@@ -1,0 +1,11 @@
+plugins {
+  id 'java'
+}
+
+group = 'viska'
+version = file('VERSION').text
+sourceCompatibility = 8
+
+repositories {
+  jcenter()
+}
