@@ -9,6 +9,7 @@ other counterparts with the following reasons:
 * Rapidly drop any functions or standards that we consider them out of fashion
   or outdated. We believe this can accelrate the evolution of XMPP standards.
 * Uses JAXB to parse XMPP queries.
+* Designed for being used by both desktop and Android applications.
 
 ## License
 
