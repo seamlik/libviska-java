@@ -12,8 +12,8 @@ other counterparts with the following reasons:
 
 ## License
 
-libviska-java is free software but we haven't chosen any open source licenses at
-the time.
+libviska-java is free software and is licensed under MIT License. The license is
+available in the `LICENSE` file.
 
 ## Contributing
 
