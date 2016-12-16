@@ -24,7 +24,7 @@ import rocks.xmpp.precis.PrecisProfiles;
  *   This class is immutable and will check whether the JID would be valid
  *   before it is created. Thus, any instances of a JID is valid.
  * </p>
- * @see <a href="https://tools.ietf.org/html/rfc7622>RFC 7622</a>
+ * @see <a href="https://tools.ietf.org/html/rfc7622">RFC 7622</a>
  * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
@@ -84,7 +84,7 @@ public class Jid {
    */
   public static boolean validateDomainpart(String domainpart)
       throws JidTooLongException, InvalidJidPartException {
-    if (domainpart == null || domainpart.length() == 0) {
+    if (domainpart == null || domainpart.isEmpty()) {
       throw new InvalidJidPartException("Empty domain name!");
     }
     if (domainpart.getBytes(StandardCharsets.UTF_8).length > 1023) {
@@ -203,7 +203,14 @@ public class Jid {
    */
   @Override
   public String toString() {
-    return localpart + "@" + domainpart + "/" + resourcepart;
+    StringBuilder result = new StringBuilder(domainpart);
+    if (!localpart.isEmpty()) {
+      result.insert(0, '@').insert(0, localpart);
+    }
+    if (!resourcepart.isEmpty()) {
+      result.append('/').append(resourcepart);
+    }
+    return result.toString();
   }
 
   /**
