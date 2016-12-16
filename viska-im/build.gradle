@@ -1,0 +1,3 @@
+dependencies {
+  project(':viska-core')
+}

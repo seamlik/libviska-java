@@ -1,11 +1,65 @@
-plugins {
-  id 'java'
+buildscript {
+  repositories {
+    jcenter()
+  }
+  dependencies {
+    classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0-M3'
+  }
 }
 
-group = 'viska'
-version = file('VERSION').text
-sourceCompatibility = 8
+subprojects {
+  apply plugin: 'java'
+  apply plugin: 'checkstyle'
+  apply plugin: 'org.junit.platform.gradle.plugin'
 
-repositories {
-  jcenter()
+  group = 'viska'
+  version = file("${rootDir}/VERSION").text
+
+
+  repositories {
+    jcenter()
+  }
+
+  dependencies {
+    testCompile("org.junit.jupiter:junit-jupiter-api:5.0.0-M3")
+    testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.0-M3")
+  }
+
+  compileJava {
+    sourceCompatibility = 7
+  }
+
+  compileTestJava {
+    sourceCompatibility = 8
+  }
+
+  checkstyle {
+    toolVersion = '7.3'
+    File styleFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
+    if (!styleFile.exists()) {
+      mkdir "${rootDir}/config/checkstyle"
+      styleFile.createNewFile()
+      styleFile.write(new URL(
+        'https://raw.githubusercontent.com/checkstyle/checkstyle/master/src/main/resources/google_checks.xml'
+      ).text)
+    }
+    config = resources.text.fromFile(styleFile)
+  }
 }
+
+task javadocAll(type: Javadoc) {
+  def outputDir = file("${buildDir}/javadocAll")
+  outputs.dir outputDir
+  outputs.files "${outputDir}/**/*"
+  options.links 'https://docs.oracle.com/javase/8/docs/api'
+  source subprojects.collect { project ->
+    project.sourceSets.main.allJava
+  }
+  classpath = files(subprojects.collect { project ->
+    project.sourceSets.main.compileClasspath
+  })
+  destinationDir = outputDir
+  title = "API Reference for libviska-java $version"
+}
+
+task build { dependsOn javadocAll }

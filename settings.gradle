@@ -1,1 +1,5 @@
-rootProject.name = 'viska'
+rootProject.name = 'libviska-java'
+
+include 'viska-core'
+include 'viska-im'
+include 'viska-jingle'
