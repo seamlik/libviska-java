@@ -1,5 +1,9 @@
+*.class
+*.jar
 /.gradle/
 /.idea/
-/build/
+/config/checkstyle/checkstyle.xml
 /gradle/wrapper/
-/gradlew*
+/gradlew
+/gradlew.bat
+build/

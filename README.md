@@ -1,15 +1,18 @@
-libviska-java: XMPP Library in Java 8 with Modern Features
-==========================================================
+libviska-java: XMPP Client Library in for Android and Java SE
+=============================================================
 
-libviska-java is an XMPP library written in Java 8. libviska-java aims to
-support as many modern or experimental features as possible. It distincts with
-other counterparts with the following reasons:
+libviska-java is an XMPP library written in Java. It aims to support as many
+modern or experimental features as possible. It is distinct from other
+counterparts with the following reasons:
 
-* Supports VoIP calls using XMPP Jingle standards.
-* Rapidly drop any functions or standards that we consider them out of fashion
-  or outdated. We believe this can accelrate the evolution of XMPP standards.
-* Uses JAXB to parse XMPP queries.
-* Designed for being used by both desktop and Android applications.
+  * Supports VoIP calls using XMPP Jingle standards.
+  * Rapidly drop functionalities or standards that we consider out of fashion
+    or outdated. We believe this can accelerate the evolution of XMPP standards.
+  * Uses [SimpleXML](http://simple.sourceforge.net) to parse XMPP stanzas (for
+    Android compatibility, otherwise we would use JAXB)
+  * Designed for being used by both Java SE and Android applications.
+
+This library can be used in Android API Level >= 19.
 
 ## License
 
@@ -26,7 +29,7 @@ welcome all kinds of help!
 
 Simply run
 
-```shell
+```bash
 gradle build
 ```
 
