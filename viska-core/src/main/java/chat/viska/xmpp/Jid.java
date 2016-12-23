@@ -1,4 +1,4 @@
-package viska.xmpp;
+package chat.viska.xmpp;
 
 import java.nio.charset.StandardCharsets;
 import org.apache.commons.validator.routines.DomainValidator;

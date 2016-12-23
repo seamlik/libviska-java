@@ -1,5 +1,7 @@
-package viska.xmpp;
+package chat.viska.xmpp;
 
+import chat.viska.xmpp.InvalidJidSyntaxException;
+import chat.viska.xmpp.Jid;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

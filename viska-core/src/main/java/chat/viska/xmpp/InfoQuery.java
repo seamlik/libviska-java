@@ -1,4 +1,4 @@
-package viska.xmpp;
+package chat.viska.xmpp;
 
 /**
  * @author Kai-Chung Yan (殷啟聰)

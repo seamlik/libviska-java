@@ -1,4 +1,5 @@
 dependencies {
   compile 'commons-validator:commons-validator:1.5.1'
+  compile 'org.simpleframework:simple-xml:2.7.1'
   compile 'rocks.xmpp:precis:0.1.0'
 }

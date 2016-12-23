@@ -1,4 +1,4 @@
-package viska.xmpp;
+package chat.viska.xmpp;
 
 /**
  * Thrown to indicate the syntax of a raw JID string is invalid.

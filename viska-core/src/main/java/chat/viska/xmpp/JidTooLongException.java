@@ -1,4 +1,6 @@
-package viska.xmpp;
+package chat.viska.xmpp;
+
+import chat.viska.xmpp.Jid;
 
 /**
  * Thrown to indicate that some part of a {@link Jid} is too long.
