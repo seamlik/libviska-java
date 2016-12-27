@@ -1,4 +1,4 @@
-package chat.viska.xmpp;
+package chat.viska.xmpp.stanzas;
 
 import java.util.Locale;
 import java.util.Map;
@@ -29,19 +29,19 @@ public interface Message extends Stanza {
 
   /**
    * Returns all {@code <body/>} elements.
-   * @return should never {@code null}
+   * @return never {@code null}
    * @see <a href="https://tools.ietf.org/html/rfc6121#section-5.2.3">Body
    *      Element</a>
    */
-  Map<Locale, String> getAllBodies();
+  Map<String, String> getAllBodies();
 
   /**
    * Returns all {@code <subject/>} elements.
-   * @return should never {@code null}
+   * @return never {@code null}
    * @see <a href="https://tools.ietf.org/html/rfc6121#section-5.2.4">Subject
    *      Element</a>
    */
-  Map<Locale, String> getAllSubjects();
+  Map<String, String> getAllSubjects();
 
   /**
    * Returns the {@code <thread/>} element.

@@ -15,7 +15,6 @@ subprojects {
   group = 'chat.viska'
   version = file("${rootDir}/VERSION").text
 
-
   repositories {
     jcenter()
   }
@@ -48,10 +47,15 @@ subprojects {
 }
 
 task javadocAll(type: Javadoc) {
+  group = 'documentation'
   def outputDir = file("${buildDir}/javadocAll")
   outputs.dir outputDir
   outputs.files "${outputDir}/**/*"
-  options.links 'https://docs.oracle.com/javase/8/docs/api'
+  def externalJavadocs = [
+    'https://docs.oracle.com/javase/8/docs/api',
+    'http://sco0ter.bitbucket.org/precis'
+  ]
+  options.links externalJavadocs.toArray(new String[0])
   source subprojects.collect { project ->
     project.sourceSets.main.allJava
   }
@@ -62,4 +66,7 @@ task javadocAll(type: Javadoc) {
   title = "API Reference for libviska-java $version"
 }
 
-task build { dependsOn javadocAll }
+task build {
+  dependsOn javadocAll
+  group = 'build'
+}

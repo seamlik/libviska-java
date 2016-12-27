@@ -1,6 +1,5 @@
-package chat.viska.xmpp;
+package chat.viska.xmpp.stanzas;
 
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -30,7 +29,7 @@ public interface Presence extends Stanza {
    * @see <a href="https://tools.ietf.org/html/rfc6121#section-4.7.2.2">Status
    *      Element</a>
    */
-  Map<Locale, String> getAllStatus();
+  Map<String, String> getAllStatus();
 
   /**
    * Returns the value of the optional element {@code <priority/>}.
@@ -39,6 +38,4 @@ public interface Presence extends Stanza {
    *      Element</a>
    */
   Byte getPriority();
-
-  void setPriority(Byte priority);
 }

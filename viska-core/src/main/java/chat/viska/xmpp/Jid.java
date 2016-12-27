@@ -29,14 +29,11 @@ import rocks.xmpp.precis.PrecisProfiles;
  * @since 0.1
  */
 public class Jid {
-  private String localpart = "";
-  private String domainpart = "";
-  private String resourcepart = "";
 
   /**
    * @see <a href="https://tools.ietf.org/html/rfc7622#section-3.3.1">RFC 7622</a>
    */
-  private static final char[] localpartExcludedChars = {
+  public static final char[] localpartExcludedChars = {
     '\"',
     '&',
     '\'',
@@ -47,6 +44,10 @@ public class Jid {
     '@'
   };
 
+  private String localpart = "";
+  private String domainpart = "";
+  private String resourcepart = "";
+
   /**
    * Validates the local part of a Jid.
    * <p>
@@ -56,7 +57,9 @@ public class Jid {
    * @return {@code true} if the local part is valid.
    */
   public static boolean validateLocalpart(String localpart)
-      throws InvalidJidPartException, JidTooLongException {
+      throws InvalidCodePointException,
+             InvalidJidPartException,
+             JidTooLongException {
     if (localpart == null) {
       return true;
     }
@@ -70,11 +73,7 @@ public class Jid {
         throw new InvalidJidPartException();
       }
     }
-    try {
-      PrecisProfiles.USERNAME_CASE_MAPPED.prepare(localpart);
-    } catch (InvalidCodePointException ex) {
-      throw new InvalidJidPartException(ex);
-    }
+    PrecisProfiles.USERNAME_CASE_MAPPED.prepare(localpart);
     return true;
   }
 
@@ -88,12 +87,11 @@ public class Jid {
       throw new InvalidJidPartException("Empty domain name!");
     }
     if (domainpart.getBytes(StandardCharsets.UTF_8).length > 1023) {
-      throw new JidTooLongException(
-        "The domain part `" + domainpart + "` is too long!"
-      );
+      throw new JidTooLongException(domainpart);
     }
-    if (!(DomainValidator.getInstance(true).isValid(domainpart)
-        || InetAddressValidator.getInstance().isValid(domainpart))) {
+    boolean isDomainName = true /* DomainValidator.getInstance(true).isValid(domainpart) */;
+    boolean isIpAddress = InetAddressValidator.getInstance().isValid(domainpart);
+    if (!isDomainName && !isIpAddress) {
       throw new InvalidJidPartException(domainpart);
     }
     return true;
@@ -104,7 +102,7 @@ public class Jid {
    * @return {@code true} if the resource part is valid.
    */
   public static boolean validateResourcepart(String resourcepart)
-      throws InvalidJidPartException, JidTooLongException {
+      throws InvalidCodePointException, JidTooLongException {
     if (resourcepart == null) {
       return true;
     }
@@ -113,11 +111,7 @@ public class Jid {
         "The resource part `" + resourcepart + "` is too long."
       );
     }
-    try {
-      PrecisProfiles.OPAQUE_STRING.prepare(resourcepart);
-    } catch (InvalidCodePointException ex) {
-      throw new InvalidJidPartException(ex);
-    }
+    PrecisProfiles.OPAQUE_STRING.prepare(resourcepart);
     return true;
   }
 

@@ -1,5 +1,6 @@
-package chat.viska.xmpp;
+package chat.viska.xmpp.stanzas;
 
+import chat.viska.xmpp.Jid;
 import java.util.Arrays;
 import java.util.List;
 
@@ -7,7 +8,7 @@ import java.util.List;
  * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
-public interface Stanza extends StanzaElement {
+public interface Stanza {
 
   /**
    * The type of a {@link Stanza}.
@@ -41,17 +42,6 @@ public interface Stanza extends StanzaElement {
     GET(InfoQuery.class),
 
     /**
-     * Providing data that is needed for an operation to be completed, setting
-     * new values, replacing existing values, etc..
-     */
-    SET(InfoQuery.class),
-
-    /**
-     * Representing a response to a successful get or set request.
-     */
-    RESULT(InfoQuery.class),
-
-    /**
      * Sending the {@link Message} to a multi-user chat session.
      */
     GROUPCHAT(Message.class),
@@ -71,6 +61,17 @@ public interface Stanza extends StanzaElement {
      * Requesting for an entity's current presence.
      */
     PROBE(Presence.class),
+
+    /**
+     * Representing a response to a successful get or set request.
+     */
+    RESULT(InfoQuery.class),
+
+    /**
+     * Providing data that is needed for an operation to be completed, setting
+     * new values, replacing existing values, etc..
+     */
+    SET(InfoQuery.class),
 
     /**
      * Wishing to subscribe to the recipient's presence.
@@ -131,8 +132,6 @@ public interface Stanza extends StanzaElement {
    */
   Jid getRecipient();
 
-  void setRecipient(Jid jid);
-
   /**
    * Returns the sender of this stanza.
    * <p>
@@ -141,8 +140,6 @@ public interface Stanza extends StanzaElement {
    * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.2">RFC 6120</a>
    */
   Jid getSender();
-
-  void setSender(Jid jid);
 
   /**
    * Returns the ID of this stanza.
@@ -153,8 +150,6 @@ public interface Stanza extends StanzaElement {
    */
   String getId();
 
-  void setId(String id);
-
   /**
    * Returns the {@link Type} of this {@link Stanza}.
    * <p>
@@ -163,6 +158,4 @@ public interface Stanza extends StanzaElement {
    * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.4">RFC 6120</a>
    */
   Type getType();
-
-  void setType(Type type);
 }

@@ -1,0 +1,20 @@
+<!--
+  Copyright 1999-2016 The XMPP Standards Foundation
+
+  The licence can be found at
+  <https://xmpp.org/extensions/xep-0167.html#appendix-legal>.
+-->
+
+<iq from='juliet@capulet.lit/balcony'
+    id='vua614d9'
+    to='romeo@montague.lit/orchard'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='session-terminate'
+          sid='a73sjjvkla37jfea'>
+    <reason>
+      <success/>
+      <text>Sorry, gotta go!</text>
+    </reason>
+  </jingle>
+</iq>
