@@ -4,7 +4,7 @@ package chat.viska.xmpp;
  * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
-public class Contact {
+public class Contact implements SessionAware {
 
   private Account account;
   private String group;
@@ -17,7 +17,8 @@ public class Contact {
 
   }
 
-  public Account getAttachedAccount() {
-    return account;
+  @Override
+  public Session getAttachedXmppSession() {
+    return account.getAttachedXmppSession();
   }
 }

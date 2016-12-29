@@ -7,7 +7,7 @@ import java.util.Set;
  * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
-public class Account {
+public class Account implements SessionAware {
   private Jid jid;
   private Set<Contact> roster;
   private Session session;
@@ -26,7 +26,8 @@ public class Account {
 
   }
 
-  public Session getAttachedSession() {
+  @Override
+  public Session getAttachedXmppSession() {
     return session;
   }
 }

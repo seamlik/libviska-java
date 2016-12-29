@@ -1,0 +1,30 @@
+<!--
+  Copyright 1999-2016 The XMPP Standards Foundation
+
+  The licence can be found at
+  <https://xmpp.org/extensions/xep-0167.html#appendix-legal>.
+-->
+
+<iq from='juliet@capulet.lit/balcony'
+    id='ih481v7s'
+    to='romeo@montague.lit/orchard'
+    type='set'>
+  <jingle xmlns='urn:xmpp:jingle:1'
+          action='content-accept'
+          initiator='romeo@montague.lit/orchard'
+          sid='a73sjjvkla37jfea'>
+    <content creator='initiator' name='webcam'>
+      <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='video'>
+        <payload-type id='98' name='theora' clockrate='90000'>
+          <parameter name='height' value='600'/>
+          <parameter name='width' value='800'/>
+          <parameter name='delivery-method' value='inline'/>
+          <parameter name='configuration' value='somebase16string'/>
+          <parameter name='sampling' value='YCbCr-4:2:2'/>
+        </payload-type>
+        <bandwidth type='AS'>128</bandwidth>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:ice-udp:1'/>
+    </content>
+  </jingle>
+</iq>

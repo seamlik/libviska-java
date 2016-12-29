@@ -3,7 +3,7 @@ package chat.viska.xmpp;
 /**
  * Thrown to indicate the syntax of a raw JID string is invalid.
  */
-public class InvalidJidSyntaxException extends Exception {
+public class InvalidJidSyntaxException extends IllegalArgumentException {
 
   /**
    * @see Exception#Exception().

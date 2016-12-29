@@ -4,24 +4,44 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * @author Kai-Chung Yan (殷啟聰)
+ * {@code <message/>} {@link Stanza}.
  * @since 0.1
  */
 public interface Message extends Stanza {
 
-  class Thread {
+  /**
+   * {@code <thread/>} element.
+   */
+  final class Thread {
     private String parent;
     private String id;
 
+    /**
+     * Default constructor.
+     * @param id {@code id} attribute.
+     * @param parent {@code parent} attribute.
+     */
     public Thread(String id, String parent) {
       this.id = id;
       this.parent = parent;
     }
 
+    /**
+     * Returns the ID of this {@link Thread}.
+     * <p>
+     *   This property represents the content of this element.
+     * </p>
+     */
     public String getId() {
       return id;
     }
 
+    /**
+     * Returns the ID of the parent {@link Thread} of this {@link Thread}.
+     * <p>
+     *   This property represents the {@code parent} attribute.
+     * </p>
+     */
     public String getParent() {
       return parent;
     }

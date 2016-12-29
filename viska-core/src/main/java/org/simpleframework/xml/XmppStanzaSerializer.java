@@ -1,25 +1,20 @@
 package org.simpleframework.xml;
 
-import chat.viska.xmpp.Jid;
 import java.io.InputStream;
 import java.io.OutputStream;
+import org.simpleframework.xml.convert.AnnotationStrategy;
 import org.simpleframework.xml.core.Persister;
 import org.simpleframework.xml.stream.InputNode;
 import org.simpleframework.xml.stream.OutputNode;
-import org.simpleframework.xml.transform.JidTransform;
-import org.simpleframework.xml.transform.RegistryMatcher;
 
 /**
- * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
 public class XmppStanzaSerializer implements chat.viska.xmpp.StanzaSerializer {
   private static Serializer serializer = null;
 
   private static void initialeSerializer() {
-    RegistryMatcher matcher = new RegistryMatcher();
-    matcher.bind(Jid.class, JidTransform.class);
-    serializer = new Persister(matcher);
+    serializer = new Persister(new AnnotationStrategy());
   }
 
   @Override
@@ -28,14 +23,15 @@ public class XmppStanzaSerializer implements chat.viska.xmpp.StanzaSerializer {
     if (serializer == null) {
       initialeSerializer();
     }
-    return serializer.read(type, input);
+    return serializer.read(type, input, false);
   }
 
-  public <T> T read(Class<? extends T> type, InputNode input) throws Exception {
+  public <T> T read(Class<? extends T> type, InputNode input)
+      throws Exception {
     if (serializer == null) {
       initialeSerializer();
     }
-    return serializer.read(type, input);
+    return serializer.read(type, input, false);
   }
 
   @Override
@@ -46,7 +42,7 @@ public class XmppStanzaSerializer implements chat.viska.xmpp.StanzaSerializer {
     serializer.write(source, output);
   }
 
-  public <T> void write(T source, OutputNode output) throws Exception {
+  public void write(Object source, OutputNode output) throws Exception {
     if (serializer == null) {
       initialeSerializer();
     }

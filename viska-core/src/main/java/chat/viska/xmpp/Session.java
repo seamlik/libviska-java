@@ -61,4 +61,8 @@ public class Session {
   public void setResource(String resource) {
 
   }
+
+  public void apply(Extension extension) {
+
+  }
 }

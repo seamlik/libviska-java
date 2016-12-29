@@ -1,5 +1,4 @@
 dependencies {
-  compile 'commons-validator:commons-validator:1.5.1'
   compile 'io.reactivex:rxjava:1.2.4'
   compile 'org.simpleframework:simple-xml:2.7.1'
   compile 'rocks.xmpp:precis:0.1.0'

@@ -10,7 +10,7 @@ public class JidTransform implements Transform<Jid> {
   public Jid read(String value) throws InvalidJidPartException,
                                        InvalidJidSyntaxException,
                                        JidTooLongException {
-    return new Jid(Jid.parse(value));
+    return new Jid(Jid.parseJidParts(value));
   }
 
   public String write(Jid value) {

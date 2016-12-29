@@ -1,7 +1,5 @@
 package chat.viska.xmpp;
 
-import chat.viska.xmpp.InvalidJidSyntaxException;
-import chat.viska.xmpp.Jid;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -11,35 +9,35 @@ public class JidTest {
   public void parseJidTest() throws Exception {
     Assertions.assertArrayEquals(
         new String[] { "juliet", "example.com", ""},
-        Jid.parse("juliet@example.com")
+        Jid.parseJidParts("juliet@example.com")
     );
     Assertions.assertArrayEquals(
         new String[] { "", "example.com", ""},
-        Jid.parse("example.com")
+        Jid.parseJidParts("example.com")
     );
     Assertions.assertArrayEquals(
         new String[] { "", "example.com", "foo"},
-        Jid.parse("example.com/foo")
+        Jid.parseJidParts("example.com/foo")
     );
     Assertions.assertArrayEquals(
         new String[] { "juliet", "example.com", "foo@bar"},
-        Jid.parse("juliet@example.com/foo@bar")
+        Jid.parseJidParts("juliet@example.com/foo@bar")
     );
     Assertions.assertArrayEquals(
         new String[] { "juliet", "example.com", "foo"},
-        Jid.parse("<juliet@example.com/foo>")
+        Jid.parseJidParts("<juliet@example.com/foo>")
     );
     Assertions.assertThrows(
         InvalidJidSyntaxException.class,
-        () -> Jid.parse("@example.com")
+        () -> Jid.parseJidParts("@example.com")
     );
     Assertions.assertThrows(
         InvalidJidSyntaxException.class,
-        () -> Jid.parse("@")
+        () -> Jid.parseJidParts("@")
     );
     Assertions.assertThrows(
         InvalidJidSyntaxException.class,
-        () -> Jid.parse("/")
+        () -> Jid.parseJidParts("/")
     );
   }
 }

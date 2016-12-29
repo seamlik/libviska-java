@@ -7,13 +7,15 @@ buildscript {
   }
 }
 
+allprojects {
+  group = 'chat.viska'
+  version = file("${rootDir}/VERSION").text
+}
+
 subprojects {
   apply plugin: 'java'
   apply plugin: 'checkstyle'
   apply plugin: 'org.junit.platform.gradle.plugin'
-
-  group = 'chat.viska'
-  version = file("${rootDir}/VERSION").text
 
   repositories {
     jcenter()
@@ -25,10 +27,6 @@ subprojects {
   }
 
   compileJava {
-    sourceCompatibility = 7
-  }
-
-  compileTestJava {
     sourceCompatibility = 8
   }
 
@@ -69,4 +67,11 @@ task javadocAll(type: Javadoc) {
 task build {
   dependsOn javadocAll
   group = 'build'
+}
+
+task clean {
+  group = 'build'
+  doFirst {
+    delete buildDir
+  }
 }

@@ -1,8 +1,6 @@
 package chat.viska.xmpp;
 
 import java.nio.charset.StandardCharsets;
-import org.apache.commons.validator.routines.DomainValidator;
-import org.apache.commons.validator.routines.InetAddressValidator;
 import rocks.xmpp.precis.InvalidCodePointException;
 import rocks.xmpp.precis.PrecisProfiles;
 
@@ -21,11 +19,9 @@ import rocks.xmpp.precis.PrecisProfiles;
  *   connected to the server and logged in with the account.
  * </p>
  * <p>
- *   This class is immutable and will check whether the JID would be valid
- *   before it is created. Thus, any instances of a JID is valid.
+ *   This class is immutable and will not validate the JID before it is created.
  * </p>
  * @see <a href="https://tools.ietf.org/html/rfc7622">RFC 7622</a>
- * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
 public class Jid {
@@ -44,9 +40,9 @@ public class Jid {
     '@'
   };
 
-  private String localpart = "";
-  private String domainpart = "";
-  private String resourcepart = "";
+  private String localpart;
+  private String domainpart;
+  private String resourcepart;
 
   /**
    * Validates the local part of a Jid.
@@ -64,9 +60,7 @@ public class Jid {
       return true;
     }
     if (localpart.getBytes(StandardCharsets.UTF_8).length > 1023) {
-      throw new JidTooLongException(
-        "The local part `" + localpart + "` is too long."
-      );
+      throw new JidTooLongException(localpart);
     }
     for (char it : localpartExcludedChars) {
       if (localpart.indexOf(it) >= 0) {
@@ -89,11 +83,7 @@ public class Jid {
     if (domainpart.getBytes(StandardCharsets.UTF_8).length > 1023) {
       throw new JidTooLongException(domainpart);
     }
-    boolean isDomainName = true /* DomainValidator.getInstance(true).isValid(domainpart) */;
-    boolean isIpAddress = InetAddressValidator.getInstance().isValid(domainpart);
-    if (!isDomainName && !isIpAddress) {
-      throw new InvalidJidPartException(domainpart);
-    }
+    // TODO: Validate if it is a domain or an IP address
     return true;
   }
 
@@ -119,8 +109,9 @@ public class Jid {
    * Parses a raw JID {@link String} and returns the parts of the JID.
    * @return An array of {@link String} containing the local part, domain part
    *         and the resource part in order.
+   * @throws InvalidJidSyntaxException If the value is not a valid {@link Jid}.
    */
-  public static String[] parse(String rawJid) throws InvalidJidSyntaxException {
+  public static String[] parseJidParts(String rawJid) {
     if (rawJid.startsWith("<") && rawJid.endsWith(">")) {
       rawJid = rawJid.substring(1, rawJid.length() - 1);
     }
@@ -150,26 +141,24 @@ public class Jid {
   /**
    * Constructs a new JID using 3 specified parts of the JID.
    * @param parts {@link String}s representing the local part, domain part and
-   *              and the resource part in order. Any redundant arguments are
-   *              ignored.
+   *              and the resource part in order. The array must contains at
+   *              at least 3 elements and any redundant elements are ignored.
+   *              In order to omit any part of the {@link Jid}, place a
+   *              {@code null} at the corresponding position.
+   * @throws InvalidJidSyntaxException If {@code parts} has less than 3 elements.
    */
-  public Jid(String... parts) throws InvalidJidPartException,
-                                     InvalidJidSyntaxException,
-                                     JidTooLongException {
+  public Jid(String[] parts) {
     if (parts.length < 3) {
       throw new InvalidJidSyntaxException();
     }
-    if (validateLocalpart(parts[0]) && validateDomainpart(parts[1])
-                                    && validateResourcepart(parts[2])) {
-      localpart = PrecisProfiles.USERNAME_CASE_MAPPED.enforce(parts[0]);
-      domainpart = parts[1].trim();
-      resourcepart = PrecisProfiles.OPAQUE_STRING.enforce(parts[2]);
-    }
+    localpart = (parts[0] == null) ? "" : parts[0];
+    domainpart = (parts[1] == null) ? "" : parts[1];
+    resourcepart = (parts[2] == null) ? "" : parts[2];
   }
 
   /**
    * Returns the local part of this JID.
-   * @return the local part, never {@code null}.
+   * @return never {@code null}.
    */
   public String getLocalpart() {
     return localpart;
@@ -177,7 +166,7 @@ public class Jid {
 
   /**
    * Returns the domain part of this JID.
-   * @return never {@code null}.
+   * @return {@code null}.
    */
   public String getDomainpart() {
     return domainpart;

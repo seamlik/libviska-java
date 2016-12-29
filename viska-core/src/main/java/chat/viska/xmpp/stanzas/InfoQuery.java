@@ -1,8 +1,9 @@
 package chat.viska.xmpp.stanzas;
 
 /**
- * @author Kai-Chung Yan (殷啟聰)
+ * {@code <iq/>} {@link Stanza}.
  * @since 0.1
  */
 public interface InfoQuery extends Stanza {
+  boolean needsAcknowledgement();
 }
