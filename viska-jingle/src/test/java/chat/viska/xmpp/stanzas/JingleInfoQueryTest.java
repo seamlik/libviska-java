@@ -1,72 +1,63 @@
 package chat.viska.xmpp.stanzas;
 
-import java.io.ByteArrayOutputStream;
+import chat.viska.xmpp.SimpleXmlSerializer;
+import java.io.InputStreamReader;
+import java.io.StringWriter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.simpleframework.xml.XmppStanzaSerializer;
 
 public class JingleInfoQueryTest {
 
   @Test
   public void parseRtpSessionInitiationStanza() throws Exception {
-    XmppStanzaSerializer serializer = new XmppStanzaSerializer();
+    SimpleXmlSerializer serializer = new SimpleXmlSerializer();
     JingleInfoQuery iq = serializer.read(
         JingleInfoQuery.class,
-        JingleInfoQuery.class
-                       .getResource("jingle-rtp-session-initiate.xml")
-                       .openStream()
+        new InputStreamReader(
+          JingleInfoQuery.class.getResourceAsStream(
+            "jingle-rtp-session-initiate.xml"
+          )
+        )
     );
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    serializer.write(iq, outputStream);
-    String output = outputStream.toString();
-    Assertions.assertNotNull(iq);
-    Assertions.assertTrue(!output.isEmpty());
-  }
-
-  @Test
-  public void parseRtpContentAcceptStanza() throws Exception {
-    XmppStanzaSerializer serializer = new XmppStanzaSerializer();
-    JingleInfoQuery iq = serializer.read(
-      JingleInfoQuery.class,
-      JingleInfoQuery.class
-        .getResource("jingle-rtp-content-accept.xml")
-        .openStream()
-    );
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    serializer.write(iq, outputStream);
-    String output = outputStream.toString();
-    Assertions.assertNotNull(iq);
-    Assertions.assertTrue(!output.isEmpty());
+    StringWriter outputWriter = new StringWriter();
+    serializer.write(iq, outputWriter);
+    String output = outputWriter.toString();
+    Assertions.assertEquals(iq.getJingle().getContents().size(), 2);
   }
 
   @Test
   public void parseZrtpSessionInitiationStanza() throws Exception {
-    XmppStanzaSerializer serializer = new XmppStanzaSerializer();
+    SimpleXmlSerializer serializer = new SimpleXmlSerializer();
     JingleInfoQuery iq = serializer.read(
       JingleInfoQuery.class,
-      JingleInfoQuery.class
-        .getResource("jingle-zrtp-session-initiation.xml")
-        .openStream()
+      new InputStreamReader(
+        JingleInfoQuery.class.getResourceAsStream(
+          "jingle-zrtp-session-initiation.xml"
+        )
+      )
     );
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    serializer.write(iq, outputStream);
-    String output = outputStream.toString();
-    Assertions.assertNotNull(iq);
-    Assertions.assertTrue(!output.isEmpty());
+    StringWriter outputWriter = new StringWriter();
+    serializer.write(iq, outputWriter);
+    String output = outputWriter.toString();
+    Assertions.assertEquals(
+      ((JingleInfoQuery.Jingle.Content.RtpDescription) iq.getJingle().getContents().get(0).getDescription()).getEncryption().getZrtpHash().toString(),
+      "fe30efd02423cb054e50efd0248742ac7a52c8f91bc2df881ae642c371ba46df");
   }
 
   @Test
   public void parseAlternativeSession() throws Exception {
-    XmppStanzaSerializer serializer = new XmppStanzaSerializer();
+    SimpleXmlSerializer serializer = new SimpleXmlSerializer();
     JingleInfoQuery iq = serializer.read(
-        JingleInfoQuery.class,
-        JingleInfoQuery.class
-                       .getResource("jingle-alternative-session.xml")
-                       .openStream()
+      JingleInfoQuery.class,
+      new InputStreamReader(
+        JingleInfoQuery.class.getResourceAsStream(
+          "jingle-alternative-session.xml"
+        )
+      )
     );
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    serializer.write(iq, outputStream);
-    String output = outputStream.toString();
+    StringWriter outputWriter = new StringWriter();
+    serializer.write(iq, outputWriter);
+    String output = outputWriter.toString();
     Assertions.assertEquals(
         iq.getJingle().getReason().getAlternativeSessionId(),
         "b84tkkwlmb48kgfb"
@@ -80,16 +71,18 @@ public class JingleInfoQueryTest {
 
   @Test
   public void parseTerminateSession() throws Exception {
-    XmppStanzaSerializer serializer = new XmppStanzaSerializer();
+    SimpleXmlSerializer serializer = new SimpleXmlSerializer();
     JingleInfoQuery iq = serializer.read(
       JingleInfoQuery.class,
-      JingleInfoQuery.class
-        .getResource("jingle-terminate-session.xml")
-        .openStream()
+      new InputStreamReader(
+        JingleInfoQuery.class.getResourceAsStream(
+          "jingle-terminate-session.xml"
+        )
+      )
     );
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    serializer.write(iq, outputStream);
-    String output = outputStream.toString();
+    StringWriter outputWriter = new StringWriter();
+    serializer.write(iq, outputWriter);
+    String output = outputWriter.toString();
     Assertions.assertEquals(
       iq.getJingle().getReason().getText(),
       "Sorry, gotta go!"
@@ -99,9 +92,5 @@ public class JingleInfoQueryTest {
       JingleInfoQuery.Jingle.Reason.ReasonType.SUCCESS
     );
     Assertions.assertTrue(!output.isEmpty());
-  }
-
-  public static void test(String text) {
-    text = "shit!";
   }
 }

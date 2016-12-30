@@ -62,6 +62,7 @@ task javadocAll(type: Javadoc) {
   })
   destinationDir = outputDir
   title = "API Reference for libviska-java $version"
+  exclude 'org/**/*'
 }
 
 task build {

@@ -1,17 +1,19 @@
 package org.simpleframework.xml.convert;
 
 import chat.viska.xmpp.stanzas.JingleInfoQuery;
-import org.simpleframework.xml.XmppStanzaSerializer;
+import org.simpleframework.xml.Serializer;
+import org.simpleframework.xml.core.Persister;
 import org.simpleframework.xml.stream.InputNode;
 import org.simpleframework.xml.stream.OutputNode;
 
 public class XmppJingleDescriptionConverter
     implements Converter<JingleInfoQuery.Jingle.Content.Description> {
 
+  private static Serializer serializer = new Persister(new AnnotationStrategy());
+
   @Override
   public JingleInfoQuery.Jingle.Content.Description read(InputNode input)
       throws Exception {
-    XmppStanzaSerializer serializer = new XmppStanzaSerializer();
     switch (input.getReference()) {
       case JingleInfoQuery.Jingle.Content.RtpDescription.XMLNS:
         return serializer.read(
@@ -32,6 +34,6 @@ public class XmppJingleDescriptionConverter
   public void write(OutputNode output,
                     JingleInfoQuery.Jingle.Content.Description value)
       throws Exception {
-    new XmppStanzaSerializer().write(value, output);
+    serializer.write(value, output);
   }
 }

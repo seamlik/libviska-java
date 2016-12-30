@@ -7,15 +7,12 @@ import org.simpleframework.xml.Attribute;
 import org.simpleframework.xml.Root;
 
 /**
- * Most basic {@code <iq/>} {@link Stanza}.
- * <p>
- *   This kind of {@code <iq/>} is mostly used as an acknowledgement to another
- *   {@code <iq/>}.
- * </p>
+ * Most basic {@code <iq/>} {@link Stanza}. This kind of {@code <iq/>} is mostly
+ * used as an acknowledgement to another {@code <iq/>}.
  * @since 0.1
  */
 @Root(name = "iq")
-public class BasicInfoQuery implements InfoQuery {
+public final class BasicInfoQuery implements InfoQuery {
 
   @Attribute(required = false)
   private String id;
@@ -36,16 +33,20 @@ public class BasicInfoQuery implements InfoQuery {
 
   /**
    * Default constructor.
-   * @param id See {@link InfoQuery#getId()}.
+   * @param id See {@link InfoQuery#getId()}. This argument is mandatory.
    * @param type See {@link InfoQuery#getType()}.
    * @param sender See {@link InfoQuery#getSender()}.
    * @param recipient See {@link InfoQuery#getRecipient()}.
+   * @throws IllegalArgumentException If {@code id} is {@code null} or empty.
    */
   public BasicInfoQuery(String id, Type type, Jid sender, Jid recipient) {
+    if (id == null || id.isEmpty()) {
+      throw new IllegalArgumentException();
+    }
     if (type == null) {
       this.type = null;
     } else {
-      this.type = type.name().toLowerCase();
+      this.type = type.toString();
     }
     this.id = id;
     this.sender = sender.toString();
@@ -60,15 +61,25 @@ public class BasicInfoQuery implements InfoQuery {
    * @param recipient See {@link InfoQuery#getRecipient()}.
    * @return never {@code null}.
    */
-  public static BasicInfoQuery acknowledge(InfoQuery iq,
-                                           Jid sender,
-                                           Jid recipient) {
+  public static BasicInfoQuery acknowledgement(InfoQuery iq,
+                                               Jid sender,
+                                               Jid recipient) {
     return new BasicInfoQuery(iq.getId(), Type.RESULT, recipient, sender);
+  }
+
+  /**
+   * Generates an {@link InfoQuery} serving as an acknowledgement of a given
+   * {@code <iq/>}.
+   * @param iq The given {@code <iq/>}.
+   * @return never {@code null}.
+   */
+  public static BasicInfoQuery acknowledgement(InfoQuery iq) {
+    return acknowledgement(iq, iq.getRecipient(), iq.getSender());
   }
 
   @Override
   public Type getType() {
-    return Enum.valueOf(Type.class, type.toUpperCase());
+    return Type.of(type);
   }
 
   @Override

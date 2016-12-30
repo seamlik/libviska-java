@@ -18,7 +18,7 @@ public class Contact implements SessionAware {
   }
 
   @Override
-  public Session getAttachedXmppSession() {
-    return account.getAttachedXmppSession();
+  public Session getSession() {
+    return account.getSession();
   }
 }

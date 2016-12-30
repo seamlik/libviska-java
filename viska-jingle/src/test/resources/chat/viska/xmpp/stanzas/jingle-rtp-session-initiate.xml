@@ -55,5 +55,43 @@
                    type='srflx'/>
       </transport>
     </content>
+    <content creator='initiator' name='webcam'>
+      <description xmlns='urn:xmpp:jingle:apps:rtp:1' media='video'>
+        <payload-type id='98' name='theora' clockrate='90000'>
+          <parameter name='height' value='600'/>
+          <parameter name='width' value='800'/>
+          <parameter name='delivery-method' value='inline'/>
+          <parameter name='configuration' value='somebase16string'/>
+          <parameter name='sampling' value='YCbCr-4:2:2'/>
+        </payload-type>
+        <bandwidth type='AS'>128</bandwidth>
+      </description>
+      <transport xmlns='urn:xmpp:jingle:transports:ice-udp:1'
+                 pwd='asd88fgpdd777uzjYhagZg'
+                 ufrag='8hhy'>
+        <candidate component='1'
+                   foundation='1'
+                   generation='0'
+                   id='el0747fg11'
+                   ip='10.0.1.1'
+                   network='1'
+                   port='8998'
+                   priority='2130706431'
+                   protocol='udp'
+                   type='host'/>
+        <candidate component='1'
+                   foundation='2'
+                   generation='0'
+                   id='y3s2b30v3r'
+                   ip='192.0.2.3'
+                   network='1'
+                   port='45664'
+                   priority='1694498815'
+                   protocol='udp'
+                   rel-addr='10.0.1.1'
+                   rel-port='8998'
+                   type='srflx'/>
+      </transport>
+    </content>
   </jingle>
 </iq>

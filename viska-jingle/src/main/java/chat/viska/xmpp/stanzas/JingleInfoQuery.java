@@ -7,7 +7,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.ice4j.ice.CandidateType;
-import org.simpleframework.xml.*;
+import org.simpleframework.xml.Attribute;
+import org.simpleframework.xml.Element;
+import org.simpleframework.xml.ElementList;
+import org.simpleframework.xml.Namespace;
+import org.simpleframework.xml.Path;
+import org.simpleframework.xml.Root;
+import org.simpleframework.xml.Text;
 import org.simpleframework.xml.convert.Convert;
 import org.simpleframework.xml.convert.XmppJingleDescriptionConverter;
 import org.simpleframework.xml.convert.XmppJingleTransportConverter;
@@ -17,10 +23,12 @@ import org.simpleframework.xml.convert.XmppJingleTransportConverter;
  * @since 0.1
  */
 @Root(name = "iq")
-public class JingleInfoQuery extends BasicInfoQuery {
+public final class JingleInfoQuery implements InfoQuery {
 
   /**
-   * {@code <jingle/>} element.
+   * Main content of a Jingle request. It represents a {@code <jingle/>}
+   * element.
+   * @see <a href="https://xmpp.org/extensions/xep-0166.html">Jingle</a>
    */
   @Namespace(reference = Jingle.XMLNS)
   public static final class Jingle {
@@ -235,15 +243,11 @@ public class JingleInfoQuery extends BasicInfoQuery {
       }
 
       /**
-       * {@code <description/>} element.
-       * <p>
-       *   This class describes what a data channel represented by a
-       *   {@link Content} is transferring.
-       * </p>
+       * Description of a Jingle media channel, e.g. a webcam or a voice
+       * channel. It represents a {@code <description/>}.
        * <p>
        *   This interface does not have any members and is only for
-       *   categorizing all classes representing a {@code <description/>}
-       *   element.
+       *   categorizing all classes representing a {@code <description/>}.
        * </p>
        */
       public interface Description {}
@@ -259,14 +263,14 @@ public class JingleInfoQuery extends BasicInfoQuery {
       public static final class RtpDescription implements Description {
 
         /**
-         * {@code <payload-type/>} element.
-         * <p>
-         *   Represents an encoding of an RTP stream.
-         * </p>
+         * Encoding of an RTP stream. It represents a {@code <payload-type/>}.
          */
         @Root(name = "payload-type")
         public static final class PayloadType {
 
+          /**
+           * Encoding parameter.
+           */
           public static final class Parameter {
 
             @Attribute(required = false)
@@ -319,7 +323,7 @@ public class JingleInfoQuery extends BasicInfoQuery {
           private Long ptime;
 
           @ElementList(entry = "parameter", inline = true, required = false)
-          List<? extends Parameter> parameters;
+          List<Parameter> parameters;
 
           /**
            * Exists only for Simple XML.
@@ -355,6 +359,15 @@ public class JingleInfoQuery extends BasicInfoQuery {
               parametersList.add(it);
             }
             this.parameters = parametersList;
+          }
+
+          @Override
+          public String toString() {
+            StringBuilder result = new StringBuilder(name);
+            if (clockrate != null) {
+              result.append('@').append(clockrate).append("Hz");
+            }
+            return result.toString();
           }
 
           /**
@@ -419,6 +432,10 @@ public class JingleInfoQuery extends BasicInfoQuery {
 
         public static class Encryption {
 
+          /**
+           * SRTP cryptographic keying material. It represents a
+           * {@code <crypto/>}.
+           */
           @Root(name = "crypto")
           public static final class SrtpCrypto {
 
@@ -439,25 +456,51 @@ public class JingleInfoQuery extends BasicInfoQuery {
              */
             private SrtpCrypto() {}
 
-            public SrtpCrypto(String cryptoSuite, String keyParams, String sessionParams, Integer tag) {
+            /**
+             * Default constructor.
+             * @param cryptoSuite See {@link SrtpCrypto#getCryptoSuite()}
+             * @param keyParams See {@link SrtpCrypto#getKeyParams()}
+             * @param sessionParams See {@link SrtpCrypto#getSessionParams()}
+             * @param tag See {@link SrtpCrypto#getTag()}
+             */
+            public SrtpCrypto(String cryptoSuite,
+                              String keyParams,
+                              String sessionParams,
+                              Integer tag) {
               this.cryptoSuite = cryptoSuite;
               this.keyParams = keyParams;
               this.sessionParams = sessionParams;
               this.tag = tag;
             }
 
+            /**
+             * Returns the description of the encryption algorithm.
+             * This property represents the {@code crypto-suite} attribute.
+             */
             public String getCryptoSuite() {
               return cryptoSuite;
             }
 
+            /**
+             * Returns one or more sets of keying material for the crypto-suite
+             * in question. It represents the {@code key-params} attribute.
+             */
             public String getKeyParams() {
               return keyParams;
             }
 
+            /**
+             * Returns transport-specific parameters for SRTP negotiation. It
+             * represents the {@code session-params} attribute.
+             */
             public String getSessionParams() {
               return sessionParams;
             }
 
+            /**
+             * Returns the identifier of the crypto material. It represents the
+             * {@code tag} attribute.
+             */
             public Integer getTag() {
               return tag;
             }
@@ -498,10 +541,6 @@ public class JingleInfoQuery extends BasicInfoQuery {
 
             @Override
             public String toString() {
-              return hash.trim();
-            }
-
-            public String getHash() {
               return (hash == null) ? null : hash.trim();
             }
           }
@@ -510,47 +549,59 @@ public class JingleInfoQuery extends BasicInfoQuery {
           private String required;
 
           @ElementList(entry = "crypto", inline = true, required = false)
-          List<? extends SrtpCrypto> cryptos;
+          List<SrtpCrypto> cryptos;
 
           @Element(name = "zrtp-hash", required = false)
           private ZrtpHash zrtpHash;
 
           private Encryption() {}
 
-          public Encryption(boolean required,
-                            List<? extends SrtpCrypto> cryptos) {
+          public Encryption(SrtpCrypto[] cryptos,
+                            boolean required) {
             this.required = Boolean.toString(required);
-            this.cryptos = new ArrayList<>(cryptos);
+            if (cryptos == null || cryptos.length == 0) {
+              throw new IllegalArgumentException();
+            }
+            this.cryptos = Arrays.asList(cryptos);
           }
 
-          public Encryption(boolean required, ZrtpHash zrtpHash) {
-            if (zrtpHash == null) {
+          public Encryption(ZrtpHash zrtpHash, boolean required) {
+            if (zrtpHash == null || zrtpHash.toString() == null) {
               throw new NullPointerException("zrtpHash");
             }
             this.required = (required) ? "true" : "false";
             this.zrtpHash = zrtpHash;
+            this.cryptos = new ArrayList<>(0);
           }
 
-          public Encryption(boolean required, String zrtpHash) {
-            if (zrtpHash == null) {
-              throw new NullPointerException("zrtpHash");
-            }
-            this.required = (required) ? "true" : "false";
-            this.zrtpHash = new ZrtpHash(zrtpHash);
-
+          public Encryption(String zrtpHash, boolean required) {
+            this(new ZrtpHash(zrtpHash), required);
           }
 
-          public Boolean required() {
+          public Encryption(String zrtpHash) {
+            this(zrtpHash, false);
+          }
+
+          public boolean required() {
             if (required == null) {
-              return null;
+              return false;
             }
             if (required.equals("true") || required.equals("1")) {
               return true;
-            }
-            if (required.equals("false") || required.equals("0")) {
+            } else  {
               return false;
             }
-            throw new IllegalArgumentException();
+          }
+
+          public ZrtpHash getZrtpHash() {
+            return zrtpHash;
+          }
+
+          public SrtpCrypto[] getSrtpCryptos() {
+            if (cryptos == null) {
+              return new SrtpCrypto[0];
+            }
+            return cryptos.toArray(new SrtpCrypto[cryptos.size()]);
           }
         }
 
@@ -573,25 +624,32 @@ public class JingleInfoQuery extends BasicInfoQuery {
         @Element(required = false)
         private Encryption encryption;
 
+
         @ElementList(entry = "payload-type", inline = true, required = false)
-        private List<? extends PayloadType> payloadTypes;
+        private List<PayloadType> payloadTypes;
 
         /**
          * Exists only for Simple XML.
          */
         private RtpDescription() {}
 
-        public RtpDescription(String media,
+        public RtpDescription(PayloadType[] payloadTypes,
+                              String media,
                               SdpBandwidthType bandwidthType,
                               Integer bandwidth,
-                              PayloadType[] payloadTypes) {
+                              Encryption encryption
+                              ) {
           if (payloadTypes == null) {
             throw new NullPointerException();
           }
+          if (bandwidthType == null ^ bandwidth == null) {
+            throw new IllegalArgumentException();
+          }
           this.media = media;
           this.bandwidthType = bandwidthType;
-          this.bandwidth = bandwidth.toString();
+          this.bandwidth = (bandwidth == null) ? null : bandwidth.toString();
           this.payloadTypes = Arrays.asList(payloadTypes);
+          this.encryption = encryption;
         }
 
         public String getMedia() {
@@ -603,7 +661,7 @@ public class JingleInfoQuery extends BasicInfoQuery {
         }
 
         public Integer getBandwidth() {
-          return new Integer(bandwidth);
+          return (bandwidth == null) ? null : new Integer(bandwidth);
         }
 
         /**
@@ -612,8 +670,15 @@ public class JingleInfoQuery extends BasicInfoQuery {
          * placing the most preferred payload type at the first position and the
          * least preferred at the last.
          */
-        public PayloadType[] getPayloadTypes() {
-          return payloadTypes.toArray(new PayloadType[payloadTypes.size()]);
+        public List<PayloadType> getPayloadTypes() {
+          if (payloadTypes != null) {
+            return new ArrayList<>(payloadTypes);
+          }
+          return new ArrayList<>(0);
+        }
+
+        public Encryption getEncryption() {
+          return encryption;
         }
       }
 
@@ -631,14 +696,11 @@ public class JingleInfoQuery extends BasicInfoQuery {
       }
 
       /**
-       * {@code <transport/>} element.
-       * <p>
-       *   This class describes the transport method a data channel represented
-       *   by a {@link Content}.
-       * </p>
+       * Transport method of a Jingle media channel such as ICE-UDP or TCP. It
+       * represents a {@code <transport/>}.
        * <p>
        *   This interface does not have any members and is only for
-       *   categorizing all classes representing a {@code <description/>}
+       *   categorizing all classes representing a {@code <transport/>}
        *   element.
        * </p>
        */
@@ -882,7 +944,7 @@ public class JingleInfoQuery extends BasicInfoQuery {
       private Transport transport;
 
       /**
-       * Exists only for Simple XML
+       * Exists only for Simple XML.
        */
       private Content() {}
 
@@ -919,6 +981,10 @@ public class JingleInfoQuery extends BasicInfoQuery {
 
       public Senders getSenders() {
         return Senders.of(senders);
+      }
+
+      public Description getDescription() {
+        return description;
       }
     }
 
@@ -1183,10 +1249,10 @@ public class JingleInfoQuery extends BasicInfoQuery {
     @Attribute(required = false)
     private String responder;
 
-    @Attribute
+    @Attribute(required = false)
     private String sid;
 
-    @Attribute
+    @Attribute(required = false)
     private String action;
 
     @ElementList(entry = "content", inline = true, required = false)
@@ -1206,7 +1272,7 @@ public class JingleInfoQuery extends BasicInfoQuery {
      * @param action See {@link Jingle#getAction()}, mandatory.
      * @param initiator See {@link Jingle#getInitiator()}.
      * @param responder See {@link Jingle#getResponder()}.
-     * @param contents See {@link Jingle#getContent()}.
+     * @param contents See {@link Jingle#getContents()}.
      * @param reason See {@link Jingle#getReason()}.
      * @throws NullPointerException If the mandatory arguments are {@code null}.
      */
@@ -1272,7 +1338,7 @@ public class JingleInfoQuery extends BasicInfoQuery {
     }
 
 
-    public List<Content> getContent() {
+    public List<Content> getContents() {
       List<Content> contents = new ArrayList<>();
       for (Content it : this.contents) {
         contents.add(it);
@@ -1285,25 +1351,67 @@ public class JingleInfoQuery extends BasicInfoQuery {
     }
   }
 
+  @Attribute
+  private String id;
+
+  @Attribute(required = false)
+  private String type;
+
+  @Attribute(name = "from", required = false)
+  private String sender;
+
+  @Attribute(name = "to", required = false)
+  private String recipient;
+
   @Element
   private Jingle jingle;
 
-  private JingleInfoQuery(@Attribute(name = "id") String id,
-                          @Attribute(name = "type") String type,
-                          @Attribute(name = "from") Jid sender,
-                          @Attribute(name = "to") Jid recipient,
-                          @Element(name = "jingle") Jingle jingle) {
-    super(id, Enum.valueOf(Type.class, type.toUpperCase()), sender, recipient);
-    this.jingle = jingle;
-  }
+  /**
+   * Exists only for Simple XML.
+   */
+  private JingleInfoQuery() {}
 
   public JingleInfoQuery(String id,
                          Type type,
                          Jid sender,
                          Jid recipient,
                          Jingle jingle) {
-    super(id, Enum.valueOf(Type.class, type.name().toLowerCase()), sender, recipient);
+    if (type != Type.SET) {
+      throw new IllegalArgumentException("Only accept a \"set\" type!");
+    }
+    if (recipient == null) {
+      throw new NullPointerException("recipient");
+    }
+    if (id == null) {
+      throw new NullPointerException("id");
+    }
+    if (jingle == null) {
+      throw new NullPointerException("jingle");
+    }
+    this.id = id;
+    this.sender = sender.toString();
+    this.recipient = recipient.toString();
     this.jingle = jingle;
+  }
+
+  @Override
+  public Type getType() {
+    return Type.of(type);
+  }
+
+  @Override
+  public Jid getSender() {
+    return new Jid(Jid.parseJidParts(sender));
+  }
+
+  @Override
+  public Jid getRecipient() {
+    return new Jid(Jid.parseJidParts(recipient));
+  }
+
+  @Override
+  public String getId() {
+    return id;
   }
 
   @Override
@@ -1312,7 +1420,8 @@ public class JingleInfoQuery extends BasicInfoQuery {
   }
 
   /**
-   * Returns the {@code <jingle/>} element.
+   * See {@link Jingle}.
+   * @return nevel {@code null}.
    */
   public Jingle getJingle() {
     return jingle;

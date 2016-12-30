@@ -1,6 +1,7 @@
 package chat.viska.xmpp;
 
 import chat.viska.xmpp.stanzas.Stanza;
+import java.util.Set;
 
 /**
  * XMPP Extension.
@@ -8,7 +9,9 @@ import chat.viska.xmpp.stanzas.Stanza;
  */
 public interface Extension {
 
-  Class<? extends Stanza>[] getDefinedStanzaTypes();
+  Set<Class<? extends Extension>> getDependencies();
 
-  Extension[] getDependencies();
+  boolean quickValidate(Stanza stanza);
+
+  Session getSession();
 }

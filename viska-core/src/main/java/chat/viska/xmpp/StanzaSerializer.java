@@ -1,8 +1,8 @@
 package chat.viska.xmpp;
 
 import chat.viska.xmpp.stanzas.Stanza;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.Reader;
+import java.io.Writer;
 
 /**
  * Generic XMPP stanza serializer.
@@ -17,7 +17,7 @@ import java.io.OutputStream;
  */
 public interface StanzaSerializer {
 
-  <T> T read(Class<? extends T> type, InputStream input) throws Exception;
+  <T extends Stanza> T read(Class<? extends T> type, Reader input) throws Exception;
 
-  void write(Object source, OutputStream output) throws Exception;
+  void write(Object source, Writer output) throws Exception;
 }

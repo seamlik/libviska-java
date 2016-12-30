@@ -1,10 +1,10 @@
 package chat.viska.xmpp;
 
 import chat.viska.xmpp.stanzas.Stanza;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
 public class Session {
@@ -64,5 +64,9 @@ public class Session {
 
   public void apply(Extension extension) {
 
+  }
+
+  public Set<? extends Extension> getAppliedExtension() {
+    throw new RuntimeException();
   }
 }

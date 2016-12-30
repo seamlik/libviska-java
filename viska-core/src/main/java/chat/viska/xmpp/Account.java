@@ -27,7 +27,7 @@ public class Account implements SessionAware {
   }
 
   @Override
-  public Session getAttachedXmppSession() {
+  public Session getSession() {
     return session;
   }
 }

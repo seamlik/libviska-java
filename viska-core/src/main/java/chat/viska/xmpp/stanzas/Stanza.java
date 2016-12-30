@@ -5,7 +5,9 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * XMPP stanza.
+ * Complete XML document sent between XMPP clients and XMPP servers. There are
+ * only 3 types of a {@link Stanza}: {@link Presence}, {@link Message} and
+ * {@link InfoQuery}. There should be no more subtypes of this type.
  * @since 0.1
  */
 public interface Stanza {
@@ -164,7 +166,8 @@ public interface Stanza {
    * </p>
    * @throws chat.viska.xmpp.InvalidJidSyntaxException If the original value of
    *         this attribute is not a valid {@link Jid}.
-   * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.1">RFC 6120</a>
+   * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.1">RFC 6120:
+   *      XMPP Core</a>
    *
    */
   Jid getRecipient();
@@ -180,7 +183,8 @@ public interface Stanza {
    * </p>
    * @throws chat.viska.xmpp.InvalidJidSyntaxException If the original value of
    *         this attribute is not a valid {@link Jid}.
-   * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.2">RFC 6120</a>
+   * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.2">RFC 6120:
+   *      XMPP Core</a>
    */
   Jid getSender();
 
@@ -191,7 +195,8 @@ public interface Stanza {
    *   {@code <iq/>} and optional for a {@code <message/>} or a
    *   {@code <presence/>}.
    * </p>
-   * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.3">RFC 6120</a>
+   * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.3">RFC 6120:
+   *      XMPP Core</a>
    */
   String getId();
 
@@ -200,7 +205,8 @@ public interface Stanza {
    * <p>
    *   This property represents the {@code type} attribute.
    * </p>
-   * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.4">RFC 6120</a>
+   * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.4">RFC 6120:
+   *      XMPP Core</a>
    */
   Type getType();
 }
