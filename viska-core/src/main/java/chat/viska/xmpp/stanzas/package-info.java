@@ -7,11 +7,17 @@
  * </p>
  * <p>
  *   When XML documents are being transformed as objects of classes in this
- *   package, validation is not performed and it is the duty of the logic of a
- *   running XMPP session. However, their public constructors are responsible
- *   for checking which attributes or elements are mandatory. If not explicitly
- *   noted, the constructor arguments are usually optional. Please consult the
- *   XMPP specifications for more details.
+ *   package, a simple validation, which means checking if an absolutely
+ *   mandatory attribute or element is provided, is performed.
+ * </p>
+ * <p>
+ *   The constructors of all classes in this package also perform the simple
+ *   validation mentioned above. If any absolutely required attributes or
+ *   element is not provided in the parameters, an
+ *   {@link java.lang.NullPointerException} or
+ *   {@link java.lang.IllegalArgumentException} will be thrown and an XPath of
+ *   that mandatory attribute or element will be provided via
+ *   {@link java.lang.Exception#getMessage()}.
  * </p>
  * @since 0.1
  */

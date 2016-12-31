@@ -1,6 +1,7 @@
 package chat.viska.xmpp.jingle;
 
-import chat.viska.xmpp.*;
+import chat.viska.xmpp.BaseExtension;
+import chat.viska.xmpp.Extension;
 import chat.viska.xmpp.Session;
 import chat.viska.xmpp.stanzas.Stanza;
 import java.util.HashSet;
@@ -15,7 +16,9 @@ public class JingleExtension implements Extension {
 
   @Override
   public Set<Class<? extends Extension>> getDependencies() {
-    return new HashSet<>(0);
+    Set<Class<? extends Extension>> dependencies = new HashSet<>(1);
+    dependencies.add(BaseExtension.class);
+    return dependencies;
   }
 
   @Override

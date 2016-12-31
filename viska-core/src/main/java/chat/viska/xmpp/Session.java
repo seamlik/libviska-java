@@ -14,10 +14,15 @@ public class Session {
   }
 
   private final UUID id = UUID.randomUUID();
-  private Account account;
   private State state;
+  private Set<? extends Extension> extensions;
+  private String server;
 
   public Session(Jid jid) {
+
+  }
+
+  public Session(String server) {
 
   }
 
@@ -42,14 +47,6 @@ public class Session {
 
   }
 
-  public void login() {
-
-  }
-
-  public void logout() {
-
-  }
-
   public void send(Stanza stanza) {
 
   }
@@ -58,15 +55,11 @@ public class Session {
     return state;
   }
 
-  public void setResource(String resource) {
-
-  }
-
   public void apply(Extension extension) {
 
   }
 
-  public Set<? extends Extension> getAppliedExtension() {
+  public Set<? extends Extension> getExtensions() {
     throw new RuntimeException();
   }
 }

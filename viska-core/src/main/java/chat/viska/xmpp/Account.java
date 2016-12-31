@@ -4,7 +4,6 @@ import java.util.Set;
 
 /**
  * An XMPP account logged into an XMPP session.
- * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
 public class Account implements SessionAware {

@@ -1,7 +1,8 @@
 package chat.viska.xmpp.stanzas;
 
 /**
- * XMPP stanza for information or a request. It represents an {@code <iq/>}.
+ * XMPP stanza for sending information or a request. It represents an
+ * {@code <iq/>}.
  * @since 0.1
  */
 public interface InfoQuery extends Stanza {

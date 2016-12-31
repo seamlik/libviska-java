@@ -7,7 +7,7 @@ import java.util.Set;
  * XMPP Extension.
  * @since 0.1
  */
-public interface Extension {
+public interface Extension extends SessionAware {
 
   Set<Class<? extends Extension>> getDependencies();
 

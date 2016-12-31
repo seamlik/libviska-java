@@ -11,7 +11,6 @@ import org.simpleframework.xml.Attribute;
 import org.simpleframework.xml.Element;
 import org.simpleframework.xml.ElementList;
 import org.simpleframework.xml.Namespace;
-import org.simpleframework.xml.Path;
 import org.simpleframework.xml.Root;
 import org.simpleframework.xml.Text;
 import org.simpleframework.xml.convert.Convert;
@@ -148,14 +147,11 @@ public final class JingleInfoQuery implements InfoQuery {
     }
 
     /**
-     * {@code <content/>} element.
-     * <p>
-     *   Represents a type of the data being transferred during a
-     *   {@link chat.viska.xmpp.jingle.Session}, i.e. a data channel. One
-     *   {@link chat.viska.xmpp.jingle.Session} may transfer multiple different
-     *   {@link Content}, e.g. an audio channel and a video channel during a
-     *   video chat session.
-     * </p>
+     * Media channel during a {@link chat.viska.xmpp.jingle.Session}. It
+     * represents a {@code <content/>}. One
+     * {@link chat.viska.xmpp.jingle.Session} may have multiple different media
+     * channels, e.g. an audio channel and a video channel during a video chat
+     * session.
      */
     public static final class Content {
 
@@ -250,6 +246,8 @@ public final class JingleInfoQuery implements InfoQuery {
        *   categorizing all classes representing a {@code <description/>}.
        * </p>
        */
+      @Root(name = "description")
+      @Convert(XmppJingleDescriptionConverter.class)
       public interface Description {}
 
       /**
@@ -605,6 +603,30 @@ public final class JingleInfoQuery implements InfoQuery {
           }
         }
 
+        public static final class Bandwidth {
+
+          @Text
+          private int bandwidth;
+
+          @Attribute
+          private SdpBandwidthType type;
+
+          private Bandwidth() {}
+
+          public Bandwidth(int bandwidth, SdpBandwidthType type) {
+            this.bandwidth = bandwidth;
+            this.type = type;
+          }
+
+          public SdpBandwidthType getType() {
+            return type;
+          }
+
+          public int getBandwidth() {
+            return bandwidth;
+          }
+        }
+
         /**
          * The XML namespace of this element.
          */
@@ -613,13 +635,8 @@ public final class JingleInfoQuery implements InfoQuery {
         @Attribute(required = false)
         private String media;
 
-        @Attribute(name = "type", required = false)
-        @Path("bandwidth")
-        private SdpBandwidthType bandwidthType;
-
-        @Text(required = false)
-        @Path("bandwidth")
-        private String bandwidth;
+        @Element(required = false)
+        private Bandwidth bandwidth;
 
         @Element(required = false)
         private Encryption encryption;
@@ -636,18 +653,14 @@ public final class JingleInfoQuery implements InfoQuery {
         public RtpDescription(PayloadType[] payloadTypes,
                               String media,
                               SdpBandwidthType bandwidthType,
-                              Integer bandwidth,
+                              Bandwidth bandwidth,
                               Encryption encryption
                               ) {
           if (payloadTypes == null) {
             throw new NullPointerException();
           }
-          if (bandwidthType == null ^ bandwidth == null) {
-            throw new IllegalArgumentException();
-          }
           this.media = media;
-          this.bandwidthType = bandwidthType;
-          this.bandwidth = (bandwidth == null) ? null : bandwidth.toString();
+          this.bandwidth = bandwidth;
           this.payloadTypes = Arrays.asList(payloadTypes);
           this.encryption = encryption;
         }
@@ -656,12 +669,8 @@ public final class JingleInfoQuery implements InfoQuery {
           return media;
         }
 
-        public SdpBandwidthType getBandwidthType() {
-          return bandwidthType;
-        }
-
-        public Integer getBandwidth() {
-          return (bandwidth == null) ? null : new Integer(bandwidth);
+        public Bandwidth getBandwidth() {
+          return bandwidth;
         }
 
         /**
@@ -704,6 +713,8 @@ public final class JingleInfoQuery implements InfoQuery {
        *   element.
        * </p>
        */
+      @Root(name = "transport")
+      @Convert(XmppJingleTransportConverter.class)
       public interface Transport {}
 
       @Root(name = "transport")
@@ -923,10 +934,10 @@ public final class JingleInfoQuery implements InfoQuery {
         public static final String XMLNS = "urn:xmpp:jingle:transports:raw-udp:1";
       }
 
-      @Attribute(required = false)
+      @Attribute
       private String creator;
 
-      @Attribute(required = false)
+      @Attribute
       private String name;
 
       @Attribute(required = false)
@@ -936,11 +947,9 @@ public final class JingleInfoQuery implements InfoQuery {
       private String senders;
 
       @Element(required = false)
-      @Convert(XmppJingleDescriptionConverter.class)
       private Description description;
 
       @Element(required = false)
-      @Convert(XmppJingleTransportConverter.class)
       private Transport transport;
 
       /**
@@ -948,12 +957,27 @@ public final class JingleInfoQuery implements InfoQuery {
        */
       private Content() {}
 
+      /**
+       * Default constructor.
+       * @param creator See {@link Content#getCreator()}, mandatory.
+       * @param name See {@link Content#getName()}, mandatory.
+       * @param disposition  See {@link Content#getDisposition()}.
+       * @param senders  See {@link Content#getSender()}.
+       * @param description  See {@link Content#getDescription()}.
+       * @param transport  See {@link Content#getTransport()}.
+       */
       public Content(Creator creator,
                      String name,
                      String disposition,
                      Senders senders,
                      Description description,
                      Transport transport) {
+        if (creator == null) {
+          throw new NullPointerException("/iq/jingle/content[@creator]");
+        }
+        if (name == null) {
+          throw new NullPointerException("/iq/jingle/content[@name]");
+        }
         this.creator = creator.toString();
         this.name = name;
         this.disposition = disposition;
@@ -964,27 +988,52 @@ public final class JingleInfoQuery implements InfoQuery {
 
       /**
        * See {@link Creator}.
-       * @throws IllegalArgumentException If its hash in the original stanza is
+       * @throws IllegalArgumentException If its value in the original stanza is
        *                                  invalid.
        */
       public Creator getCreator() {
         return Creator.of(creator);
       }
 
+      /**
+       * Returns a unique name or identifier for the media channel according to
+       * the creator.
+       */
       public String getName() {
         return name;
       }
 
+      /**
+       * Returns how the content definition is to be interpreted by the
+       * recipient. It should be one of the values defined in
+       * <a href="https://www.iana.org/assignments/cont-disp/cont-disp.xhtml#cont-disp-1">
+       * Content Disposition Values and Parameters</a>. The default value is
+       * {@code session}.
+       */
       public String getDisposition() {
         return disposition;
       }
 
+      /**
+       * Determines which parties in the {@link chat.viska.xmpp.jingle.Session}
+       * will be generating content.
+       */
       public Senders getSenders() {
         return Senders.of(senders);
       }
 
+      /**
+       * See {@link Description}.
+       */
       public Description getDescription() {
         return description;
+      }
+
+      /**
+       * See {@link Transport}.
+       */
+      public Transport getTransport() {
+        return transport;
       }
     }
 
@@ -1267,7 +1316,7 @@ public final class JingleInfoQuery implements InfoQuery {
     private Jingle() {}
 
     /**
-     * Construct a {@link Jingle} with every field specified.
+     * Default constructor.
      * @param sid See {@link Jingle#getSessionId()}, mandatory.
      * @param action See {@link Jingle#getAction()}, mandatory.
      * @param initiator See {@link Jingle#getInitiator()}.
