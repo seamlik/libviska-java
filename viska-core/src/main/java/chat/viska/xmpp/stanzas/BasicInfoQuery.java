@@ -1,7 +1,5 @@
 package chat.viska.xmpp.stanzas;
 
-
-import chat.viska.xmpp.InvalidJidSyntaxException;
 import chat.viska.xmpp.Jid;
 import org.simpleframework.xml.Attribute;
 import org.simpleframework.xml.Root;
@@ -12,45 +10,22 @@ import org.simpleframework.xml.Root;
  * @since 0.1
  */
 @Root(name = "iq")
-public final class BasicInfoQuery implements InfoQuery {
-
-  @Attribute(required = false)
-  private String id;
-
-  @Attribute(required = false)
-  private String type;
-
-  @Attribute(name = "from", required = false)
-  private String sender;
-
-  @Attribute(name = "to", required = false)
-  private String recipient;
-
-  /**
-   * Exists only for Simple XML.
-   */
-  private BasicInfoQuery() {}
+public class BasicInfoQuery extends InfoQuery {
 
   /**
    * Default constructor.
-   * @param id See {@link InfoQuery#getId()}. This argument is mandatory.
-   * @param type See {@link InfoQuery#getType()}.
-   * @param sender See {@link InfoQuery#getSender()}.
-   * @param recipient See {@link InfoQuery#getRecipient()}.
+   * @param id See {@link Stanza#getId()}. This argument is mandatory.
+   * @param type See {@link Stanza#getType()}. This argument is mandatory.
+   * @param recipient See {@link Stanza#getRecipient()}.
+   * @param sender See {@link Stanza#getSender()}.
    * @throws IllegalArgumentException If {@code id} is {@code null} or empty.
    */
-  public BasicInfoQuery(String id, Type type, Jid sender, Jid recipient) {
-    if (id == null || id.isEmpty()) {
-      throw new IllegalArgumentException();
-    }
-    if (type == null) {
-      this.type = null;
-    } else {
-      this.type = type.toString();
-    }
-    this.id = id;
-    this.sender = sender.toString();
-    this.recipient = recipient.toString();
+  public BasicInfoQuery(@Attribute(name = "id") String id,
+                        @Attribute(name = "type") Type type,
+                        @Attribute(name = "to", required = false) Jid recipient,
+                        @Attribute(name = "from", required = false) Jid sender) {
+
+    super(id, type, recipient, sender);
   }
 
   /**
@@ -64,7 +39,7 @@ public final class BasicInfoQuery implements InfoQuery {
   public static BasicInfoQuery acknowledgement(InfoQuery iq,
                                                Jid sender,
                                                Jid recipient) {
-    return new BasicInfoQuery(iq.getId(), Type.RESULT, recipient, sender);
+    return new BasicInfoQuery(iq.getId(), Type.RESULT, sender, recipient);
   }
 
   /**
@@ -75,26 +50,6 @@ public final class BasicInfoQuery implements InfoQuery {
    */
   public static BasicInfoQuery acknowledgement(InfoQuery iq) {
     return acknowledgement(iq, iq.getRecipient(), iq.getSender());
-  }
-
-  @Override
-  public Type getType() {
-    return Type.of(type);
-  }
-
-  @Override
-  public Jid getSender() {
-    return new Jid(Jid.parseJidParts(sender));
-  }
-
-  @Override
-  public Jid getRecipient() {
-    return new Jid(Jid.parseJidParts(recipient));
-  }
-
-  @Override
-  public String getId() {
-    return id;
   }
 
   @Override

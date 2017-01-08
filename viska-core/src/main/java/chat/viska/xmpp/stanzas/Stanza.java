@@ -1,8 +1,19 @@
 package chat.viska.xmpp.stanzas;
 
 import chat.viska.xmpp.Jid;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.util.Arrays;
 import java.util.List;
+import org.simpleframework.xml.Attribute;
+import org.simpleframework.xml.Serializer;
+import org.simpleframework.xml.convert.AnnotationStrategy;
+import org.simpleframework.xml.core.Persister;
+import org.simpleframework.xml.strategy.ClassAttributeRemovingVisitor;
+import org.simpleframework.xml.strategy.VisitorStrategy;
+import org.simpleframework.xml.transform.RegistryMatcher;
+import org.simpleframework.xml.transform.XmppJidTransform;
+import org.simpleframework.xml.transform.XmppStanzaTypeTransform;
 
 /**
  * Complete XML document sent between XMPP clients and XMPP servers. There are
@@ -10,7 +21,7 @@ import java.util.List;
  * {@link InfoQuery}. There should be no more subtypes of this type.
  * @since 0.1
  */
-public interface Stanza {
+public abstract class Stanza implements SimpleXmlSerializable {
 
   /**
    * The type of a {@link Stanza}.
@@ -25,7 +36,7 @@ public interface Stanza {
    * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.2.3">"Type"
    *      attribute of an iq stanza</a>
    */
-  enum Type {
+  public enum Type {
 
     /**
      * Sending the {@link Message} to a ont-to-one chat session.
@@ -154,6 +165,32 @@ public interface Stanza {
     }
   }
 
+  private String id;
+  private Type type;
+  private Jid sender;
+  private Jid recipient;
+
+  protected Stanza(String id, Type type, Jid sender, Jid recipient) {
+    this.id = id;
+    this.type = type;
+    this.sender = sender;
+    this.recipient = recipient;
+  }
+
+  @Override
+  public void writeXml(Writer output) throws Exception {
+    RegistryMatcher matcher = new RegistryMatcher();
+    matcher.bind(Jid.class, new XmppJidTransform());
+    matcher.bind(Stanza.Type.class, new XmppStanzaTypeTransform());
+    Serializer serializer = new Persister(
+        new AnnotationStrategy(new VisitorStrategy(
+            new ClassAttributeRemovingVisitor()
+        )),
+        matcher
+    );
+    serializer.write(this, output);
+  }
+
   /**
    * Returns the recipient.
    * <p>
@@ -170,7 +207,10 @@ public interface Stanza {
    *      XMPP Core</a>
    *
    */
-  Jid getRecipient();
+  @Attribute(name = "to", required = false)
+  public Jid getRecipient() {
+    return recipient;
+  }
 
   /**
    * Returns the sender.
@@ -186,7 +226,10 @@ public interface Stanza {
    * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.2">RFC 6120:
    *      XMPP Core</a>
    */
-  Jid getSender();
+  @Attribute(name = "from", required = false)
+  public Jid getSender() {
+    return sender;
+  }
 
   /**
    * Returns the ID .
@@ -198,7 +241,10 @@ public interface Stanza {
    * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.3">RFC 6120:
    *      XMPP Core</a>
    */
-  String getId();
+  @Attribute(name = "id", required = false)
+  public String getId() {
+    return id;
+  }
 
   /**
    * Returns the {@link Type} of this {@link Stanza}.
@@ -208,5 +254,8 @@ public interface Stanza {
    * @see <a href="https://tools.ietf.org/html/rfc6120#section-8.1.4">RFC 6120:
    *      XMPP Core</a>
    */
-  Type getType();
+  @Attribute(name = "type", required = false)
+  public Type getType() {
+    return type;
+  }
 }

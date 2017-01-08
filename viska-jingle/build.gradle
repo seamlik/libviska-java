@@ -1,4 +1,5 @@
 dependencies {
   compile 'org.jitsi:ice4j:1.0'
   compile project(':viska-core')
+  compile project(':viska-rtp')
 }

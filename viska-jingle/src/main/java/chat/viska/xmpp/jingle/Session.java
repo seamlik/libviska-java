@@ -9,12 +9,14 @@ import java.util.UUID;
  */
 public class Session implements SessionAware {
 
+  public enum State {
+    ACTIVE,
+    ENDED,
+    PENDING
+  }
+
   private UUID innerId = UUID.randomUUID();
   private String sessionId;
-
-  public enum State {
-
-  }
 
   private State state;
 

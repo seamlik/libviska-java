@@ -1,11 +1,35 @@
 package chat.viska.xmpp.stanzas;
 
+import chat.viska.xmpp.Jid;
+import org.simpleframework.xml.Attribute;
+import org.simpleframework.xml.Root;
+
 /**
  * XMPP stanza for sending information or a request. It represents an
  * {@code <iq/>}.
  * @since 0.1
  */
-public interface InfoQuery extends Stanza {
+@Root(name = "iq")
+public abstract class InfoQuery extends Stanza {
+
+  /**
+   * Default constructor.
+   * @param id See {@link Stanza#getId()}. This argument is mandatory.
+   * @param type See {@link Stanza#getType()}. This argument is mandatory.
+   * @param recipient See {@link Stanza#getRecipient()}.
+   * @param sender See {@link Stanza#getSender()}.
+   * @throws NullPointerException If {@code id} or {@code type} is {@code null}.
+   *         The message of the exception is the XPath to the missing attribute.
+   */
+  protected InfoQuery(String id, Type type, Jid recipient, Jid sender) {
+    super(id, type, sender, recipient);
+    if (id == null) {
+      throw new NullPointerException("/iq[@id]");
+    }
+    if (type == null) {
+      throw new NullPointerException("/iq[@type]");
+    }
+  }
 
   /**
    * Determines whether this type of {@link InfoQuery} needs an acknowledgement.
@@ -16,5 +40,5 @@ public interface InfoQuery extends Stanza {
    * {@link BasicInfoQuery#acknowledgement(InfoQuery, chat.viska.xmpp.Jid, chat.viska.xmpp.Jid)}.
    * @see BasicInfoQuery#acknowledgement(InfoQuery, chat.viska.xmpp.Jid, chat.viska.xmpp.Jid)
    */
-  boolean needsAcknowledgement();
+  public abstract boolean needsAcknowledgement();
 }

@@ -1,6 +1,5 @@
 package chat.viska.xmpp.stanzas;
 
-import chat.viska.xmpp.SimpleXmlSerializer;
 import java.io.InputStreamReader;
 import java.io.StringWriter;
 import org.junit.jupiter.api.Assertions;
@@ -10,8 +9,7 @@ public class JingleInfoQueryTest {
 
   @Test
   public void parseRtpSessionInitiationStanza() throws Exception {
-    SimpleXmlSerializer serializer = new SimpleXmlSerializer();
-    JingleInfoQuery iq = serializer.read(
+    JingleInfoQuery iq = SimpleXmlSerializable.readXml(
         JingleInfoQuery.class,
         new InputStreamReader(
           JingleInfoQuery.class.getResourceAsStream(
@@ -20,15 +18,14 @@ public class JingleInfoQueryTest {
         )
     );
     StringWriter outputWriter = new StringWriter();
-    serializer.write(iq, outputWriter);
+    iq.writeXml(outputWriter);
     String output = outputWriter.toString();
     Assertions.assertEquals(iq.getJingle().getContents().size(), 2);
   }
 
   @Test
   public void parseZrtpSessionInitiationStanza() throws Exception {
-    SimpleXmlSerializer serializer = new SimpleXmlSerializer();
-    JingleInfoQuery iq = serializer.read(
+    JingleInfoQuery iq = SimpleXmlSerializable.readXml(
         JingleInfoQuery.class,
         new InputStreamReader(JingleInfoQuery.class.getResourceAsStream(
             "jingle-zrtp-session-initiation.xml"
@@ -36,7 +33,7 @@ public class JingleInfoQueryTest {
       )
     );
     StringWriter outputWriter = new StringWriter();
-    serializer.write(iq, outputWriter);
+    iq.writeXml(outputWriter);
     String output = outputWriter.toString();
     JingleInfoQuery.Jingle.Content.RtpDescription rtpDescription =
         (JingleInfoQuery.Jingle.Content.RtpDescription) iq.getJingle()
@@ -51,8 +48,7 @@ public class JingleInfoQueryTest {
 
   @Test
   public void parseAlternativeSession() throws Exception {
-    SimpleXmlSerializer serializer = new SimpleXmlSerializer();
-    JingleInfoQuery iq = serializer.read(
+    JingleInfoQuery iq = SimpleXmlSerializable.readXml(
         JingleInfoQuery.class,
         new InputStreamReader(JingleInfoQuery.class.getResourceAsStream(
           "jingle-alternative-session.xml"
@@ -60,7 +56,7 @@ public class JingleInfoQueryTest {
       )
     );
     StringWriter outputWriter = new StringWriter();
-    serializer.write(iq, outputWriter);
+    iq.writeXml(outputWriter);
     String output = outputWriter.toString();
     Assertions.assertEquals(
         iq.getJingle().getReason().getAlternativeSessionId(),
@@ -75,8 +71,7 @@ public class JingleInfoQueryTest {
 
   @Test
   public void parseTerminateSession() throws Exception {
-    SimpleXmlSerializer serializer = new SimpleXmlSerializer();
-    JingleInfoQuery iq = serializer.read(
+    JingleInfoQuery iq = SimpleXmlSerializable.readXml(
         JingleInfoQuery.class,
         new InputStreamReader(JingleInfoQuery.class.getResourceAsStream(
             "jingle-terminate-session.xml"
@@ -84,7 +79,7 @@ public class JingleInfoQueryTest {
       )
     );
     StringWriter outputWriter = new StringWriter();
-    serializer.write(iq, outputWriter);
+    iq.writeXml(outputWriter);
     String output = outputWriter.toString();
     Assertions.assertEquals(
         iq.getJingle().getReason().getText(),

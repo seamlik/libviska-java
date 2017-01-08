@@ -7,11 +7,31 @@ import java.util.Set;
  * XMPP Extension.
  * @since 0.1
  */
-public interface Extension extends SessionAware {
+public abstract class Extension implements SessionAware {
 
-  Set<Class<? extends Extension>> getDependencies();
+  private Session session;
 
-  boolean quickValidate(Stanza stanza);
+  protected Extension(Session session) throws DuplicatedExtensionsException {
+    if (session == null) {
+      throw new NullPointerException(
+          "A session must be provided when constructing an Extension!"
+      );
+    }
+    if (session.hasExtension(this.getExtensionId())) {
+      throw new DuplicatedExtensionsException(this.getExtensionId());
+    }
+    this.session = session;
+  }
 
-  Session getSession();
+  public abstract Set<Class<? extends Extension>> getDependencies();
+
+  public abstract boolean quickMatch(Stanza stanza);
+
+  public Session getSession() {
+    return session;
+  }
+
+  public abstract Set<String> getFeatures();
+
+  public abstract String getExtensionId();
 }

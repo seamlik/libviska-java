@@ -1,17 +1,22 @@
 package chat.viska.xmpp.stanzas;
 
+import chat.viska.xmpp.Jid;
 import java.util.Map;
 
 /**
  * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
-public interface Presence extends Stanza {
-  enum Show {
+public abstract class Presence extends Stanza {
+  public enum Show {
     AWAY,
     CHAT,
     DND,
     XA
+  }
+
+  protected Presence(String id, Type type, Jid sender, Jid recipient) {
+    super(id, type, sender, recipient);
   }
 
   /**
@@ -20,7 +25,7 @@ public interface Presence extends Stanza {
    * @see <a href="https://tools.ietf.org/html/rfc6121#section-4.7.2.1">Show
    *      Element</a>
    */
-  Show getShow();
+  public abstract Show getShow();
 
   /**
    * Returns the values of all {@code <status/>} elements.
@@ -29,7 +34,7 @@ public interface Presence extends Stanza {
    * @see <a href="https://tools.ietf.org/html/rfc6121#section-4.7.2.2">Status
    *      Element</a>
    */
-  Map<String, String> getAllStatus();
+  public abstract Map<String, String> getAllStatus();
 
   /**
    * Returns the value of the optional element {@code <priority/>}.
@@ -37,5 +42,5 @@ public interface Presence extends Stanza {
    * @see <a href="https://tools.ietf.org/html/rfc6121#section-4.7.2.3">Priority
    *      Element</a>
    */
-  Byte getPriority();
+  public abstract Byte getPriority();
 }

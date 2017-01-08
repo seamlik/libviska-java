@@ -157,30 +157,6 @@ public class Jid {
   }
 
   /**
-   * Returns the local part of this JID.
-   * @return never {@code null}.
-   */
-  public String getLocalpart() {
-    return localpart;
-  }
-
-  /**
-   * Returns the domain part of this JID.
-   * @return {@code null}.
-   */
-  public String getDomainpart() {
-    return domainpart;
-  }
-
-  /**
-   * Returns the resource part of this JID.
-   * @return never {@code null}.
-   */
-  public String getResourcepart() {
-    return resourcepart;
-  }
-
-  /**
    * Returns the {@link String} representation of this JID.
    * @return never {@code null}.
    */
@@ -211,6 +187,34 @@ public class Jid {
     }
     Jid jid = (Jid)object;
     return localpart.equals(jid.localpart) && domainpart.equals(jid.domainpart)
-                                           && resourcepart.equals(jid.resourcepart);
+        && resourcepart.equals(jid.resourcepart);
+  }
+
+  /**
+   * Returns the local part of this JID.
+   * @return never {@code null}.
+   */
+  public String getLocalpart() {
+    return localpart;
+  }
+
+  /**
+   * Returns the domain part of this JID.
+   * @return {@code null}.
+   */
+  public String getDomainpart() {
+    return domainpart;
+  }
+
+  /**
+   * Returns the resource part of this JID.
+   * @return never {@code null}.
+   */
+  public String getResourcepart() {
+    return resourcepart;
+  }
+
+  public Jid toBareJid() {
+    return new Jid(new String[] { localpart, domainpart, null });
   }
 }

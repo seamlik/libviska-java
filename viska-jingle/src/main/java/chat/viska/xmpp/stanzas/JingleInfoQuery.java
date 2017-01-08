@@ -22,7 +22,7 @@ import org.simpleframework.xml.convert.XmppJingleTransportConverter;
  * @since 0.1
  */
 @Root(name = "iq")
-public final class JingleInfoQuery implements InfoQuery {
+public final class JingleInfoQuery extends BasicInfoQuery {
 
   /**
    * Main content of a Jingle request. It represents a {@code <jingle/>}
@@ -30,7 +30,7 @@ public final class JingleInfoQuery implements InfoQuery {
    * @see <a href="https://xmpp.org/extensions/xep-0166.html">Jingle</a>
    */
   @Namespace(reference = Jingle.XMLNS)
-  public static final class Jingle {
+  public static final class Jingle extends InfoQueryElement {
 
     /**
      * Jingle action.
@@ -1346,6 +1346,11 @@ public final class JingleInfoQuery implements InfoQuery {
       this.contents = contentCollection;
     }
 
+    @Override
+    public String getNamespace() {
+      return XMLNS;
+    }
+
     /**
      * Returns the action of this Jingle request.
      * <p>
@@ -1400,70 +1405,35 @@ public final class JingleInfoQuery implements InfoQuery {
     }
   }
 
-  @Attribute
-  private String id;
-
-  @Attribute(required = false)
-  private String type;
-
-  @Attribute(name = "from", required = false)
-  private String sender;
-
-  @Attribute(name = "to", required = false)
-  private String recipient;
-
-  @Element
   private Jingle jingle;
 
-  /**
-   * Exists only for Simple XML.
-   */
-  private JingleInfoQuery() {}
-
-  public JingleInfoQuery(String id,
-                         Type type,
-                         Jid sender,
-                         Jid recipient,
-                         Jingle jingle) {
+  private JingleInfoQuery(@Attribute(name = "id") String id,
+                          @Attribute(name = "type") Type type,
+                          @Attribute(name = "to", required = false) Jid recipient,
+                          @Attribute(name = "from", required = false) Jid sender,
+                          @Element(name = "jingle") Jingle jingle) {
+    super(id, type, recipient, sender);
     if (type != Type.SET) {
-      throw new IllegalArgumentException("Only accept a \"set\" type!");
-    }
-    if (recipient == null) {
-      throw new NullPointerException("recipient");
-    }
-    if (id == null) {
-      throw new NullPointerException("id");
+      throw new IllegalArgumentException(
+          "Only accept a \"set\" type for \"/iq[@type]\"!"
+      );
     }
     if (jingle == null) {
-      throw new NullPointerException("jingle");
+      throw new NullPointerException("/iq/jingle");
     }
-    this.id = id;
-    this.sender = sender.toString();
-    this.recipient = recipient.toString();
     this.jingle = jingle;
   }
 
-  @Override
-  public Type getType() {
-    return Type.of(type);
+  public JingleInfoQuery(String id, Jingle jingle, Jid recipient, Jid sender) {
+    this(id, Type.SET, recipient, sender, jingle);
+  }
+
+  public JingleInfoQuery(String id, Jingle jingle, Jid recipient) {
+    this(id, Type.SET, recipient, null, jingle);
   }
 
   @Override
-  public Jid getSender() {
-    return new Jid(Jid.parseJidParts(sender));
-  }
-
-  @Override
-  public Jid getRecipient() {
-    return new Jid(Jid.parseJidParts(recipient));
-  }
-
-  @Override
-  public String getId() {
-    return id;
-  }
-
-  @Override
+  @Element(name = "jingle")
   public boolean needsAcknowledgement() {
     return true;
   }

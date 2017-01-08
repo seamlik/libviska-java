@@ -8,12 +8,19 @@ counterparts with the following reasons:
   * Supports VoIP calls using XMPP Jingle standards.
   * Rapidly drop features or standards that we consider out of fashion or
     outdated. We believe this can accelerate the evolution of XMPP standards.
-  * Uses [SimpleXML](http://simple.sourceforge.net) to parse XMPP stanzas (for
+  * Uses [Simple XML](http://simple.sourceforge.net) to parse XMPP stanzas (for
     Android compatibility, otherwise we would use JAXB)
   * Designed for being used by both Java SE and Android applications.
   * Supports end-to-end encryption.
 
 This library can be used in Android API Level >= 19 and Java SE >= 7.
+
+Supported XEPs
+--------------
+
+  * [XEP-0166: Jingle](https://xmpp.org/extensions/xep-0166.html)
+  * [XEP-0167: Jingle RTP Sessions](https://xmpp.org/extensions/xep-0167.html)
+  * [XEP-0176: Jingle ICE-UDP Transport Method](https://xmpp.org/extensions/xep-0176.html)
 
 License
 -------
