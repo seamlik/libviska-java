@@ -8,8 +8,6 @@ counterparts with the following reasons:
   * Supports VoIP calls using XMPP Jingle standards.
   * Rapidly drop features or standards that we consider out of fashion or
     outdated. We believe this can accelerate the evolution of XMPP standards.
-  * Uses [Simple XML](http://simple.sourceforge.net) to parse XMPP stanzas (for
-    Android compatibility, otherwise we would use JAXB)
   * Designed for being used by both Java SE and Android applications.
   * Supports end-to-end encryption.
 
@@ -40,15 +38,11 @@ welcome all kinds of help!
 Simply run
 
 ```bash
-gradle build
+gradle
 ```
-
-### Report Bugs
-
-We use the issue tracker of GitHub and pull requests are welcomed.
 
 ### TODOs
 
 * Supports video conferencing
-* Supports text messaging
+* Supports text messaging over OMEMO
 * Supports multimedia messaging

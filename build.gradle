@@ -1,37 +1,42 @@
+/*
+ * Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+ext {
+  subprojects = project(':subprojects').subprojects + project(':android').subprojects
+}
+
 buildscript {
   repositories {
     jcenter()
   }
   dependencies {
+    classpath 'com.android.tools.build:gradle:2.3.0'
     classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0-M3'
   }
 }
 
-allprojects {
-  group = 'chat.viska'
-  version = file("${rootDir}/VERSION").text
-}
-
-subprojects {
-  apply plugin: 'java'
-  apply plugin: 'checkstyle'
-  apply plugin: 'org.junit.platform.gradle.plugin'
-
-  repositories {
+ext.subprojects.each { pr ->
+  pr.apply plugin: 'checkstyle'
+  pr.group = 'chat.viska'
+  pr.version = file("${rootDir}/VERSION").text
+  pr.repositories {
     jcenter()
   }
-
-  dependencies {
-    testCompile("org.junit.jupiter:junit-jupiter-api:5.0.0-M3")
-    testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.0-M3")
-  }
-
-  compileJava {
-    sourceCompatibility = 8
-  }
-
-  checkstyle {
-    toolVersion = '7.3'
+  pr.checkstyle {
+    toolVersion = '7.4'
     File styleFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
     if (!styleFile.exists()) {
       mkdir "${rootDir}/config/checkstyle"
@@ -44,35 +49,63 @@ subprojects {
   }
 }
 
+project(':subprojects').subprojects {
+  apply plugin: 'java'
+  apply plugin: 'maven-publish'
+  apply plugin: 'org.junit.platform.gradle.plugin'
+
+  dependencies {
+    testCompile("org.junit.jupiter:junit-jupiter-api:5.0.0-M3")
+    testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.0-M3")
+  }
+
+  publishing {
+    publications {
+      mavenJava(MavenPublication) {
+        from components.java
+      }
+    }
+  }
+}
+
+project(':android').subprojects {
+  apply plugin: 'com.android.library'
+}
+
 task javadocAll(type: Javadoc) {
   group = 'documentation'
+  description = 'Generates Javadoc for the whole project.'
   def outputDir = file("${buildDir}/javadocAll")
   outputs.dir outputDir
   outputs.files "${outputDir}/**/*"
-  def externalJavadocs = [
+  options.links(
     'https://docs.oracle.com/javase/8/docs/api',
     'http://sco0ter.bitbucket.org/precis'
-  ]
-  options.links externalJavadocs.toArray(new String[0])
-  source subprojects.collect { project ->
+  )
+  source(project(':subprojects').subprojects.collect { project ->
     project.sourceSets.main.allJava
-  }
-  classpath = files(subprojects.collect { project ->
-    project.sourceSets.main.compileClasspath
   })
+  source(project(':android').subprojects.collect { project ->
+    project.android.sourceSets.main.java.sourceFiles
+  })
+  classpath = files(project(':subprojects').subprojects.collect { p ->
+    p.sourceSets.main.compileClasspath
+  })
+  /*
+  classpath += files(project(':android').subprojects.collect { p ->
+    p.android.bootClasspath
+  })
+  */
   destinationDir = outputDir
   title = "API Reference for libviska-java $version"
-  exclude 'org/**/*'
-}
-
-task build {
-  dependsOn javadocAll
-  group = 'build'
 }
 
 task clean {
   group = 'build'
-  doFirst {
+  doLast {
     delete buildDir
+    delete file('config/checkstyle/checkstyle.xml')
   }
 }
+
+defaultTasks 'build', 'javadocAll'
