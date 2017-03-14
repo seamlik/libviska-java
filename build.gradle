@@ -14,28 +14,34 @@
  * limitations under the License.
  */
 
-ext {
-  subprojects = project(':subprojects').subprojects + project(':android').subprojects
-}
-
 buildscript {
   repositories {
     jcenter()
   }
   dependencies {
-    classpath 'com.android.tools.build:gradle:2.3.0'
     classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0-M3'
   }
 }
 
-ext.subprojects.each { pr ->
-  pr.apply plugin: 'checkstyle'
-  pr.group = 'chat.viska'
-  pr.version = file("${rootDir}/VERSION").text
-  pr.repositories {
+subprojects {
+  apply plugin: 'checkstyle'
+  apply plugin: 'java'
+  apply plugin: 'maven-publish'
+  apply plugin: 'org.junit.platform.gradle.plugin'
+
+  group = 'chat.viska'
+  version = file("${rootDir}/VERSION").text
+
+  repositories {
     jcenter()
   }
-  pr.checkstyle {
+
+  dependencies {
+    testCompile("org.junit.jupiter:junit-jupiter-api:5.0.0-M3")
+    testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.0-M3")
+  }
+
+  checkstyle {
     toolVersion = '7.4'
     File styleFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
     if (!styleFile.exists()) {
@@ -47,17 +53,6 @@ ext.subprojects.each { pr ->
     }
     config = resources.text.fromFile(styleFile)
   }
-}
-
-project(':subprojects').subprojects {
-  apply plugin: 'java'
-  apply plugin: 'maven-publish'
-  apply plugin: 'org.junit.platform.gradle.plugin'
-
-  dependencies {
-    testCompile("org.junit.jupiter:junit-jupiter-api:5.0.0-M3")
-    testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.0-M3")
-  }
 
   publishing {
     publications {
@@ -67,11 +62,12 @@ project(':subprojects').subprojects {
     }
   }
 }
-
-project(':android').subprojects {
-  apply plugin: 'com.android.library'
+/*
+project(':android').subprojects { pr ->
+  pr.logger.warn("          applying android plugin to ${pr.name}")
+  pr.apply plugin: 'com.android.library'
 }
-
+*/
 task javadocAll(type: Javadoc) {
   group = 'documentation'
   description = 'Generates Javadoc for the whole project.'
@@ -79,23 +75,16 @@ task javadocAll(type: Javadoc) {
   outputs.dir outputDir
   outputs.files "${outputDir}/**/*"
   options.links(
-    'https://docs.oracle.com/javase/8/docs/api',
-    'http://sco0ter.bitbucket.org/precis'
+    'http://reactivex.io/RxJava/2.x/javadoc',
+    'http://sco0ter.bitbucket.org/precis',
+    'https://docs.oracle.com/javase/8/docs/api'
   )
-  source(project(':subprojects').subprojects.collect { project ->
-    project.sourceSets.main.allJava
+  source(subprojects.collect { pr ->
+    pr.sourceSets.main.allJava
   })
-  source(project(':android').subprojects.collect { project ->
-    project.android.sourceSets.main.java.sourceFiles
+  classpath += files(subprojects.collect { pr ->
+    pr.sourceSets.main.compileClasspath
   })
-  classpath = files(project(':subprojects').subprojects.collect { p ->
-    p.sourceSets.main.compileClasspath
-  })
-  /*
-  classpath += files(project(':android').subprojects.collect { p ->
-    p.android.bootClasspath
-  })
-  */
   destinationDir = outputDir
   title = "API Reference for libviska-java $version"
 }

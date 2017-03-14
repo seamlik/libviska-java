@@ -1,5 +1,8 @@
 rootProject.name = 'viska'
 
-include ':android:viska-impl-webrtc-android'
-include ':subprojects:viska-core'
-include ':subprojects:viska-jingle'
+include ':viska-core'
+include ':viska-jingle'
+
+rootProject.children.each { pr ->
+  pr.projectDir = file("${rootDir}/subprojects/${pr.name}")
+}

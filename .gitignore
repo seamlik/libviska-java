@@ -1,7 +1,8 @@
 *.class
+*.iml
 *.jar
+.idea/
 /.gradle/
-/.idea/
 /config/checkstyle/checkstyle.xml
 /gradle/wrapper/
 /gradlew
