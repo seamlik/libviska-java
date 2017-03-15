@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *       http://www.apache.org/licenses/LICENSE-2.0
+ *        http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,25 +16,21 @@
 
 package chat.viska;
 
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
-import org.joda.time.Instant;
+public class OperationNotReadyException extends RuntimeException {
 
-public abstract class Event {
-
-  private Instant triggerdTime;
-  private String message;
-
-  public Event(@Nullable Instant triggerdTime, @Nullable String message) {
-    this.triggerdTime = triggerdTime == null ? Instant.now() : triggerdTime;
-    this.message = message;
+  public OperationNotReadyException() {
+    super();
   }
 
-  public @NonNull Instant getTriggeredTime() {
-    return triggerdTime;
+  public OperationNotReadyException(String s) {
+    super(s);
   }
 
-  public @Nullable String getMessage() {
-    return message;
+  public OperationNotReadyException(String s, Throwable throwable) {
+    super(s, throwable);
+  }
+
+  public OperationNotReadyException(Throwable throwable) {
+    super(throwable);
   }
 }

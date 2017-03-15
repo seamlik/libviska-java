@@ -17,14 +17,13 @@ Supported XEPs
 --------------
 
   * [XEP-0166: Jingle](https://xmpp.org/extensions/xep-0166.html)
-  * [XEP-0167: Jingle RTP Sessions](https://xmpp.org/extensions/xep-0167.html)
-  * [XEP-0176: Jingle ICE-UDP Transport Method](https://xmpp.org/extensions/xep-0176.html)
+  * [XEP-0343: Signaling WebRTC datachannels in Jingle](https://xmpp.org/extensions/xep-0343.html)
 
 License
 -------
 
-libviska-java is free software and is licensed under MIT License. The license is
-available in the `LICENSE` file.
+libviska-java is free software and is licensed under Apache-2.0 License. The
+license is available in the `LICENSE` file.
 
 Contributing
 ------------

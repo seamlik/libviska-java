@@ -18,14 +18,19 @@ package chat.viska.xmpp;
 
 import chat.viska.Event;
 import chat.viska.EventSource;
+import chat.viska.OperationNotReadyException;
 import io.reactivex.Observable;
+import io.reactivex.Scheduler;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
 import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
 import java.net.Proxy;
 import java.util.logging.Logger;
-import org.dom4j.Document;
+import org.joda.time.Instant;
+import org.w3c.dom.Document;
 
 /**
  * @since 0.1
@@ -36,21 +41,22 @@ public abstract class Session implements EventSource {
     CONNECTED,
     CONNECTING,
     DISCONNECTED,
-    DISCONNECTING
+    DISCONNECTING,
+    OFFLINE,
+    ONLINE
   }
 
   public static class StateChangedEvent extends Event {
-    private EventSource source;
+
     private State lastState;
 
-    public StateChangedEvent(EventSource source, State lastState) {
-      this.source = source;
+    public StateChangedEvent(@NonNull State lastState, @Nullable Instant triggeredTime) {
+      super(triggeredTime, null);
       this.lastState = lastState;
     }
 
-    @Override
-    public EventSource getSource() {
-      return source;
+    public StateChangedEvent(@NonNull State lastState) {
+      this(lastState, null);
     }
 
     public State getLastState() {
@@ -58,48 +64,66 @@ public abstract class Session implements EventSource {
     }
   }
 
+  public static final int DEFAULT_TCP_PORT = 5222;
+
   private State state = State.DISCONNECTED;
-  private String server;
+  private String domain;
   private String username;
   private final PluginManager pluginManager = new PluginManager(this);
   private Subject<Event> eventStream = PublishSubject.create();
   private Logger logger;
 
-  protected Session(@NonNull String server, @Nullable String username) {
-    this.server = server;
+  protected Session(@NonNull String domain, @Nullable String username) {
+    this.domain = domain;
     this.username = username;
     logger = Logger.getLogger(
-        "chat.viska.xmpp.Session_"+ username + "@" + server
+        "chat.viska.xmpp.Session_"+ username + "@" + domain
     );
   }
 
-  protected void fireEvent(Event event) {
+  protected void triggerEvent(Event event) {
     eventStream.onNext(event);
   }
 
   protected void setState(State state) {
     State lastState = this.state;
     this.state = state;
-    eventStream.onNext(new StateChangedEvent(this, lastState));
+    eventStream.onNext(new StateChangedEvent(lastState));
   }
 
-  public abstract void send(Document stanza);
+  public abstract @Nullable Proxy getProxy();
 
-  public abstract Observable<Document> getIncomingStanzas();
+  public abstract void setProxy(@Nullable Proxy proxy) throws OperationNotReadyException;
 
-  public abstract void connect(@Nullable String host,
-                               @Nullable Proxy proxy)
-      throws ServerConnectionEndpointNotFoundException;
+  public abstract @Nullable String getConnectionEndpoint();
+
+  public abstract void setConnectionEndpoint(String connectionEndpoint) throws OperationNotReadyException;
+
+  public abstract int getPort();
+
+  public abstract void setPort(int port) throws OperationNotReadyException;
+
+  public abstract void send(String stanza);
+
+  public void send(@NonNull Document stanza) {
+    //TODO
+  }
+
+  public abstract Observable<Document> getIncomingStanzaStream();
+
+  public abstract void connect() throws ConnectionEndpointNotFoundException;
 
   public abstract void disconnect();
 
+  public abstract void fetchConnectionMethod()
+      throws OperationNotReadyException, ConnectionEndpointNotFoundException;
 
   public State getState() {
     return state;
   }
 
-  public String getServer() {
-    return server;
+  public String getDomain() {
+    return domain;
   }
 
   public String getUsername() {
@@ -118,8 +142,27 @@ public abstract class Session implements EventSource {
     return logger;
   }
 
+  public @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
+                                             @NonNull Consumer<Event> handler) {
+    return eventStream.ofType(event).subscribe(handler);
+  }
+
+  public void login(@NonNull String password) {
+    login(password, null);
+  }
+
+  public void login(@NonNull String password, @Nullable String resource) {
+
+  }
+
   @Override
-  public Observable<Event> getEventStream() {
-    return eventStream;
+  public @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
+                                             @NonNull Consumer<Event> handler,
+                                             long timesOfHandling,
+                                             @Nullable Scheduler scheduler) {
+    return eventStream.ofType(event)
+                      .take(timesOfHandling)
+                      .observeOn(scheduler)
+                      .subscribe(handler);
   }
 }

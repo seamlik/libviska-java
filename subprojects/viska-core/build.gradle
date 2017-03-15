@@ -16,9 +16,9 @@
 
 dependencies {
   compile 'com.google.code.gson:gson:2.8.0'
+  compile 'io.netty:netty-codec-http:4.1.9.Final'
   compile 'io.reactivex.rxjava2:rxjava:2.0.6'
+  compile 'joda-time:joda-time:2.9.7'
   compile 'org.apache.commons:commons-lang3:3.5'
-  compile 'org.dom4j:dom4j:2.0.0'
-  compile 'org.glassfish.tyrus.bundles:tyrus-standalone-client-jdk:1.13.1'
   compile 'rocks.xmpp:precis:0.1.0'
 }
