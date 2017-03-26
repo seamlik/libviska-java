@@ -1,7 +1,7 @@
 libviska-java: XMPP Client Library for Android and Java SE
 ==========================================================
 
-libviska-java is an XMPP library written in Java. It aims to support as many
+`libviska-java` is an XMPP library written in Java. It aims to support as many
 modern or experimental features as possible. It is distinct from other
 counterparts with the following reasons:
 
@@ -18,11 +18,12 @@ Supported XEPs
 
   * [XEP-0166: Jingle](https://xmpp.org/extensions/xep-0166.html)
   * [XEP-0343: Signaling WebRTC datachannels in Jingle](https://xmpp.org/extensions/xep-0343.html)
+  * [XEP-0156: Discovering Alternative XMPP Connection Methods](https://xmpp.org/extensions/xep-0156.html)
 
 License
 -------
 
-libviska-java is free software and is licensed under Apache-2.0 License. The
+`libviska-java` is free software and is licensed under Apache-2.0 License. The
 license is available in the `LICENSE` file.
 
 Contributing

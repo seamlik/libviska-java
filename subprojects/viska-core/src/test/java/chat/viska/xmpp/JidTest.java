@@ -2,6 +2,7 @@ package chat.viska.xmpp;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 public class JidTest {
 
@@ -29,15 +30,30 @@ public class JidTest {
     );
     Assertions.assertThrows(
         InvalidJidSyntaxException.class,
-        () -> Jid.parseJidParts("@example.com")
+        new Executable() {
+          @Override
+          public void execute() throws Throwable {
+            Jid.parseJidParts("@example.com");
+          }
+        }
     );
     Assertions.assertThrows(
         InvalidJidSyntaxException.class,
-        () -> Jid.parseJidParts("@")
+        new Executable() {
+          @Override
+          public void execute() throws Throwable {
+            Jid.parseJidParts("@");
+          }
+        }
     );
     Assertions.assertThrows(
         InvalidJidSyntaxException.class,
-        () -> Jid.parseJidParts("/")
+        new Executable() {
+          @Override
+          public void execute() throws Throwable {
+            Jid.parseJidParts("/");
+          }
+        }
     );
   }
 }

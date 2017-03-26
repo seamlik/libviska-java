@@ -30,6 +30,11 @@ public interface EventSource {
 
   @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
                                       @NonNull Consumer<Event> handler,
-                                      long timesOfHandling,
-                                      @Nullable Scheduler scheduler);
+                                      long timesOfHandling);
+
+  @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
+                                      @NonNull Consumer<Event> handler);
+
+  @NonNull Disposable addEventHandlerOnce(@NonNull Class<? extends Event> event,
+                                          @NonNull Consumer<Event> handler);
 }

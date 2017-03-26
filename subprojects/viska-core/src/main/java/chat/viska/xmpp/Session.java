@@ -18,9 +18,7 @@ package chat.viska.xmpp;
 
 import chat.viska.Event;
 import chat.viska.EventSource;
-import chat.viska.OperationNotReadyException;
 import io.reactivex.Observable;
-import io.reactivex.Scheduler;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import io.reactivex.disposables.Disposable;
@@ -28,8 +26,9 @@ import io.reactivex.functions.Consumer;
 import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
 import java.net.Proxy;
+import java.util.List;
 import java.util.logging.Logger;
-import org.joda.time.Instant;
+import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
 
 /**
@@ -50,13 +49,9 @@ public abstract class Session implements EventSource {
 
     private State lastState;
 
-    public StateChangedEvent(@NonNull State lastState, @Nullable Instant triggeredTime) {
-      super(triggeredTime, null);
+    public StateChangedEvent(@NonNull EventSource source, @NonNull State lastState) {
+      super(source, null);
       this.lastState = lastState;
-    }
-
-    public StateChangedEvent(@NonNull State lastState) {
-      this(lastState, null);
     }
 
     public State getLastState() {
@@ -64,70 +59,96 @@ public abstract class Session implements EventSource {
     }
   }
 
-  public static final int DEFAULT_TCP_PORT = 5222;
-
   private State state = State.DISCONNECTED;
-  private String domain;
-  private String username;
+  private Jid loginJid;
   private final PluginManager pluginManager = new PluginManager(this);
   private Subject<Event> eventStream = PublishSubject.create();
   private Logger logger;
+  private Proxy proxy;
+  private ConnectionMethod connectionMethod;
 
-  protected Session(@NonNull String domain, @Nullable String username) {
-    this.domain = domain;
-    this.username = username;
+  protected Session(@NonNull Jid loginJid) {
+    Validate.notNull(loginJid, "`loginJid` must not be null");
+    this.loginJid = loginJid.toBareJid();
     logger = Logger.getLogger(
-        "chat.viska.xmpp.Session_"+ username + "@" + domain
+        "chat.viska.xmpp.Session_"+ loginJid.toString()
     );
   }
+
+  protected abstract void sendOpeningStreamStanza();
+
+  protected abstract void sendClosingStreamStanza();
 
   protected void triggerEvent(Event event) {
     eventStream.onNext(event);
   }
 
-  protected void setState(State state) {
+  private void setState(State state) {
     State lastState = this.state;
     this.state = state;
-    eventStream.onNext(new StateChangedEvent(lastState));
+    triggerEvent(new StateChangedEvent(this, lastState));
   }
 
-  public abstract @Nullable Proxy getProxy();
-
-  public abstract void setProxy(@Nullable Proxy proxy) throws OperationNotReadyException;
-
-  public abstract @Nullable String getConnectionEndpoint();
-
-  public abstract void setConnectionEndpoint(String connectionEndpoint) throws OperationNotReadyException;
-
-  public abstract int getPort();
-
-  public abstract void setPort(int port) throws OperationNotReadyException;
-
-  public abstract void send(String stanza);
-
-  public void send(@NonNull Document stanza) {
-    //TODO
-  }
+  public abstract void send(@NonNull Document stanza);
 
   public abstract Observable<Document> getIncomingStanzaStream();
 
-  public abstract void connect() throws ConnectionEndpointNotFoundException;
+  public abstract @NonNull List<ConnectionMethod> queryConnectionMethod();
 
-  public abstract void disconnect();
+  public void connect() throws ConnectionMethodNotFoundException {
+    switch (state) {
+      case CONNECTED:
+        return;
+      case CONNECTING:
+        return;
+      case DISCONNECTING:
+        throw new IllegalStateException("Client is disconnecting.");
+      case ONLINE:
+        return;
+      case OFFLINE:
+        return;
+      default:
+        break;
+    }
+    setState(State.CONNECTING);
+    if (connectionMethod == null) {
+      connectionMethod = queryConnectionMethod().get(0);
+    }
+    if (connectionMethod == null) {
+      throw new ConnectionMethodNotFoundException();
+    }
+    //TODO
+  }
 
-  public abstract void fetchConnectionMethod()
-      throws OperationNotReadyException, ConnectionEndpointNotFoundException;
+  public void disconnect() {
+    switch (getState()) {
+      case DISCONNECTED:
+        return;
+      case DISCONNECTING:
+        return;
+      case CONNECTING:
+        throw new IllegalStateException();
+    }
+    //TODO
+  }
+
+  public @Nullable Proxy getProxy() {
+    return proxy;
+  }
+
+  public void setProxy(Proxy proxy) {
+    if (getState() != State.DISCONNECTED) {
+      throw new IllegalStateException();
+    }
+    this.proxy = proxy;
+  }
 
   public State getState() {
     return state;
   }
 
-  public String getDomain() {
-    return domain;
-  }
-
-  public String getUsername() {
-    return username;
+  public Jid getLoginJid() {
+    return loginJid;
   }
 
   public void setResource(String resource) {
@@ -142,10 +163,7 @@ public abstract class Session implements EventSource {
     return logger;
   }
 
-  public @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
-                                             @NonNull Consumer<Event> handler) {
-    return eventStream.ofType(event).subscribe(handler);
-  }
+
 
   public void login(@NonNull String password) {
     login(password, null);
@@ -158,11 +176,25 @@ public abstract class Session implements EventSource {
   @Override
   public @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
                                              @NonNull Consumer<Event> handler,
-                                             long timesOfHandling,
-                                             @Nullable Scheduler scheduler) {
-    return eventStream.ofType(event)
-                      .take(timesOfHandling)
-                      .observeOn(scheduler)
-                      .subscribe(handler);
+                                             long timesOfHandling) {
+    if (timesOfHandling > 0L) {
+      return eventStream.ofType(event).take(timesOfHandling).subscribe(handler);
+    } else if (timesOfHandling == 0L) {
+      return eventStream.ofType(event).subscribe(handler);
+    } else {
+      throw new IllegalArgumentException("`timesOfHandlng` must be non-negative.");
+    }
+  }
+
+  @Override
+  public @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
+                                             @NonNull Consumer<Event> handler) {
+    return eventStream.ofType(event).subscribe(handler);
+  }
+
+  @Override
+  public @NonNull Disposable addEventHandlerOnce(@NonNull Class<? extends Event> event,
+                                                 @NonNull Consumer<Event> handler) {
+    return addEventHandler(event, handler, 1L);
   }
 }

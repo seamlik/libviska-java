@@ -18,23 +18,31 @@ package chat.viska;
 
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
+import org.apache.commons.lang3.Validate;
 import org.joda.time.Instant;
 
 public abstract class Event {
 
-  private Instant triggerdTime;
+  private EventSource source;
+  private Instant triggeredTime;
   private String message;
 
-  public Event(@Nullable Instant triggerdTime, @Nullable String message) {
-    this.triggerdTime = triggerdTime == null ? Instant.now() : triggerdTime;
-    this.message = message;
+  public Event(@NonNull EventSource source, @Nullable String message) {
+    Validate.notNull(source, "`source` must not be null");
+    this.source = source;
+    this.triggeredTime = Instant.now();
+    this.message = message == null ? "" : message;
+  }
+
+  public @NonNull EventSource getSource() {
+    return source;
   }
 
   public @NonNull Instant getTriggeredTime() {
-    return triggerdTime;
+    return triggeredTime;
   }
 
-  public @Nullable String getMessage() {
+  public @NonNull String getMessage() {
     return message;
   }
 }

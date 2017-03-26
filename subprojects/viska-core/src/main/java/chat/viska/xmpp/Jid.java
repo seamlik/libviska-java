@@ -213,7 +213,12 @@ public class Jid {
     }
     Jid jid = (Jid)object;
     return localpart.equals(jid.localpart) && domainpart.equals(jid.domainpart)
-        && resourcepart.equals(jid.resourcepart);
+                                           && resourcepart.equals(jid.resourcepart);
+  }
+
+  @Override
+  public int hashCode() {
+    return toString().hashCode();
   }
 
   /**

@@ -24,7 +24,7 @@ package chat.viska.xmpp;
  * <p>
  *   The local part must be an instance of the
  *   <a href="https://tools.ietf.org/html/rfc7613#section-3.2">
- *   UsernameCaseMapped profile of the PRECIS IdentifierClass</a>. Addtionally,
+ *   UsernameCaseMapped profile of the PRECIS IdentifierClass</a>. Additionally,
  *   the local part must not contain any characters belonging to
  *   {@link Jid#localpartExcludedChars}.
  * </p>
@@ -39,7 +39,6 @@ package chat.viska.xmpp;
  *   profile of the PRECIS FreeformClass</a>.
  * </p>
  * @see <a href="https://tools.ietf.org/html/rfc7622#section-3.3">RFC 7622</a>
- * @author Kai-Chung Yan (殷啟聰)
  * @since 0.1
  */
 public class InvalidJidPartException extends Exception {

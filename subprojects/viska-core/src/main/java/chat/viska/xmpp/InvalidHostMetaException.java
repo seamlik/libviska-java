@@ -19,21 +19,21 @@ package chat.viska.xmpp;
 /**
  * @since 0.1
  */
-public class HostMetaNotFoundException extends Exception {
+public class InvalidHostMetaException extends Exception {
 
-  public HostMetaNotFoundException() {
+  public InvalidHostMetaException() {
     super();
   }
 
-  public HostMetaNotFoundException(String msg) {
+  public InvalidHostMetaException(String msg) {
     super(msg);
   }
 
-  public HostMetaNotFoundException(String msg, Throwable throwable) {
+  public InvalidHostMetaException(String msg, Throwable throwable) {
     super(msg, throwable);
   }
 
-  public HostMetaNotFoundException(Throwable throwable) {
+  public InvalidHostMetaException(Throwable throwable) {
     super(throwable);
   }
 }

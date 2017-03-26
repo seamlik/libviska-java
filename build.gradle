@@ -25,12 +25,15 @@ buildscript {
 
 subprojects {
   apply plugin: 'checkstyle'
+  apply plugin: 'findbugs'
   apply plugin: 'java'
   apply plugin: 'maven-publish'
   apply plugin: 'org.junit.platform.gradle.plugin'
+  apply plugin: 'pmd'
 
   group = 'chat.viska'
   version = file("${rootDir}/VERSION").text
+  sourceCompatibility = 7
 
   repositories {
     jcenter()
@@ -54,20 +57,22 @@ subprojects {
     config = resources.text.fromFile(styleFile)
   }
 
+  tasks.withType(FindBugs) {
+    reports {
+      html.enabled = true
+      xml.enabled = false
+    }
+  }
+
   publishing {
     publications {
-      mavenJava(MavenPublication) {
+      main(MavenPublication) {
         from components.java
       }
     }
   }
 }
-/*
-project(':android').subprojects { pr ->
-  pr.logger.warn("          applying android plugin to ${pr.name}")
-  pr.apply plugin: 'com.android.library'
-}
-*/
+
 task javadocAll(type: Javadoc) {
   group = 'documentation'
   description = 'Generates Javadoc for the whole project.'
@@ -97,4 +102,4 @@ task clean {
   }
 }
 
-defaultTasks 'build', 'javadocAll'
+defaultTasks 'assemble', 'javadocAll'
