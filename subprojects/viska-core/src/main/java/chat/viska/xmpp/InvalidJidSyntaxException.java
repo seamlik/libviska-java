@@ -21,17 +21,19 @@ package chat.viska.xmpp;
  */
 public class InvalidJidSyntaxException extends IllegalArgumentException {
 
-  /**
-   * @see Exception#Exception().
-   */
   public InvalidJidSyntaxException() {
     super();
   }
 
-  /**
-   * @see Exception#Exception().
-   */
   public InvalidJidSyntaxException(String msg) {
     super(msg);
+  }
+
+  public InvalidJidSyntaxException(String s, Throwable throwable) {
+    super(s, throwable);
+  }
+
+  public InvalidJidSyntaxException(Throwable throwable) {
+    super(throwable);
   }
 }

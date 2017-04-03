@@ -22,19 +22,12 @@ import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
+import java.util.NoSuchElementException;
 
 /**
  * @since 0.1
  */
 public interface EventSource {
 
-  @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
-                                      @NonNull Consumer<Event> handler,
-                                      long timesOfHandling);
-
-  @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
-                                      @NonNull Consumer<Event> handler);
-
-  @NonNull Disposable addEventHandlerOnce(@NonNull Class<? extends Event> event,
-                                          @NonNull Consumer<Event> handler);
+  @NonNull Observable<Event> getEventStream();
 }

@@ -21,14 +21,16 @@ import chat.viska.EventSource;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
 import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
 import java.net.Proxy;
 import java.util.List;
-import java.util.logging.Logger;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.logging.Level;
 import org.apache.commons.lang3.Validate;
+import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 import org.w3c.dom.Document;
 
 /**
@@ -42,7 +44,8 @@ public abstract class Session implements EventSource {
     DISCONNECTED,
     DISCONNECTING,
     OFFLINE,
-    ONLINE
+    ONLINE,
+    SHUTDOWN,
   }
 
   public static class StateChangedEvent extends Event {
@@ -50,7 +53,7 @@ public abstract class Session implements EventSource {
     private State lastState;
 
     public StateChangedEvent(@NonNull EventSource source, @NonNull State lastState) {
-      super(source, null);
+      super(source, Level.FINE, null);
       this.lastState = lastState;
     }
 
@@ -59,69 +62,96 @@ public abstract class Session implements EventSource {
     }
   }
 
+  public static class ExceptionCaughtEvent extends Event {
+
+    private Throwable cause;
+
+    public ExceptionCaughtEvent(@NonNull EventSource source, @NonNull Throwable cause) {
+      super(source, Level.WARNING, null);
+      Validate.notNull(cause, "`cause` must not be null.");
+      this.cause = cause;
+    }
+
+    public Throwable getCause() {
+      return cause;
+    }
+  }
+
   private State state = State.DISCONNECTED;
   private Jid loginJid;
   private final PluginManager pluginManager = new PluginManager(this);
   private Subject<Event> eventStream = PublishSubject.create();
-  private Logger logger;
   private Proxy proxy;
   private ConnectionMethod connectionMethod;
+  private final LoggingManager loggingManager;
 
-  protected Session(@NonNull Jid loginJid) {
-    Validate.notNull(loginJid, "`loginJid` must not be null");
-    this.loginJid = loginJid.toBareJid();
-    logger = Logger.getLogger(
-        "chat.viska.xmpp.Session_"+ loginJid.toString()
-    );
-  }
-
-  protected abstract void sendOpeningStreamStanza();
-
-  protected abstract void sendClosingStreamStanza();
-
-  protected void triggerEvent(Event event) {
-    eventStream.onNext(event);
-  }
-
-  private void setState(State state) {
+  private synchronized void setState(State state) {
     State lastState = this.state;
     this.state = state;
     triggerEvent(new StateChangedEvent(this, lastState));
   }
 
-  public abstract void send(@NonNull Document stanza);
+  protected Session(@NonNull Jid loginJid) {
+    Validate.notNull(loginJid, "`loginJid` must not be null");
+    this.loginJid = loginJid.toBareJid();
+    this.loggingManager = new LoggingManager(this);
+  }
 
-  public abstract Observable<Document> getIncomingStanzaStream();
+  protected abstract void onOpeningXmppStream();
 
-  public abstract @NonNull List<ConnectionMethod> queryConnectionMethod();
+  protected abstract void onClosingXmppStream();
 
-  public void connect() throws ConnectionMethodNotFoundException {
+  protected abstract Future<Void> onConnecting()
+      throws ConnectionMethodNotFoundException, ConnectionException;
+
+  protected abstract void onDisconnecting();
+
+  protected abstract void onShuttingDown();
+
+  protected synchronized void triggerEvent(Event event) {
+    loggingManager.log(event, null);
+    eventStream.onNext(event);
+  }
+
+  public abstract Future<Void> send(@NonNull String xml);
+
+  public Future<Void> send(@NonNull Document xml) {
+    throw new RuntimeException();
+  }
+
+  public abstract Observable<String> getInboundXmppStream();
+
+  public abstract Observable<String> getOutboundXmppStream();
+
+  public abstract @NonNull Future<List<ConnectionMethod>> queryConnectionMethod();
+
+  public synchronized Future<Void> connect()
+      throws ConnectionMethodNotFoundException, ConnectionException {
     switch (state) {
       case CONNECTED:
-        return;
+        return ConcurrentUtils.constantFuture(null);
       case CONNECTING:
-        return;
-      case DISCONNECTING:
+        return ConcurrentUtils.constantFuture(null);
+      case DISCONNECTED:
         throw new IllegalStateException("Client is disconnecting.");
       case ONLINE:
-        return;
+        return ConcurrentUtils.constantFuture(null);
       case OFFLINE:
-        return;
+        return ConcurrentUtils.constantFuture(null);
+      case SHUTDOWN:
+        throw new IllegalStateException("Client has been shut down.");
       default:
         break;
-    }
-    setState(State.CONNECTING);
-    if (connectionMethod == null) {
-      connectionMethod = queryConnectionMethod().get(0);
     }
     if (connectionMethod == null) {
       throw new ConnectionMethodNotFoundException();
     }
-    //TODO
+    setState(State.CONNECTING);
+    return onConnecting();
   }
 
-  public void disconnect() {
-    switch (getState()) {
+  public synchronized void disconnect() {
+    switch (state) {
       case DISCONNECTED:
         return;
       case DISCONNECTING:
@@ -137,7 +167,7 @@ public abstract class Session implements EventSource {
   }
 
   public void setProxy(Proxy proxy) {
-    if (getState() != State.DISCONNECTED) {
+    if (state != State.DISCONNECTED) {
       throw new IllegalStateException();
     }
     this.proxy = proxy;
@@ -159,11 +189,9 @@ public abstract class Session implements EventSource {
     return pluginManager;
   }
 
-  public Logger getLogger() {
-    return logger;
+  public LoggingManager getLoggingManager() {
+    return loggingManager;
   }
-
-
 
   public void login(@NonNull String password) {
     login(password, null);
@@ -173,28 +201,20 @@ public abstract class Session implements EventSource {
 
   }
 
-  @Override
-  public @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
-                                             @NonNull Consumer<Event> handler,
-                                             long timesOfHandling) {
-    if (timesOfHandling > 0L) {
-      return eventStream.ofType(event).take(timesOfHandling).subscribe(handler);
-    } else if (timesOfHandling == 0L) {
-      return eventStream.ofType(event).subscribe(handler);
-    } else {
-      throw new IllegalArgumentException("`timesOfHandlng` must be non-negative.");
-    }
+  public synchronized void shutdown() {
+    //TODO
+  }
+
+  public ConnectionMethod getConnectionMethod() {
+    return connectionMethod;
+  }
+
+  public synchronized void setConnectionMethod(ConnectionMethod connectionMethod) {
+    this.connectionMethod = connectionMethod;
   }
 
   @Override
-  public @NonNull Disposable addEventHandler(@NonNull Class<? extends Event> event,
-                                             @NonNull Consumer<Event> handler) {
-    return eventStream.ofType(event).subscribe(handler);
-  }
-
-  @Override
-  public @NonNull Disposable addEventHandlerOnce(@NonNull Class<? extends Event> event,
-                                                 @NonNull Consumer<Event> handler) {
-    return addEventHandler(event, handler, 1L);
+  public Subject<Event> getEventStream() {
+    return eventStream;
   }
 }

@@ -18,6 +18,7 @@ package chat.viska;
 
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
+import java.util.logging.Level;
 import org.apache.commons.lang3.Validate;
 import org.joda.time.Instant;
 
@@ -26,10 +27,12 @@ public abstract class Event {
   private EventSource source;
   private Instant triggeredTime;
   private String message;
+  private Level level;
 
-  public Event(@NonNull EventSource source, @Nullable String message) {
+  public Event(@NonNull EventSource source, @Nullable Level level, @Nullable String message) {
     Validate.notNull(source, "`source` must not be null");
     this.source = source;
+    this.level = level == null ? Level.FINE : level;
     this.triggeredTime = Instant.now();
     this.message = message == null ? "" : message;
   }
@@ -44,5 +47,9 @@ public abstract class Event {
 
   public @NonNull String getMessage() {
     return message;
+  }
+
+  public @NonNull Level getLevel() {
+    return level;
   }
 }

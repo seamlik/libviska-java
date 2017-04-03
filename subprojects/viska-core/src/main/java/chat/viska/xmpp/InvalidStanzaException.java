@@ -20,4 +20,20 @@ package chat.viska.xmpp;
  * @since 0.1
  */
 public class InvalidStanzaException extends Exception {
+
+  public InvalidStanzaException() {
+    super();
+  }
+
+  public InvalidStanzaException(String s) {
+    super(s);
+  }
+
+  public InvalidStanzaException(String s, Throwable throwable) {
+    super(s, throwable);
+  }
+
+  public InvalidStanzaException(Throwable throwable) {
+    super(throwable);
+  }
 }

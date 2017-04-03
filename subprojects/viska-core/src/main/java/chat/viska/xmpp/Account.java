@@ -16,28 +16,33 @@
 
 package chat.viska.xmpp;
 
+import io.reactivex.annotations.NonNull;
 import java.util.Set;
+import org.apache.commons.lang3.Validate;
 
 /**
  * @since 0.1
  */
 public abstract class Account implements SessionAware {
+
   private Session session;
   private Jid jid;
 
-  public abstract Set<String> getFeatures();
+  public abstract @NonNull Set<String> getFeatures();
 
-  protected Account(Jid jid, Session session) {
+  protected Account(@NonNull Jid jid, @NonNull Session session) {
+    Validate.notNull(jid, "`jid` must not be null.");
+    Validate.notNull(session, "`session` must not be null.");
     this.jid = jid.toBareJid();
     this.session = session;
   }
 
   @Override
-  public Session getSession() {
+  public @NonNull Session getSession() {
     return session;
   }
 
-  public Jid getJid() {
+  public @NonNull Jid getJid() {
     return jid;
   }
 }

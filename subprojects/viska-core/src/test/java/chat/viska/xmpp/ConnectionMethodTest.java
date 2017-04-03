@@ -36,17 +36,17 @@ public class ConnectionMethodTest {
     );
     List<ConnectionMethod> jsonResult = ConnectionMethod.queryHostMetaJson(hostMetaJson);
     Assertions.assertEquals(
-        "im.example.org/ws",
-        jsonResult.get(0).getEndpoint()
+        "wss://im.example.org:443/ws",
+        jsonResult.get(0).getUri().toString()
     );
     Assertions.assertEquals(
-        "im.example.org/xmpp",
-        jsonResult.get(1).getEndpoint()
+        "wss://im.example.org:443/xmpp",
+        jsonResult.get(1).getUri().toString()
     );
     InputStream hostMetaXml = getClass().getResourceAsStream("host-meta.xml");
     Assertions.assertEquals(
-        "im.example.org/ws",
-        ConnectionMethod.queryHostMetaXml(hostMetaXml).get(0).getEndpoint()
+        "wss://im.example.org:443/ws",
+        ConnectionMethod.queryHostMetaXml(hostMetaXml).get(0).getUri().toString()
     );
   }
 }

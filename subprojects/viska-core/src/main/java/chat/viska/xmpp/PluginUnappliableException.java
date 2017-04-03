@@ -19,7 +19,7 @@ package chat.viska.xmpp;
 /**
  * Thrown when a {@link Plugin} cannot be applied to a {@link Session}.
  */
-public class PluginUnappliableException extends Exception {
+public class PluginUnappliableException extends RuntimeException {
 
   public PluginUnappliableException() {
     super();

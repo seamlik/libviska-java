@@ -34,9 +34,4 @@ public class RemoteAccount extends Account {
   public Set<String> getFeatures() {
     return null;
   }
-
-  @Override
-  public Jid getJid() {
-    return super.getJid();
-  }
 }

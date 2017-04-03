@@ -31,7 +31,7 @@ public final class PluginManager implements SessionAware {
     this.session = session;
   }
 
-  public void apply(Class<? extends Plugin> type) throws PluginUnappliableException {
+  public void apply(Class<? extends Plugin> type) {
     Plugin plugin;
     try {
       plugin = type.getConstructor(Session.class).newInstance(session);

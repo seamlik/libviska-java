@@ -31,6 +31,7 @@ import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.Proxy;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.List;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -48,43 +49,44 @@ public class ConnectionMethod {
     WEBSOCKET
   }
 
-  public static final int DEFAULT_TCP_PORT = 5222;
-  public static final String HOST_META_NAMESPACE_BOSH = "urn:xmpp:alt-connections:xbosh";
-  public static final String HOST_META_NAMESPACE_WEBSOCKET = "urn:xmpp:alt-connections:websocket";
-
   private Protocol protocol;
   private String scheme;
-  private String endpoint;
+  private String host;
+  private String path;
   private int port;
+
+  public static final int DEFAULT_TCP_PORT_XMPP = 5222;
+  public static final String HOST_META_NAMESPACE_BOSH = "urn:xmpp:alt-connections:xbosh";
+  public static final String HOST_META_NAMESPACE_WEBSOCKET = "urn:xmpp:alt-connections:websocket";
 
   /**
    * Returns a URL to the host-meta file.
    * <p>This method forces to use HTTPS URL for security reasons.</p>
-   * @param domain The domain of the server, might be an IP address, a domain
+   * @param host The domain of the server, might be an IP address, a domain
    *               name, {@code localhost}, etc.. If it specifies a protocol
    *               other than HTTPS, HTTPS will still be used.
    * @param json Indicates whether to get the JSON version or the XML version.
    * @throws MalformedURLException If {@code domain} is invalid.
    */
-  private static @NonNull URL getHostMetaUrl(@NonNull String domain, boolean json)
+  private static @NonNull URL getHostMetaUrl(@NonNull String host, boolean json)
       throws MalformedURLException {
     final String hostMetaPath = "/.well-known/host-meta" + (json ? ".json" : "");
     return new URL(
         "https",
-        domain,
-        domain.endsWith("/") ? hostMetaPath.substring(1) : hostMetaPath
+        host,
+        host.endsWith("/") ? hostMetaPath.substring(1) : hostMetaPath
     );
   }
 
-  private static @NonNull JsonObject downloadHostMetaJson(@NonNull String domain,
+  private static @NonNull JsonObject downloadHostMetaJson(@NonNull String host,
                                                           @Nullable Proxy proxy)
       throws InvalidHostMetaException, IOException {
-    Validate.notNull(domain, "`domain` must not be null.");
+    Validate.notNull(host, "`domain` must not be null.");
     InputStreamReader reader = null;
     InputStream stream = null;
     JsonObject hostMeta = null;
     try {
-      final URL hostMetaUrl = getHostMetaUrl(domain, true);
+      final URL hostMetaUrl = getHostMetaUrl(host, true);
       stream = proxy == null ? hostMetaUrl.openStream()
                              : hostMetaUrl.openConnection(proxy).getInputStream();
       reader = new InputStreamReader(stream);
@@ -248,14 +250,16 @@ public class ConnectionMethod {
 
   public ConnectionMethod(@NonNull Protocol protocol,
                           @Nullable String scheme,
-                          @NonNull String endpoint,
-                          int port) {
+                          @NonNull String host,
+                          int port,
+                          @Nullable String path) {
     Validate.notNull(protocol, "`protocol` must not be null.");
-    Validate.notNull(endpoint, "`endpoint` must not be null.");
+    Validate.notNull(host, "`host` must not be null.");
     this.protocol = protocol;
     this.scheme = scheme == null ? "" : scheme;
-    this.endpoint = endpoint;
+    this.host = host;
     this.port = port;
+    this.path = path == null ? "" : path;
   }
 
   public ConnectionMethod(@NonNull Protocol protocol, @NonNull URI uri) {
@@ -264,7 +268,8 @@ public class ConnectionMethod {
     this.protocol = protocol;
     this.scheme = uri.getScheme();
     this.port = uri.getPort();
-    this.endpoint = uri.getHost() + uri.getPath();
+    this.host = uri.getHost();
+    this.path = uri.getPath();
   }
 
   public @NonNull Protocol getProtocol() {
@@ -275,15 +280,19 @@ public class ConnectionMethod {
     return port;
   }
 
-  public @NonNull String getEndpoint() {
-    return endpoint;
-  }
-
   public @NonNull String getScheme() {
     return scheme;
   }
 
-  public @NonNull ConnectionMethod toSecure() {
+  public @NonNull String getHost() {
+    return host;
+  }
+
+  public @NonNull String getPath() {
+    return path;
+  }
+
+  public @NonNull ConnectionMethod toTlsEnabled() {
     String secureScheme = scheme;
     switch (scheme.toLowerCase()) {
       case "http":
@@ -299,6 +308,29 @@ public class ConnectionMethod {
       default:
         return this;
     }
-    return new ConnectionMethod(protocol, secureScheme, endpoint, port);
+    return new ConnectionMethod(protocol, secureScheme, host, port, path);
+  }
+
+  public @NonNull URI getUri() {
+    try {
+      return new URI(scheme, null, host, port, path, null, null);
+    } catch (URISyntaxException ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+
+  public boolean isTlsEnabled() {
+    switch (scheme.toLowerCase()) {
+      case "http":
+        return false;
+      case "https":
+        return true;
+      case "ws":
+        return false;
+      case "wss":
+        return true;
+      default:
+        return false;
+    }
   }
 }

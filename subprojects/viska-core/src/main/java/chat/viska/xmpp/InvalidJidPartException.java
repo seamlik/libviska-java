@@ -43,24 +43,19 @@ package chat.viska.xmpp;
  */
 public class InvalidJidPartException extends Exception {
 
-  /**
-   * @see Exception#Exception().
-   */
   public InvalidJidPartException() {
     super();
   }
 
-  /**
-   * @see Exception#Exception().
-   */
   public InvalidJidPartException(String msg) {
     super(msg);
   }
 
-  /**
-   * @see Exception#Exception(Throwable).
-   */
   public InvalidJidPartException(Throwable throwable) {
     super(throwable);
+  }
+
+  public InvalidJidPartException(String s, Throwable throwable) {
+    super(s, throwable);
   }
 }

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *       http://www.apache.org/licenses/LICENSE-2.0
+ *        http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,23 +16,31 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.xmpp.SessionAware;
+import java.util.UUID;
+
 /**
+ * Jingle session.
  * @since 0.1
  */
-public class InvalidXmppServerHostException extends Exception {
-  public InvalidXmppServerHostException() {
-    super();
+public class JingleSession implements SessionAware {
+
+  public enum State {
+    ACTIVE,
+    ENDED,
+    PENDING
   }
 
-  public InvalidXmppServerHostException(String msg) {
-    super(msg);
+  private UUID innerId = UUID.randomUUID();
+  private String sessionId;
+
+  private State state;
+
+  public State getState() {
+    return state;
   }
 
-  public InvalidXmppServerHostException(String msg, Throwable throwable) {
-    super(msg, throwable);
-  }
-
-  public InvalidXmppServerHostException(Throwable throwable) {
-    super(throwable);
+  public chat.viska.xmpp.Session getSession() {
+    throw new RuntimeException();
   }
 }
