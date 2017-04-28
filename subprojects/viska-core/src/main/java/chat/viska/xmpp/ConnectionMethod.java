@@ -33,7 +33,9 @@ import java.net.Proxy;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.Future;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import org.apache.commons.lang3.Validate;
@@ -46,14 +48,25 @@ public class ConnectionMethod {
   public enum Protocol {
     BOSH,
     TCP,
-    WEBSOCKET
+    WEBSOCKET;
+
+    @Override
+    public String toString() {
+      switch (this) {
+        case WEBSOCKET:
+          return "WebSocket";
+        default:
+          return name();
+      }
+    }
   }
 
   private Protocol protocol;
-  private String scheme;
+  private String scheme = "";
   private String host;
-  private String path;
+  private String path = "";
   private int port;
+  private Boolean tlsEnabled;
 
   public static final int DEFAULT_TCP_PORT_XMPP = 5222;
   public static final String HOST_META_NAMESPACE_BOSH = "urn:xmpp:alt-connections:xbosh";
@@ -89,7 +102,7 @@ public class ConnectionMethod {
       final URL hostMetaUrl = getHostMetaUrl(host, true);
       stream = proxy == null ? hostMetaUrl.openStream()
                              : hostMetaUrl.openConnection(proxy).getInputStream();
-      reader = new InputStreamReader(stream);
+      reader = new InputStreamReader(stream, StandardCharsets.UTF_8);
       hostMeta = new JsonParser().parse(reader).getAsJsonObject();
     } catch (Exception ex) {
       throw new InvalidHostMetaException(ex);
@@ -115,7 +128,7 @@ public class ConnectionMethod {
       final URL hostMetaUrl = getHostMetaUrl(domain, false);
       stream = proxy == null ? hostMetaUrl.openStream()
                              : hostMetaUrl.openConnection(proxy).getInputStream();
-      reader = new InputStreamReader(stream);
+      reader = new InputStreamReader(stream, StandardCharsets.UTF_8);
       hostMeta = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(stream);
       hostMeta.normalizeDocument();
     } catch (ParserConfigurationException ex) {
@@ -161,6 +174,8 @@ public class ConnectionMethod {
             break;
           case HOST_META_NAMESPACE_WEBSOCKET:
             protocol = Protocol.WEBSOCKET;
+            break;
+          default:
             break;
         }
         return new ConnectionMethod(protocol, new URI(element.getAttribute("href")));
@@ -218,6 +233,8 @@ public class ConnectionMethod {
           case HOST_META_NAMESPACE_WEBSOCKET:
             protocol = Protocol.WEBSOCKET;
             break;
+          default:
+            break;
         }
         return new ConnectionMethod(
             protocol,
@@ -242,9 +259,14 @@ public class ConnectionMethod {
     return queryHostMetaJson(downloadHostMetaJson(domain, proxy));
   }
 
-  public static List<ConnectionMethod> queryDnsTxt(@NonNull String domain,
+  public static List<ConnectionMethod> queryDnsTxt(@NonNull String host,
                                                    @Nullable Proxy proxy) {
-    Validate.notNull(domain, "`domain` must not be null.");
+    Validate.notNull(host, "`host` must not be null.");
+    throw new RuntimeException();
+  }
+
+  public static Future<List<ConnectionMethod>> queryDnsSrv(@NonNull String host) {
+    Validate.notNull(host, "`host` must not be null.");
     throw new RuntimeException();
   }
 
@@ -252,14 +274,21 @@ public class ConnectionMethod {
                           @Nullable String scheme,
                           @NonNull String host,
                           int port,
-                          @Nullable String path) {
+                          @Nullable String path,
+                          @Nullable Boolean tlsEnabled) {
     Validate.notNull(protocol, "`protocol` must not be null.");
     Validate.notNull(host, "`host` must not be null.");
     this.protocol = protocol;
-    this.scheme = scheme == null ? "" : scheme;
     this.host = host;
     this.port = port;
-    this.path = path == null ? "" : path;
+    if (protocol == Protocol.TCP) {
+      Validate.notNull(tlsEnabled, "`tlsEnabled` must not be null with TCP protocol.");
+      this.tlsEnabled = tlsEnabled;
+    } else {
+      Validate.notNull(scheme, "`scheme` must not be null with %1s protocol.", protocol.toString());
+      this.path = path == null ? "" : path;
+      this.scheme = scheme == null ? "" : scheme;
+    }
   }
 
   public ConnectionMethod(@NonNull Protocol protocol, @NonNull URI uri) {
@@ -294,6 +323,13 @@ public class ConnectionMethod {
 
   public @NonNull ConnectionMethod toTlsEnabled() {
     String secureScheme = scheme;
+    if (protocol == Protocol.TCP) {
+      if (tlsEnabled) {
+        return this;
+      } else {
+        return new ConnectionMethod(Protocol.TCP, scheme, host, port, path, true);
+      }
+    }
     switch (scheme.toLowerCase()) {
       case "http":
         secureScheme = "https";
@@ -308,7 +344,7 @@ public class ConnectionMethod {
       default:
         return this;
     }
-    return new ConnectionMethod(protocol, secureScheme, host, port, path);
+    return new ConnectionMethod(protocol, secureScheme, host, port, null, null);
   }
 
   public @NonNull URI getUri() {
@@ -320,6 +356,9 @@ public class ConnectionMethod {
   }
 
   public boolean isTlsEnabled() {
+    if (protocol == Protocol.TCP) {
+      return tlsEnabled;
+    }
     switch (scheme.toLowerCase()) {
       case "http":
         return false;

@@ -14,10 +14,15 @@
  * limitations under the License.
  */
 
-dependencies {
-  compile 'com.google.code.gson:gson:2.8.0'
-  compile 'io.netty:netty-codec-http:4.1.9.Final'
-  compile 'io.netty:netty-handler:4.1.9.Final'
-  compile 'rocks.xmpp:precis:0.1.0'
-  compile project(':viska-commons')
+package chat.viska.commons.events;
+
+import io.reactivex.Observable;
+import io.reactivex.annotations.NonNull;
+
+/**
+ * @since 0.1
+ */
+public interface EventSource {
+
+  @NonNull Observable<Event> getEventStream();
 }

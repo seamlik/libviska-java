@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package chat.viska;
+package chat.viska.commons.events;
 
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;

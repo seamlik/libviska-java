@@ -12,7 +12,7 @@ public abstract class Message extends Stanza {
   /**
    * {@code <thread/>} element.
    */
-  public final class Thread {
+  public static final class Thread {
     private String parent;
     private String id;
 

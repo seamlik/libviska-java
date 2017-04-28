@@ -45,7 +45,7 @@ public class Jid {
   /**
    * @see <a href="https://tools.ietf.org/html/rfc7622#section-3.3.1">RFC 7622</a>
    */
-  public static final char[] localpartExcludedChars = {
+  private static final char[] localpartExcludedChars = {
     '\"',
     '&',
     '\'',

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *       http://www.apache.org/licenses/LICENSE-2.0
+ *        http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,20 +14,8 @@
  * limitations under the License.
  */
 
-package chat.viska;
-
-import io.reactivex.Observable;
-import io.reactivex.Scheduler;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
-import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
-import java.util.NoSuchElementException;
-
-/**
- * @since 0.1
- */
-public interface EventSource {
-
-  @NonNull Observable<Event> getEventStream();
+dependencies {
+  compile 'joda-time:joda-time:2.9.7'
+  compile 'io.reactivex.rxjava2:rxjava:2.0.6'
+  compile 'org.apache.commons:commons-lang3:3.5'
 }

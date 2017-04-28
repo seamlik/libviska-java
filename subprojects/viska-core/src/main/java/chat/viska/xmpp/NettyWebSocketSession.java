@@ -16,7 +16,7 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.netty.ChannelFutureListener;
+import chat.viska.commons.events.ExceptionCaughtEvent;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
@@ -28,6 +28,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpObjectAggregator;
+import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
@@ -35,9 +36,9 @@ import io.netty.handler.codec.http.websocketx.WebSocketFrameAggregator;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
-import io.reactivex.Observable;
+import io.netty.util.concurrent.GenericFutureListener;
 import io.reactivex.annotations.NonNull;
-import io.reactivex.subjects.PublishSubject;
+import io.reactivex.functions.Consumer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -47,7 +48,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.logging.Level;
 import javax.net.ssl.SSLException;
-import org.apache.commons.lang3.Validate;
 
 /**
  * @since 0.1
@@ -60,24 +60,23 @@ public class NettyWebSocketSession extends Session {
   private EventLoopGroup nettyEventLoopGroup;
   private SocketChannel nettyChannel;
   private WebSocketClientProtocolHandler nettyWebSocketProtocolHandler;
-  private final PublishSubject<String> inboundXmppStream = PublishSubject.create();
-  private final PublishSubject<String> outboundXmppStream = PublishSubject.create();
 
   @Override
-  protected void onOpeningXmppStream() {
-
+  protected String generateStreamOpening() {
+    return String.format(
+        "<open xmlns=\"urn:ietf:params:xml:ns:xmpp-framing\" to=\"%1s\" version=\"1.0\" />",
+        getLoginJid().getDomainpart()
+    );
   }
 
   @Override
-  protected void onClosingXmppStream() {
-
+  protected String generateStreamClosing() {
+    return "<close xmlns=\"urn:ietf:params:xml:ns:xmpp-framing\"/>";
   }
 
   @Override
-  protected Future<Void> onConnecting()
-      throws ConnectionMethodNotFoundException, ConnectionException {
-    Validate.notNull(nettyWebSocketProtocolHandler, "WebSocket handler not initialized.");
-
+  protected Future<Void> onOpeningConnection()
+      throws ConnectionException {
     final Session thisSession = this;
     final SslContext sslContext;
     try {
@@ -108,13 +107,7 @@ public class NettyWebSocketSession extends Session {
           @Override
           protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame msg)
               throws Exception {
-            inboundXmppStream.onNext(msg.text());
-          }
-        });
-        ch.pipeline().addLast(new SimpleChannelInboundHandler<Object>() {
-          @Override
-          protected void channelRead0(ChannelHandlerContext ctx, Object msg)
-              throws Exception {
+            getXmlPipeline().read(msg);
           }
 
           @Override
@@ -129,26 +122,40 @@ public class NettyWebSocketSession extends Session {
         getConnectionMethod().getHost(),
         getConnectionMethod().getPort()
     );
-    result.addListener(new ChannelFutureListener(result) {
+    result.addListener(new GenericFutureListener<io.netty.util.concurrent.Future<? super Void>>() {
       @Override
-      public void operationComplete(io.netty.util.concurrent.Future<? super Void> future,
-                                    ChannelFuture channelFuture)
+      public void operationComplete(io.netty.util.concurrent.Future<? super Void> future)
           throws Exception {
-        nettyChannel = (SocketChannel) channelFuture.channel();
+        if (future.isSuccess()) {
+          nettyChannel = (SocketChannel) result.channel();
+          getXmlPipeline().getOutboundStream().subscribe(new Consumer<String>() {
+            @Override
+            public void accept(String s) throws Exception {
+              nettyChannel.writeAndFlush(new TextWebSocketFrame(s));
+            }
+          });
+        }
       }
     });
     return result;
   }
 
   @Override
-  protected void onDisconnecting() {
-    nettyChannel.shutdown().awaitUninterruptibly();
-    nettyEventLoopGroup.shutdownGracefully().awaitUninterruptibly();
-  }
-
-  @Override
-  protected void onShuttingDown() {
-
+  protected Future<Void> onClosingConnection() {
+    final FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
+      @Override
+      public Void call() throws Exception {
+        nettyWebSocketProtocolHandler.handshaker().close(
+            nettyChannel,
+            new CloseWebSocketFrame(1000, "Client logging out.")
+        );
+        nettyChannel.shutdown().await();
+        nettyEventLoopGroup.shutdownGracefully().await();
+        return null;
+      }
+    });
+    THREAD_POOL_INSTANCE.submit(task);
+    return task;
   }
 
   public NettyWebSocketSession(Jid loginJid) {
@@ -164,7 +171,7 @@ public class NettyWebSocketSession extends Session {
         try {
           List<ConnectionMethod> methods = ConnectionMethod.queryHostMetaJson(
               getLoginJid().getDomainpart(),
-              getProxy()
+              null
           );
           for (ConnectionMethod it : methods) {
             if (it.getProtocol() == ConnectionMethod.Protocol.WEBSOCKET) {
@@ -182,7 +189,7 @@ public class NettyWebSocketSession extends Session {
           try {
             List<ConnectionMethod> methods = ConnectionMethod.queryHostMetaXml(
                 getLoginJid().getDomainpart(),
-                getProxy()
+                null
             );
             for (ConnectionMethod it : methods) {
               if (it.getProtocol() == ConnectionMethod.Protocol.WEBSOCKET) {
@@ -201,7 +208,7 @@ public class NettyWebSocketSession extends Session {
           try {
             List<ConnectionMethod> methods = ConnectionMethod.queryDnsTxt(
                 getLoginJid().getDomainpart(),
-                getProxy()
+                null
             );
             for (ConnectionMethod it : methods) {
               if (it.getProtocol() == ConnectionMethod.Protocol.WEBSOCKET) {
@@ -225,18 +232,7 @@ public class NettyWebSocketSession extends Session {
   }
 
   @Override
-  public void disconnect() {
-    super.disconnect();
-  }
-
-  @Override
-  public Future<Void> send(String xml) {
-    outboundXmppStream.onNext(xml);
-    return nettyChannel.writeAndFlush(new TextWebSocketFrame(xml));
-  }
-
-  @Override
-  public synchronized void setConnectionMethod(ConnectionMethod connectionMethod) {
+  public void setConnectionMethod(ConnectionMethod connectionMethod) {
     super.setConnectionMethod(connectionMethod);
     nettyWebSocketProtocolHandler = new WebSocketClientProtocolHandler(
         WebSocketClientHandshakerFactory.newHandshaker(
@@ -248,15 +244,5 @@ public class NettyWebSocketSession extends Session {
         ),
         true
     );
-  }
-
-  @Override
-  public Observable<String> getInboundXmppStream() {
-    return inboundXmppStream;
-  }
-
-  @Override
-  public Observable<String> getOutboundXmppStream() {
-    return outboundXmppStream;
   }
 }

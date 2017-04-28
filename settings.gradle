@@ -1,5 +1,6 @@
 rootProject.name = 'viska'
 
+include ':viska-commons'
 include ':viska-core'
 include ':viska-jingle'
 

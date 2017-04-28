@@ -16,9 +16,10 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.Event;
+import chat.viska.commons.events.Event;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
+import io.reactivex.functions.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -33,6 +34,12 @@ public class LoggingManager implements SessionAware {
     logger = Logger.getLogger(
         "chat.viska.xmpp.Session_"+ session.getLoginJid().toString()
     );
+    session.getEventStream().subscribe(new Consumer<Event>() {
+      @Override
+      public void accept(Event event) throws Exception {
+        log(event, null);
+      }
+    });
   }
 
   public Level getLoggingLevel() {
