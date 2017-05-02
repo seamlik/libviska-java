@@ -44,6 +44,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   public enum State {
     RUNNING,
+    SHUTDOWN,
     STOPPED
   }
 
@@ -63,9 +64,6 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   private void processObject(@NonNull Object obj, boolean isReading)
       throws InterruptedException {
-    if (state == State.STOPPED) {
-      return;
-    }
     final ListIterator<Map.Entry<String, Pipe>> iterator = isReading
         ? pipes.listIterator()
         : pipes.listIterator(pipes.size());
@@ -173,18 +171,36 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   public void start() {
-    if (state == State.RUNNING) {
-      return;
+    switch (state) {
+      case RUNNING:
+        return;
+      case SHUTDOWN:
+        throw new IllegalStateException();
+      default:
+        break;
     }
     state = State.RUNNING;
     readTask = new FutureTask<>(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         while (true) {
-          if (state == State.STOPPED) {
-            return null;
+          switch (state) {
+            case STOPPED:
+              return null;
+            case SHUTDOWN:
+              return null;
+            default:
+              break;
           }
-          processObject(readQueue.take(), true);
+          Object obj = readQueue.take();
+          pipeLock.readLock().lock();
+          try {
+            processObject(obj, true);
+          } catch (InterruptedException ex) {
+            pipeLock.readLock().unlock();
+            throw ex;
+          }
+          pipeLock.readLock().unlock();
         }
       }
     });
@@ -192,10 +208,23 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
       @Override
       public Void call() throws Exception {
         while (true) {
-          if (state == State.STOPPED) {
-            return null;
+          switch (state) {
+            case STOPPED:
+              return null;
+            case SHUTDOWN:
+              return null;
+            default:
+              break;
           }
-          processObject(writeQueue.take(), false);
+          Object obj = readQueue.take();
+          pipeLock.readLock().lock();
+          try {
+            processObject(obj, false);
+          } catch (InterruptedException ex) {
+            pipeLock.readLock().unlock();
+            throw ex;
+          }
+          pipeLock.readLock().unlock();
         }
       }
     });
@@ -204,9 +233,17 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   public void stop() {
-    if (state == State.STOPPED) {
-      return;
+    switch (state) {
+      case STOPPED:
+        return;
+      case SHUTDOWN:
+        return;
+      default:
+        break;
     }
+    // The tasks will stop themselves by checking the state. But if they are
+    // already waiting & taking an object from the queues, they still need to be
+    // manually killed.
     state = State.STOPPED;
     if (!readTask.isDone()) {
       readTask.cancel(true);
@@ -214,6 +251,24 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     if (!writeTask.isDone()) {
       writeTask.cancel(true);
     }
+  }
+
+  public void shutdown() {
+    switch (state) {
+      case RUNNING:
+        stop();
+      case SHUTDOWN:
+        return;
+      default:
+        break;
+    }
+    readQueue.clear();
+    writeQueue.clear();
+    inboundStream.onComplete();
+    inboundExceptionStream.onComplete();
+    outboundStream.onComplete();
+    outboundExceptionStream.onComplete();
+    state = State.SHUTDOWN;
   }
 
   public Future<Void> addAfter(final @NonNull String previous,
@@ -359,8 +414,16 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     return inboundStream;
   }
 
+  public @NonNull Observable<Throwable> getInboundExceptionStream() {
+    return inboundExceptionStream;
+  }
+
   public @NonNull Observable<O> getOutboundStream() {
     return outboundStream;
+  }
+
+  public @NonNull Observable<Throwable> getOutboundExceptionStream() {
+    return outboundExceptionStream;
   }
 
   public @NonNull Future<Boolean> remove(final @NonNull String name) {
