@@ -47,4 +47,8 @@ public class Pipe {
       throws Exception {
     toForward.add(toWrite);
   }
+
+  public void onAddedToPipeline(Pipeline pipeline) {}
+
+  public void onRemovedFromPipeline(Pipeline pipeline) {}
 }
