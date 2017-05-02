@@ -23,26 +23,20 @@ import org.apache.commons.lang3.Validate;
 /**
  * @since 0.1
  */
-public abstract class Account implements SessionAware {
+public abstract class Account {
 
-  private Session session;
-  private Jid jid;
+  private Jid bareJid;
 
   public abstract @NonNull Set<String> getFeatures();
 
-  protected Account(@NonNull Jid jid, @NonNull Session session) {
-    Validate.notNull(jid, "`jid` must not be null.");
-    Validate.notNull(session, "`session` must not be null.");
-    this.jid = jid.toBareJid();
-    this.session = session;
-  }
+  public abstract @NonNull Set<String> getResources();
 
-  @Override
-  public @NonNull Session getSession() {
-    return session;
+  protected Account(@NonNull Jid bareJid) {
+    Validate.notNull(bareJid);
+    this.bareJid = bareJid.toBareJid();
   }
 
   public @NonNull Jid getJid() {
-    return jid;
+    return bareJid;
   }
 }

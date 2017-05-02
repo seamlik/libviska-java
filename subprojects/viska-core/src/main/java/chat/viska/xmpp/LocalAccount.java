@@ -16,16 +16,26 @@
 
 package chat.viska.xmpp;
 
+import io.reactivex.annotations.NonNull;
 import java.util.Set;
+import org.apache.commons.lang3.Validate;
 
 /**
  * An XMPP account logged into an XMPP session.
  * @since 0.1
  */
-public class LocalAccount extends Account {
+public class LocalAccount extends Account implements SessionAware {
 
-  public LocalAccount(Jid jid, Session session) {
-    super(jid, session);
+  private Session session;
+
+  public LocalAccount(@NonNull Jid jid, @NonNull Session session) {
+    super(jid);
+    Validate.notNull(session);
+    this.session = session;
+  }
+
+  public void setPassword(String password) {
+
   }
 
   @Override
@@ -33,7 +43,13 @@ public class LocalAccount extends Account {
     return null;
   }
 
-  public void setPassword(String password) {
+  @Override
+  public Set<String> getResources() {
+    return null;
+  }
 
+  @Override
+  public Session getSession() {
+    return session;
   }
 }

@@ -16,22 +16,35 @@
 
 package chat.viska.xmpp;
 
-import java.util.HashSet;
+import io.reactivex.annotations.NonNull;
 import java.util.Set;
+import org.apache.commons.lang3.Validate;
 
 /**
  * @since 0.1
  */
-public class RemoteAccount extends Account {
+public class RemoteAccount extends Account implements SessionAware {
 
-  private Set<String> resources = new HashSet<>();
+  private Session session;
 
-  public RemoteAccount(Jid jid, Session session) {
-    super(jid, session);
+  public RemoteAccount(@NonNull Jid bareJid, @NonNull Session session) {
+    super(bareJid);
+    Validate.notNull(session);
+    this.session = session;
   }
 
   @Override
   public Set<String> getFeatures() {
     return null;
+  }
+
+  @Override
+  public Set<String> getResources() {
+    return null;
+  }
+
+  @Override
+  public Session getSession() {
+    return session;
   }
 }
