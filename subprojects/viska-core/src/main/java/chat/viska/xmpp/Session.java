@@ -18,22 +18,22 @@ package chat.viska.xmpp;
 
 import chat.viska.commons.events.Event;
 import chat.viska.commons.events.EventSource;
+import chat.viska.commons.events.ExceptionCaughtEvent;
 import chat.viska.commons.events.StateChangedEvent;
 import chat.viska.commons.pipelines.Pipeline;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import io.reactivex.functions.Consumer;
 import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
-import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.commons.lang3.Validate;
 import org.apache.commons.lang3.concurrent.ConcurrentUtils;
+import org.w3c.dom.Document;
 
 /**
  * @since 0.1
@@ -41,24 +41,27 @@ import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 public abstract class Session implements EventSource {
 
   public enum State {
-    CONNECTED,
     CONNECTING,
     DISCONNECTED,
     DISCONNECTING,
+    HANDSHAKING,
     ONLINE,
     SHUTDOWN,
   }
 
   private static final ExecutorService THREAD_POOL_INSTANCE = Executors.newCachedThreadPool();
 
-  private AtomicReference<State> state = new AtomicReference<>(State.DISCONNECTED);
-  private final Jid loginJid;
-  private final PluginManager pluginManager;
+
   private final Subject<Event> eventStream;
-  private ConnectionMethod connectionMethod;
+  private final Jid loginJid;
   private final LoggingManager loggingManager;
+  private final PluginManager pluginManager;
+  private ConnectionMethod connectionMethod;
+  private String resource;
   private String streamId;
-  private Pipeline<String, String> xmlPipeline = new Pipeline<>();
+  private AtomicReference<State> state = new AtomicReference<>(State.DISCONNECTED);
+  private Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
+
 
   private void setState(State state) {
     State lastState = this.state.get();
@@ -67,50 +70,54 @@ public abstract class Session implements EventSource {
   }
 
   protected Session(@NonNull Jid loginJid) {
-    Validate.notNull(loginJid, "`loginJid` must not be null");
+    Validate.notNull(loginJid);
+    final Session thisSession = this;
     this.loginJid = loginJid.toBareJid();
     PublishSubject<Event> unsafeEventStream = PublishSubject.create();
     this.eventStream = unsafeEventStream.toSerialized();
+    xmlPipeline.getInboundExceptionStream().subscribe(new Consumer<Throwable>() {
+      @Override
+      public void accept(Throwable cause) throws Exception {
+        triggerEvent(new ExceptionCaughtEvent(thisSession, cause));
+      }
+    });
+    xmlPipeline.getOutboundExceptionStream().subscribe(new Consumer<Throwable>() {
+      @Override
+      public void accept(Throwable cause) throws Exception {
+        triggerEvent(new ExceptionCaughtEvent(thisSession, cause));
+      }
+    });
     this.loggingManager = new LoggingManager(this);
     this.pluginManager = new PluginManager(this);
   }
 
-  protected abstract @NonNull String generateStreamOpening();
+  protected abstract @NonNull Future<Void> sendStreamOpening();
 
-  protected abstract @NonNull String generateStreamClosing();
+  protected abstract @NonNull Future<Void> sendStreamClosing();
 
-  protected abstract @NonNull Future<Void> onOpeningConnection() throws ConnectionException;
+  protected abstract @NonNull void onOpeningConnection()
+      throws ConnectionException, InterruptedException;
 
-  protected abstract @NonNull Future<Void> onClosingConnection();
+  protected abstract @NonNull void onClosingConnection();
 
   protected void triggerEvent(Event event) {
     loggingManager.log(event, null);
     eventStream.onNext(event);
   }
 
-  protected Pipeline<String, String> getXmlPipeline() {
+  protected Pipeline<Document, Document> getXmlPipeline() {
     return xmlPipeline;
   }
 
-  public abstract @NonNull Future<List<ConnectionMethod>> queryConnectionMethod();
+  public abstract boolean isCompressionEnabled();
 
-  public void send(@NonNull String xml) {
-    xmlPipeline.write(xml);
-  }
+  public abstract void enableCompression(boolean enabled);
 
-  public Observable<String> getInboundXmppStream() {
-    return xmlPipeline.getInboundStream();
-  }
-
-  public Observable<String> getOutboundXmppStream() {
-    return xmlPipeline.getOutboundStream();
-  }
-
-  public Future<Void> connect(@NonNull String password, @Nullable String resource)
+  public Future<Void> connect(@NonNull String password)
       throws ConnectionMethodNotFoundException, ConnectionException {
     Validate.notBlank(password);
     switch (state.get()) {
-      case CONNECTED:
+      case HANDSHAKING:
         return ConcurrentUtils.constantFuture(null);
       case CONNECTING:
         return ConcurrentUtils.constantFuture(null);
@@ -127,21 +134,15 @@ public abstract class Session implements EventSource {
       throw new ConnectionMethodNotFoundException();
     }
     setState(State.CONNECTING);
-    xmlPipeline.start();
-    final Future<Void> result = new FutureTask<>(new Callable<Void>() {
+    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
-        onOpeningConnection().get();
-        setState(State.CONNECTED);
+        onOpeningConnection();
+        setState(State.HANDSHAKING);
+        xmlPipeline.start();
         return null;
       }
     });
-    return result;
-  }
-
-  public Future<Void> connect(@NonNull String password)
-      throws ConnectionException, ConnectionMethodNotFoundException {
-    return connect(password, null);
   }
 
   public Future<Void> disconnect() {
@@ -155,43 +156,27 @@ public abstract class Session implements EventSource {
       default:
         break;
     }
-    FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
+    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
-        send(generateStreamClosing());
+        sendStreamClosing().get();
         setState(State.DISCONNECTED);
-        onClosingConnection().get();
+        onClosingConnection();
         setState(State.SHUTDOWN);
         return null;
       }
     });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
   }
 
-  public State getState() {
-    return state.get();
-  }
-
-  public Jid getLoginJid() {
-    return loginJid;
-  }
-
-  public void setResource(String resource) {
-
-  }
-
-  public PluginManager getPluginManager() {
-    return pluginManager;
-  }
-
-  public LoggingManager getLoggingManager() {
-    return loggingManager;
-  }
 
   public void shutdown() {
     //TODO
   }
+
+  public void send(@NonNull Document xml) {
+    xmlPipeline.write(xml);
+  }
+
 
   public ConnectionMethod getConnectionMethod() {
     return connectionMethod;
@@ -199,6 +184,34 @@ public abstract class Session implements EventSource {
 
   public void setConnectionMethod(ConnectionMethod connectionMethod) {
     this.connectionMethod = connectionMethod;
+  }
+
+  public Observable<Document> getInboundStanzaStream() {
+    return xmlPipeline.getInboundStream();
+  }
+
+  public Observable<Document> getOutboundXmlStream() {
+    return xmlPipeline.getOutboundStream();
+  }
+
+  public LoggingManager getLoggingManager() {
+    return loggingManager;
+  }
+
+  public Jid getLoginJid() {
+    return loginJid;
+  }
+
+  public PluginManager getPluginManager() {
+    return pluginManager;
+  }
+
+  public State getState() {
+    return state.get();
+  }
+
+  public void setResource(String resource) {
+
   }
 
   @Override

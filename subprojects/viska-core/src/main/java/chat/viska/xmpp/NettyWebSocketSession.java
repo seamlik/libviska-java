@@ -33,21 +33,27 @@ import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
 import io.netty.handler.codec.http.websocketx.WebSocketFrameAggregator;
+import io.netty.handler.codec.http.websocketx.WebSocketHandshakeException;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.util.concurrent.GenericFutureListener;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.functions.Consumer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Callable;
+import io.reactivex.subjects.MaybeSubject;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
-import java.util.logging.Level;
 import javax.net.ssl.SSLException;
+import javax.xml.transform.Result;
+import javax.xml.transform.Source;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import org.w3c.dom.Document;
 
 /**
  * @since 0.1
@@ -56,27 +62,42 @@ public class NettyWebSocketSession extends Session {
 
   private static final int INBOUND_CACHE_SIZE_BYTES = 1024 * 1024;
   private static final ExecutorService THREAD_POOL_INSTANCE = Executors.newCachedThreadPool();
+  private static final Transformer DOM_TRANSFORMER_INSTANCE;
+
+  static {
+    TransformerFactory factory = TransformerFactory.newInstance();
+    try {
+      DOM_TRANSFORMER_INSTANCE = factory.newTransformer();
+    } catch (TransformerConfigurationException ex) {
+      throw new RuntimeException("Error while initializing DOM transformers.", ex);
+    }
+  }
 
   private EventLoopGroup nettyEventLoopGroup;
   private SocketChannel nettyChannel;
   private WebSocketClientProtocolHandler nettyWebSocketProtocolHandler;
+  private boolean compressionEnabled = false;
 
   @Override
-  protected String generateStreamOpening() {
-    return String.format(
-        "<open xmlns=\"urn:ietf:params:xml:ns:xmpp-framing\" to=\"%1s\" version=\"1.0\" />",
-        getLoginJid().getDomainpart()
-    );
+  protected @NonNull Future<Void> sendStreamOpening() {
+    return nettyChannel.writeAndFlush(new TextWebSocketFrame(
+        String.format(
+            "<open xmlns=\"urn:ietf:params:xml:ns:xmpp-framing\" to=\"%1s\" version=\"1.0\" />",
+            getLoginJid().getDomainpart()
+        )
+    ));
   }
 
   @Override
-  protected String generateStreamClosing() {
-    return "<close xmlns=\"urn:ietf:params:xml:ns:xmpp-framing\"/>";
+  protected @NonNull Future<Void> sendStreamClosing() {
+    return nettyChannel.writeAndFlush(new TextWebSocketFrame(
+        "<close xmlns=\"urn:ietf:params:xml:ns:xmpp-framing\"/>"
+    ));
   }
 
   @Override
-  protected Future<Void> onOpeningConnection()
-      throws ConnectionException {
+  protected void onOpeningConnection()
+      throws ConnectionException, InterruptedException {
     final Session thisSession = this;
     final SslContext sslContext;
     try {
@@ -90,6 +111,7 @@ public class NettyWebSocketSession extends Session {
     final Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(nettyEventLoopGroup);
     bootstrap.channel(NioSocketChannel.class);
+    final MaybeSubject<Boolean> wsHandshakeMaybe = MaybeSubject.create();
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) throws Exception {
@@ -104,58 +126,72 @@ public class NettyWebSocketSession extends Session {
         ch.pipeline().addLast(nettyWebSocketProtocolHandler);
         ch.pipeline().addLast(new WebSocketFrameAggregator(INBOUND_CACHE_SIZE_BYTES));
         ch.pipeline().addLast(new SimpleChannelInboundHandler<TextWebSocketFrame>() {
+          boolean wsHandshakeCompleted = false;
           @Override
           protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame msg)
               throws Exception {
-            getXmlPipeline().read(msg);
+            getXmlPipeline().read(msg.text());
           }
-
           @Override
           public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
               throws Exception {
-            triggerEvent(new ExceptionCaughtEvent(thisSession, cause));
+            if (!wsHandshakeCompleted && cause instanceof WebSocketHandshakeException) {
+              wsHandshakeCompleted = true;
+              wsHandshakeMaybe.onError(cause);
+            } else {
+              triggerEvent(new ExceptionCaughtEvent(thisSession, cause));
+            }
+          }
+          @Override
+          public void userEventTriggered(ChannelHandlerContext ctx, Object evt)
+              throws Exception {
+            if (!wsHandshakeCompleted &&
+                evt == WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE) {
+              wsHandshakeMaybe.onSuccess(true);
+              wsHandshakeCompleted = true;
+            } else {
+              super.userEventTriggered(ctx, evt);
+            }
           }
         });
       }
     });
-    final ChannelFuture result = bootstrap.connect(
+    final ChannelFuture channelFuture = bootstrap.connect(
         getConnectionMethod().getHost(),
         getConnectionMethod().getPort()
-    );
-    result.addListener(new GenericFutureListener<io.netty.util.concurrent.Future<? super Void>>() {
+    ).await();
+    if (!channelFuture.isSuccess()) {
+      nettyChannel.shutdown().awaitUninterruptibly();
+      nettyEventLoopGroup.shutdownGracefully().awaitUninterruptibly();
+      throw new ConnectionException(channelFuture.cause());
+    }
+    nettyChannel = (SocketChannel) channelFuture.channel();
+    final Boolean isHandshakeDone = wsHandshakeMaybe.blockingGet();
+    if (isHandshakeDone == null) {
+      nettyChannel.shutdown().awaitUninterruptibly();
+      nettyEventLoopGroup.shutdownGracefully().awaitUninterruptibly();
+      throw new ConnectionException(wsHandshakeMaybe.getThrowable());
+    }
+    getXmlPipeline().getOutboundStream().subscribe(new Consumer<Document>() {
       @Override
-      public void operationComplete(io.netty.util.concurrent.Future<? super Void> future)
-          throws Exception {
-        if (future.isSuccess()) {
-          nettyChannel = (SocketChannel) result.channel();
-          getXmlPipeline().getOutboundStream().subscribe(new Consumer<String>() {
-            @Override
-            public void accept(String s) throws Exception {
-              nettyChannel.writeAndFlush(new TextWebSocketFrame(s));
-            }
-          });
-        }
+      public void accept(Document s) throws Exception {
+        Source source = new DOMSource(s);
+        Writer writer = new StringWriter();
+        Result result = new StreamResult(writer);
+        DOM_TRANSFORMER_INSTANCE.transform(source, result);
+        nettyChannel.writeAndFlush(new TextWebSocketFrame(writer.toString()));
       }
     });
-    return result;
   }
 
   @Override
-  protected Future<Void> onClosingConnection() {
-    final FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
-      @Override
-      public Void call() throws Exception {
-        nettyWebSocketProtocolHandler.handshaker().close(
-            nettyChannel,
-            new CloseWebSocketFrame(1000, "Client logging out.")
-        );
-        nettyChannel.shutdown().await();
-        nettyEventLoopGroup.shutdownGracefully().await();
-        return null;
-      }
-    });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
+  protected void onClosingConnection() {
+    nettyWebSocketProtocolHandler.handshaker().close(
+        nettyChannel,
+        new CloseWebSocketFrame(1000, "Client logging out.")
+    );
+    nettyChannel.shutdown().awaitUninterruptibly();
+    nettyEventLoopGroup.shutdownGracefully().awaitUninterruptibly();
   }
 
   public NettyWebSocketSession(Jid loginJid) {
@@ -163,77 +199,13 @@ public class NettyWebSocketSession extends Session {
   }
 
   @Override
-  public @NonNull Future<List<ConnectionMethod>> queryConnectionMethod() {
-    Callable<List<ConnectionMethod>> callable = new Callable<List<ConnectionMethod>>() {
-      @Override
-      public List<ConnectionMethod> call() throws Exception {
-        final List<ConnectionMethod> result = new ArrayList<>();
-        try {
-          List<ConnectionMethod> methods = ConnectionMethod.queryHostMetaJson(
-              getLoginJid().getDomainpart(),
-              null
-          );
-          for (ConnectionMethod it : methods) {
-            if (it.getProtocol() == ConnectionMethod.Protocol.WEBSOCKET) {
-              result.add(it);
-            }
-          }
-        } catch (Exception ex) {
-          getLoggingManager().log(
-              ex,
-              Level.WARNING,
-              "Failed to find any WebSocket endpoint from `host-meta.json`."
-          );
-        }
-        if (result.isEmpty()) {
-          try {
-            List<ConnectionMethod> methods = ConnectionMethod.queryHostMetaXml(
-                getLoginJid().getDomainpart(),
-                null
-            );
-            for (ConnectionMethod it : methods) {
-              if (it.getProtocol() == ConnectionMethod.Protocol.WEBSOCKET) {
-                result.add(it);
-              }
-            }
-          } catch (Exception ex) {
-            getLoggingManager().log(
-                ex,
-                Level.WARNING,
-                "Failed to find any WebSocket endpoint from `host-meta`."
-            );
-          }
-        }
-        if (result.isEmpty()) {
-          try {
-            List<ConnectionMethod> methods = ConnectionMethod.queryDnsTxt(
-                getLoginJid().getDomainpart(),
-                null
-            );
-            for (ConnectionMethod it : methods) {
-              if (it.getProtocol() == ConnectionMethod.Protocol.WEBSOCKET) {
-                result.add(it);
-              }
-            }
-          } catch (Exception ex) {
-            getLoggingManager().log(
-                ex,
-                Level.WARNING,
-                "Failed to find any secure WebSocket endpoint from DNS TXT record."
-            );
-          }
-        }
-        return result;
-      }
-    };
-    FutureTask<List<ConnectionMethod>> task = new FutureTask<>(callable);
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
-  }
-
-  @Override
   public void setConnectionMethod(ConnectionMethod connectionMethod) {
     super.setConnectionMethod(connectionMethod);
+    if (connectionMethod == null) {
+      return;
+    } else if (connectionMethod.getProtocol() != ConnectionMethod.Protocol.WEBSOCKET) {
+      throw new IllegalArgumentException();
+    }
     nettyWebSocketProtocolHandler = new WebSocketClientProtocolHandler(
         WebSocketClientHandshakerFactory.newHandshaker(
             connectionMethod.getUri(),
@@ -244,5 +216,27 @@ public class NettyWebSocketSession extends Session {
         ),
         true
     );
+  }
+
+  @Override
+  public void enableCompression(boolean enabled) {
+    switch (getState()) {
+      case CONNECTING:
+        throw new IllegalStateException();
+      case HANDSHAKING:
+        throw new IllegalStateException();
+      case ONLINE:
+        throw new IllegalStateException();
+      case DISCONNECTING:
+        throw new IllegalStateException();
+      default:
+        break;
+    }
+    this.compressionEnabled = enabled;
+  }
+
+  @Override
+  public boolean isCompressionEnabled() {
+    return compressionEnabled;
   }
 }
