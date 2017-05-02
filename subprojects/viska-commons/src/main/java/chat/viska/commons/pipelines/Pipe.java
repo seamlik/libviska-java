@@ -17,9 +17,22 @@
 package chat.viska.commons.pipelines;
 
 import io.reactivex.annotations.NonNull;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Target;
 import java.util.List;
 
 public class Pipe {
+
+  /**
+   * Indicates that the same instance of the annotated {@link Pipe} can be added
+   * to multiple {@link Pipeline}s without a race condition. Implementations of
+   * {@link Pipe} without this annotation should check for misbehavior and may
+   * throw an {@link IllegalStateException} in {@link Pipe#onAddedToPipeline(Pipeline)}.
+   */
+  @Documented
+  @Target(value = ElementType.TYPE)
+  public @interface Shareable {}
 
   public void catchInboundException(@NonNull Pipeline pipeline,
                                     @NonNull Throwable cause)
