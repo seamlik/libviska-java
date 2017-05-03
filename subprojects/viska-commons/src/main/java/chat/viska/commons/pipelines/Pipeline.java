@@ -34,7 +34,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -59,8 +58,8 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   private final BlockingQueue<Object> writeQueue = new LinkedBlockingQueue<>();
   private State state = State.STOPPED;
   private ReadWriteLock pipeLock = new ReentrantReadWriteLock(true);
-  private FutureTask<Void> readTask;
-  private FutureTask<Void> writeTask;
+  private Future<Void> readTask;
+  private Future<Void> writeTask;
 
   private void processObject(@NonNull Object obj, boolean isReading)
       throws InterruptedException {
@@ -132,7 +131,10 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   private @Nullable ListIterator<Map.Entry<String, Pipe>> getIteratorOf(@NonNull String name) {
-    ListIterator<Map.Entry<String, Pipe>> iterator = pipes.listIterator();
+    if (name == null || name.trim().isEmpty()) {
+      return null;
+    }
+    final ListIterator<Map.Entry<String, Pipe>> iterator = pipes.listIterator();
     while (iterator.hasNext()) {
       Map.Entry entry = iterator.next();
       if (entry.getKey().equals(name)) {
@@ -144,7 +146,10 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   private @Nullable ListIterator<Map.Entry<String, Pipe>> getIteratorOf(@NonNull Pipe pipe) {
-    ListIterator<Map.Entry<String, Pipe>> iterator = pipes.listIterator();
+    if (pipe == null) {
+      return null;
+    }
+    final ListIterator<Map.Entry<String, Pipe>> iterator = pipes.listIterator();
     while (iterator.hasNext()) {
       Map.Entry entry = iterator.next();
       if (entry.getValue().equals(pipe)) {
@@ -156,13 +161,13 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   public Pipeline() {
-    PublishSubject<I> unsafeInboundStream = PublishSubject.create();
+    final PublishSubject<I> unsafeInboundStream = PublishSubject.create();
     inboundStream = unsafeInboundStream.toSerialized();
-    PublishSubject<Throwable> unsafeInboundExceptionStream = PublishSubject.create();
+    final PublishSubject<Throwable> unsafeInboundExceptionStream = PublishSubject.create();
     inboundExceptionStream = unsafeInboundExceptionStream.toSerialized();
-    PublishSubject<O> unsafeOutboundStream = PublishSubject.create();
+    final PublishSubject<O> unsafeOutboundStream = PublishSubject.create();
     outboundStream = unsafeOutboundStream.toSerialized();
-    PublishSubject<Throwable> unsafeOutboundExceptionStream = PublishSubject.create();
+    final PublishSubject<Throwable> unsafeOutboundExceptionStream = PublishSubject.create();
     outboundExceptionStream = unsafeOutboundExceptionStream.toSerialized();
   }
 
@@ -180,7 +185,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         break;
     }
     state = State.RUNNING;
-    readTask = new FutureTask<>(new Callable<Void>() {
+    readTask = THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         while (true) {
@@ -204,7 +209,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         }
       }
     });
-    writeTask = new FutureTask<>(new Callable<Void>() {
+    writeTask = THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         while (true) {
@@ -228,8 +233,6 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         }
       }
     });
-    THREAD_POOL_INSTANCE.submit(readTask);
-    THREAD_POOL_INSTANCE.submit(writeTask);
   }
 
   public void stop() {
@@ -268,6 +271,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     inboundExceptionStream.onComplete();
     outboundStream.onComplete();
     outboundExceptionStream.onComplete();
+    THREAD_POOL_INSTANCE.shutdown();
     state = State.SHUTDOWN;
   }
 
@@ -277,23 +281,32 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Validate.notBlank(previous);
     Validate.notNull(pipe);
     final Pipeline thisPipeline = this;
-    FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
+    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
-        ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(previous);
-        if (iterator == null) {
-          throw new NoSuchElementException(previous);
+        try {
+          if (getIteratorOf(name) != null) {
+            throw new IllegalArgumentException(name);
+          }
+          ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(previous);
+          if (iterator == null) {
+            throw new NoSuchElementException(previous);
+          }
+          iterator.next();
+          iterator.add(new AbstractMap.SimpleImmutableEntry<>(
+              name == null ? "" : name,
+              pipe
+          ));
+          pipe.onAddedToPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
         }
-        iterator.next();
-        iterator.add(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
-        pipe.onAddedToPipeline(thisPipeline);
         pipeLock.writeLock().unlock();
         return null;
       }
     });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
   }
 
   public @NonNull Future<Void> addAfter(final @NonNull Pipe previous,
@@ -302,23 +315,32 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Validate.notNull(previous);
     Validate.notNull(pipe);
     final Pipeline thisPipeline = this;
-    FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
+    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
-        ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(previous);
-        if (iterator == null) {
-          throw new NoSuchElementException();
+        try {
+          if (getIteratorOf(name) != null) {
+            throw new IllegalArgumentException(name);
+          }
+          ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(previous);
+          if (iterator == null) {
+            throw new NoSuchElementException();
+          }
+          iterator.next();
+          iterator.add(new AbstractMap.SimpleImmutableEntry<>(
+              name == null ? "" : name,
+              pipe
+          ));
+          pipe.onAddedToPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
         }
-        iterator.next();
-        iterator.add(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
-        pipe.onAddedToPipeline(thisPipeline);
         pipeLock.writeLock().unlock();
         return null;
       }
     });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
   }
 
   public @NonNull Future<Void> addBefore(final @NonNull String next,
@@ -327,22 +349,31 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Validate.notBlank(next);
     Validate.notNull(pipe);
     final Pipeline thisPipeline = this;
-    FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
+    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
-        ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(next);
-        if (iterator == null) {
-          throw new NoSuchElementException(next);
+        try {
+          if (getIteratorOf(name) != null) {
+            throw new IllegalArgumentException(name);
+          }
+          ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(next);
+          if (iterator == null) {
+            throw new NoSuchElementException(next);
+          }
+          iterator.add(new AbstractMap.SimpleImmutableEntry<>(
+              name == null ? "" : name,
+              pipe
+          ));
+          pipe.onAddedToPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
         }
-        iterator.add(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
-        pipe.onAddedToPipeline(thisPipeline);
         pipeLock.writeLock().unlock();
         return null;
       }
     });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
   }
 
   public @NonNull Future<Void> addBefore(final @NonNull Pipe next,
@@ -351,58 +382,250 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Validate.notNull(next);
     Validate.notNull(pipe);
     final Pipeline thisPipeline = this;
-    FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
+    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
-        ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(next);
-        if (iterator == null) {
-          throw new NoSuchElementException();
+        try {
+          if (getIteratorOf(name) != null) {
+            throw new IllegalArgumentException(name);
+          }
+          ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(next);
+          if (iterator == null) {
+            throw new NoSuchElementException();
+          }
+          iterator.add(new AbstractMap.SimpleImmutableEntry<>(
+              name == null ? "" : name,
+              pipe
+          ));
+          pipe.onAddedToPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
         }
-        iterator.add(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
-        pipe.onAddedToPipeline(thisPipeline);
         pipeLock.writeLock().unlock();
         return null;
       }
     });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
   }
 
   public @NonNull Future<Void> addFirst(final @Nullable String name,
                                         final @NonNull Pipe pipe) {
     Validate.notNull(pipe);
     final Pipeline thisPipeline = this;
-    FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
+    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
-        pipes.addFirst(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
-        pipe.onAddedToPipeline(thisPipeline);
+        try {
+          if (getIteratorOf(name) != null) {
+            throw new IllegalArgumentException(name);
+          }
+          pipes.addFirst(new AbstractMap.SimpleImmutableEntry<>(
+              name == null ? "" : name,
+              pipe
+          ));
+          pipe.onAddedToPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
+        }
         pipeLock.writeLock().unlock();
         return null;
       }
     });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
   }
 
   public @NonNull Future<Void> addLast(final @Nullable String name,
                                        final @NonNull Pipe pipe) {
     Validate.notNull(pipe);
     final Pipeline thisPipeline = this;
-    FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
+    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
-        pipes.addLast(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
-        pipe.onAddedToPipeline(thisPipeline);
+        try {
+          if (getIteratorOf(name) != null) {
+            throw new IllegalArgumentException(name);
+          }
+          pipes.addLast(new AbstractMap.SimpleImmutableEntry<>(
+              name == null ? "" : name,
+              pipe
+          ));
+          pipe.onAddedToPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
+        }
         pipeLock.writeLock().unlock();
         return null;
       }
     });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
+  }
+
+  public @NonNull Future<Pipe> remove(final @NonNull String name) {
+    Validate.notBlank(name);
+    final Pipeline thisPipeline = this;
+    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+      @Override
+      public Pipe call() throws Exception {
+        final Pipe pipe;
+        pipeLock.writeLock().lock();
+        try {
+          final ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(name);
+          if (iterator == null) {
+            return null;
+          }
+          pipe = iterator.next().getValue();
+          iterator.remove();
+          pipe.onRemovedFromPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
+        }
+        pipeLock.writeLock().unlock();
+        return pipe;
+      }
+    });
+  }
+
+  public @NonNull Future<Pipe> remove(final @NonNull Pipe pipe) {
+    Validate.notNull(pipe);
+    final Pipeline thisPipeline = this;
+    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+      @Override
+      public Pipe call() throws Exception {
+        pipeLock.writeLock().lock();
+        try {
+          final ListIterator iterator = getIteratorOf(pipe);
+          if (iterator == null) {
+            return null;
+          }
+          iterator.next(); // For the remove() to work
+          iterator.remove();
+          pipe.onRemovedFromPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
+        }
+        pipeLock.writeLock().unlock();
+        return pipe;
+      }
+    });
+  }
+
+  public @NonNull Future<Pipe> removeFirst() {
+    final Pipeline thisPipeline = this;
+    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+      @Override
+      public Pipe call() throws Exception {
+        final Pipe pipe;
+        pipeLock.writeLock().lock();
+        try {
+          pipe = pipes.pollFirst().getValue();
+          if (pipe != null) {
+            pipe.onRemovedFromPipeline(thisPipeline);
+          }
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
+        }
+        pipeLock.writeLock().unlock();
+        return pipe;
+      }
+    });
+  }
+
+  public @NonNull Future<Pipe> removeLast() {
+    final Pipeline thisPipeline = this;
+    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+      @Override
+      public Pipe call() throws Exception {
+        pipeLock.writeLock().lock();
+        final Pipe pipe;
+        try {
+          pipe = pipes.pollLast().getValue();
+          if (pipe != null) {
+            pipe.onRemovedFromPipeline(thisPipeline);
+          }
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
+        }
+        pipeLock.writeLock().unlock();
+        return pipe;
+      }
+    });
+  }
+
+  public @NonNull Future<Pipe> replace(@NonNull final String oldName,
+                                       @NonNull final Pipe newPipe) {
+    Validate.notBlank(oldName);
+    Validate.notNull(newPipe);
+    final Pipeline thisPipeline = this;
+    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+      @Override
+      public Pipe call() throws Exception {
+        pipeLock.writeLock().lock();
+        final Pipe oldPipe;
+        try {
+          final ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(oldName);
+          if (iterator == null) {
+            throw new NoSuchElementException(oldName);
+          }
+          oldPipe = iterator.next().getValue();
+          iterator.set(new AbstractMap.SimpleImmutableEntry<>(
+              oldName,
+              newPipe
+          ));
+          oldPipe.onRemovedFromPipeline(thisPipeline);
+          newPipe.onAddedToPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
+        }
+        pipeLock.writeLock().unlock();
+        return oldPipe;
+      }
+    });
+  }
+
+  public @NonNull Future<Pipe> replace(final @NonNull Pipe oldPipe,
+                                       final @NonNull Pipe newPipe) {
+    Validate.notNull(oldPipe);
+    Validate.notNull(newPipe);
+    final Pipeline thisPipeline = this;
+    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+      @Override
+      public Pipe call() throws Exception {
+        pipeLock.writeLock().lock();
+        try {
+          final ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(oldPipe);
+          if (iterator == null) {
+            throw new NoSuchElementException();
+          }
+          Map.Entry<String, Pipe> oldEntry = iterator.next();
+          iterator.set(new AbstractMap.SimpleImmutableEntry<String, Pipe>(
+              oldEntry.getKey(),
+              newPipe
+          ));
+          oldPipe.onRemovedFromPipeline(thisPipeline);
+          newPipe.onAddedToPipeline(thisPipeline);
+        } catch (Throwable cause) {
+          pipeLock.writeLock().unlock();
+          throw cause;
+        }
+        return oldPipe;
+      }
+    });
+  }
+
+  public void read(@NonNull Object obj) {
+    readQueue.add(obj);
+  }
+
+  public void write(@NonNull Object obj) {
+    writeQueue.add(obj);
   }
 
   public @Nullable Pipe get(String name) {
@@ -436,147 +659,6 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   public @NonNull Observable<Throwable> getOutboundExceptionStream() {
     return outboundExceptionStream;
-  }
-
-  public @NonNull Future<Pipe> remove(final @NonNull String name) {
-    Validate.notBlank(name);
-    final Pipeline thisPipeline = this;
-    FutureTask<Pipe> task = new FutureTask<>(new Callable<Pipe>() {
-      @Override
-      public Pipe call() throws Exception {
-        pipeLock.writeLock().lock();
-        ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(name);
-        if (iterator == null) {
-          return null;
-        }
-        Pipe pipe = iterator.next().getValue();
-        iterator.remove();
-        pipe.onRemovedFromPipeline(thisPipeline);
-        pipeLock.writeLock().unlock();
-        return pipe;
-      }
-    });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
-  }
-
-  public @NonNull Future<Pipe> remove(final @NonNull Pipe pipe) {
-    Validate.notNull(pipe);
-    final Pipeline thisPipeline = this;
-    FutureTask<Pipe> task = new FutureTask<>(new Callable<Pipe>() {
-      @Override
-      public Pipe call() throws Exception {
-        pipeLock.writeLock().lock();
-        ListIterator iterator = getIteratorOf(pipe);
-        if (iterator == null) {
-          return null;
-        }
-        iterator.next(); // For the remove() to work
-        iterator.remove();
-        pipe.onRemovedFromPipeline(thisPipeline);
-        pipeLock.writeLock().unlock();
-        return pipe;
-      }
-    });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
-  }
-
-  public @NonNull Future<Pipe> removeFirst() {
-    final Pipeline thisPipeline = this;
-    FutureTask<Pipe> task = new FutureTask<>(new Callable<Pipe>() {
-      @Override
-      public Pipe call() throws Exception {
-        pipeLock.writeLock().lock();
-        final Pipe pipe = pipes.pollFirst().getValue();
-        if (pipe != null) {
-          pipe.onRemovedFromPipeline(thisPipeline);
-        }
-        pipeLock.writeLock().unlock();
-        return pipe;
-      }
-    });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
-  }
-
-  public @NonNull Future<Pipe> removeLast() {
-    final Pipeline thisPipeline = this;
-    FutureTask<Pipe> task = new FutureTask<>(new Callable<Pipe>() {
-      @Override
-      public Pipe call() throws Exception {
-        pipeLock.writeLock().lock();
-        final Pipe pipe = pipes.pollLast().getValue();
-        if (pipe != null) {
-          pipe.onRemovedFromPipeline(thisPipeline);
-        }
-        pipeLock.writeLock().unlock();
-        return pipe;
-      }
-    });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
-  }
-
-  public @NonNull Future<Pipe> replace(@NonNull final String oldName, @NonNull final Pipe newPipe) {
-    Validate.notBlank(oldName);
-    Validate.notNull(newPipe);
-    final Pipeline thisPipeline = this;
-    FutureTask<Pipe> task = new FutureTask<>(new Callable<Pipe>() {
-      @Override
-      public Pipe call() throws Exception {
-        pipeLock.writeLock().lock();
-        ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(oldName);
-        if (iterator == null) {
-          throw new NoSuchElementException(oldName);
-        }
-        Pipe oldPipe = iterator.next().getValue();
-        iterator.set(new AbstractMap.SimpleImmutableEntry<String, Pipe>(
-            oldName,
-            newPipe
-        ));
-        oldPipe.onRemovedFromPipeline(thisPipeline);
-        newPipe.onAddedToPipeline(thisPipeline);
-        return oldPipe;
-      }
-    });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
-  }
-
-  public @NonNull Future<Pipe> replace(final @NonNull Pipe oldPipe,
-                                       final @NonNull Pipe newPipe) {
-    Validate.notNull(oldPipe);
-    Validate.notNull(newPipe);
-    final Pipeline thisPipeline = this;
-    FutureTask<Pipe> task = new FutureTask<>(new Callable<Pipe>() {
-      @Override
-      public Pipe call() throws Exception {
-        pipeLock.writeLock().lock();
-        ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(oldPipe);
-        if (iterator == null) {
-          throw new NoSuchElementException();
-        }
-        Map.Entry<String, Pipe> oldEntry = iterator.next();
-        iterator.set(new AbstractMap.SimpleImmutableEntry<String, Pipe>(
-            oldEntry.getKey(),
-            newPipe
-        ));
-        oldPipe.onRemovedFromPipeline(thisPipeline);
-        newPipe.onAddedToPipeline(thisPipeline);
-        return oldPipe;
-      }
-    });
-    THREAD_POOL_INSTANCE.submit(task);
-    return task;
-  }
-
-  public void read(@NonNull Object obj) {
-    readQueue.add(obj);
-  }
-
-  public void write(@NonNull Object obj) {
-    writeQueue.add(obj);
   }
 
   @Override
