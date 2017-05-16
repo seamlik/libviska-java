@@ -19,6 +19,7 @@ package chat.viska.commons.pipelines;
 import io.reactivex.annotations.NonNull;
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
 import java.lang.annotation.Target;
 import java.util.List;
 
@@ -34,34 +35,34 @@ public class Pipe {
   @Target(value = ElementType.TYPE)
   public @interface Shareable {}
 
-  public void catchInboundException(@NonNull Pipeline pipeline,
+  public void catchInboundException(@NonNull Pipeline<?, ?> pipeline,
                                     @NonNull Throwable cause)
       throws Throwable {
     throw cause;
   }
 
-  public void catchOutboundException(@NonNull Pipeline pipeline,
+  public void catchOutboundException(@NonNull Pipeline<?, ?> pipeline,
                                      @NonNull Throwable cause)
       throws Throwable {
     throw cause;
   }
 
-  public void read(@NonNull Pipeline pipeline,
-                   @NonNull Object toRead,
-                   @NonNull List<Object> toForward)
+  public void onReading(@NonNull Pipeline<?, ?> pipeline,
+                        @NonNull Object toRead,
+                        @NonNull List<Object> toForward)
       throws Exception {
     toForward.add(toRead);
   }
 
 
-  public void write(@NonNull Pipeline pipeline,
-                    @NonNull Object toWrite,
-                    @NonNull List<Object> toForward)
+  public void onWriting(@NonNull Pipeline<?, ?> pipeline,
+                        @NonNull Object toWrite,
+                        @NonNull List<Object> toForward)
       throws Exception {
     toForward.add(toWrite);
   }
 
-  public void onAddedToPipeline(Pipeline pipeline) {}
+  public void onAddedToPipeline(Pipeline<?, ?> pipeline) {}
 
-  public void onRemovedFromPipeline(Pipeline pipeline) {}
+  public void onRemovedFromPipeline(Pipeline<?, ?> pipeline) {}
 }

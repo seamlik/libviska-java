@@ -17,26 +17,41 @@
 package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
+import java.util.Objects;
 import java.util.Set;
-import org.apache.commons.lang3.Validate;
+import java.util.concurrent.Future;
 
-/**
- * @since 0.1
- */
-public abstract class Account {
+public class Account extends AbstractEntity {
 
   private Jid bareJid;
+  private Server server;
 
-  public abstract @NonNull Set<String> getFeatures();
-
-  public abstract @NonNull Set<String> getResources();
-
-  protected Account(@NonNull Jid bareJid) {
-    Validate.notNull(bareJid);
+  protected Account(@NonNull AbstractSession session,
+                    @NonNull Jid bareJid) {
+    super(session);
+    Objects.requireNonNull(bareJid);
     this.bareJid = bareJid.toBareJid();
+    server = Server.getInstance(session, bareJid.getDomainPart());
   }
 
-  public @NonNull Jid getJid() {
+  @NonNull
+  public Future<String> getNickname() {
+    throw new UnsupportedOperationException();
+  }
+
+  @NonNull
+  public Future<Set<AbstractClient>> getClients() {
+    throw new UnsupportedOperationException();
+  }
+
+  @NonNull
+  public Server getServer() {
+    return server;
+  }
+
+  @Override
+  @NonNull
+  public Jid getJid() {
     return bareJid;
   }
 }

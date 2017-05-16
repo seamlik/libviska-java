@@ -16,29 +16,24 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.xmpp.stanzas.Stanza;
-import java.util.Set;
-
 /**
- * XMPP Plugin.
  * @since 0.1
  */
-public abstract class Plugin implements SessionAware {
+public class InvalidXmlException extends Exception {
 
-  private Session session;
-
-  public abstract Set<Class<? extends Plugin>> getDependencies();
-
-  public abstract boolean quickMatch(Stanza stanza);
-
-  public abstract Set<String> getFeatures();
-
-  public void onApply(Session session) {
-    this.session = session;
+  public InvalidXmlException() {
+    super();
   }
 
-  @Override
-  public Session getSession() {
-    return session;
+  public InvalidXmlException(String s) {
+    super(s);
+  }
+
+  public InvalidXmlException(String s, Throwable throwable) {
+    super(s, throwable);
+  }
+
+  public InvalidXmlException(Throwable throwable) {
+    super(throwable);
   }
 }

@@ -1,0 +1,5 @@
+dependencies {
+  compile 'com.ibm.icu:icu4j:59.1'
+  compile 'commons-codec:commons-codec:1.10'
+  compile 'org.apache.commons:commons-lang3:3.5'
+}

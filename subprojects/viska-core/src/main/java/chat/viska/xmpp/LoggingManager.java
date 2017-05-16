@@ -16,10 +16,11 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.events.Event;
+import chat.viska.commons.ExceptionCaughtEvent;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import io.reactivex.functions.Consumer;
+import java.util.EventObject;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -27,17 +28,17 @@ public class LoggingManager implements SessionAware {
 
   private Level loggingLevel = Level.WARNING;
   private final Logger logger;
-  private final Session session;
+  private final AbstractSession session;
 
-  public LoggingManager(Session session) {
+  public LoggingManager(AbstractSession session) {
     this.session = session;
-    logger = Logger.getLogger(
-        "chat.viska.xmpp.Session_"+ session.getLoginJid().toString()
-    );
-    session.getEventStream().subscribe(new Consumer<Event>() {
+    logger = Logger.getLogger("chat.viska.xmpp.Session");
+    session.getEventStream()
+        .ofType(ExceptionCaughtEvent.class)
+        .subscribe(new Consumer<ExceptionCaughtEvent>() {
       @Override
-      public void accept(Event event) throws Exception {
-        log(event, null);
+      public void accept(ExceptionCaughtEvent event) throws Exception {
+        log(event.getCause());
       }
     });
   }
@@ -54,16 +55,16 @@ public class LoggingManager implements SessionAware {
     return logger;
   }
 
-  public void log(@NonNull Throwable throwable, @NonNull Level level, @Nullable String msg) {
-    //TODO
+  public void log(final @NonNull Throwable throwable) {
+    throw new UnsupportedOperationException();
   }
 
-  public void log(@NonNull Event event, @Nullable String msg) {
-    //TODO
+  public void log(@NonNull EventObject event, @Nullable String msg) {
+    throw new UnsupportedOperationException();
   }
 
   @Override
-  public Session getSession() {
+  public AbstractSession getSession() {
     return session;
   }
 }

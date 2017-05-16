@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+ * Copyright 2017 Kai-Chung Yan (殷啟聰)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ *       http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-dependencies {
-  compile 'io.reactivex.rxjava2:rxjava:2.1.0'
-  compile 'org.apache.commons:commons-lang3:3.5'
+package chat.viska.xmpp;
+
+public enum Compression {
+  DEFLATE,
+  LZW,
+  ZLIB
 }

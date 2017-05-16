@@ -40,7 +40,7 @@
                    port='8998'
                    priority='2130706431'
                    protocol='udp'
-                   type='host'/>
+                   type='domain'/>
         <candidate component='1'
                    foundation='2'
                    generation='0'
@@ -78,7 +78,7 @@
                    port='8998'
                    priority='2130706431'
                    protocol='udp'
-                   type='host'/>
+                   type='domain'/>
         <candidate component='1'
                    foundation='2'
                    generation='0'

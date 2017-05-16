@@ -17,39 +17,35 @@
 package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import org.apache.commons.lang3.Validate;
 
 /**
- * An XMPP account logged into an XMPP session.
+ * XMPP AbstractPlugin.
  * @since 0.1
  */
-public class LocalAccount extends Account implements SessionAware {
+public abstract class AbstractPlugin implements SessionAware {
 
-  private Session session;
+  private AbstractSession session;
 
-  public LocalAccount(@NonNull Jid jid, @NonNull Session session) {
-    super(jid);
-    Validate.notNull(session);
+  @NonNull
+  public abstract Set<Class<? extends AbstractPlugin>> getDependencies();
+
+  @NonNull
+  public abstract Set<String> getFeatures();
+
+  @NonNull
+  public abstract Set<Map.Entry<String, String>> getSupportedStanzas();
+
+  protected AbstractPlugin(@NonNull AbstractSession session) {
+    Objects.requireNonNull(session);
     this.session = session;
   }
 
-  public void setPassword(String password) {
-
-  }
-
   @Override
-  public Set<String> getFeatures() {
-    return null;
-  }
-
-  @Override
-  public Set<String> getResources() {
-    return null;
-  }
-
-  @Override
-  public Session getSession() {
+  @NonNull
+  public AbstractSession getSession() {
     return session;
   }
 }

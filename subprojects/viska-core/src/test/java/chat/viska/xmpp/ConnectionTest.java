@@ -24,17 +24,17 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests of {@link ConnectionMethod}.
+ * Tests of {@link Connection}.
  * @since 0.1
  */
-public class ConnectionMethodTest {
+public class ConnectionTest {
 
   @Test
   public void queryHostMetaTest() throws Exception {
     Reader hostMetaJson = new InputStreamReader(
         getClass().getResourceAsStream("host-meta.json")
     );
-    List<ConnectionMethod> jsonResult = ConnectionMethod.queryHostMetaJson(hostMetaJson);
+    List<Connection> jsonResult = Connection.queryHostMetaJson(hostMetaJson);
     Assertions.assertEquals(
         "wss://im.example.org:443/ws",
         jsonResult.get(0).getUri().toString()
@@ -46,7 +46,7 @@ public class ConnectionMethodTest {
     InputStream hostMetaXml = getClass().getResourceAsStream("host-meta.xml");
     Assertions.assertEquals(
         "wss://im.example.org:443/ws",
-        ConnectionMethod.queryHostMetaXml(hostMetaXml).get(0).getUri().toString()
+        Connection.queryHostMetaXml(hostMetaXml).get(0).getUri().toString()
     );
   }
 }

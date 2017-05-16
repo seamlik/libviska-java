@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+ * Copyright 2017 Kai-Chung Yan (殷啟聰)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,17 @@
  * limitations under the License.
  */
 
-package chat.viska.commons.events;
+package chat.viska.sasl;
 
-import io.reactivex.Observable;
-import io.reactivex.annotations.NonNull;
+public interface Client {
 
-/**
- * @since 0.1
- */
-public interface EventSource {
+  String getMechanismName();
 
-  @NonNull Observable<Event> getEventStream();
+  byte[] respond(byte[] challenge);
+
+  byte[] respond();
+
+  boolean hasInitialResponse();
+
+  boolean isCompleted() throws AuthenticationException;
 }

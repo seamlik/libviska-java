@@ -16,8 +16,6 @@
 
 dependencies {
   compile 'com.google.code.gson:gson:2.8.0'
-  compile 'io.netty:netty-codec-http:4.1.9.Final'
-  compile 'io.netty:netty-handler:4.1.9.Final'
   compile 'rocks.xmpp:precis:0.1.0'
   compile project(':viska-commons')
 }

@@ -16,12 +16,10 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.xmpp.SessionAware;
-import java.util.UUID;
+import io.reactivex.annotations.NonNull;
 
 /**
  * Jingle session.
- * @since 0.1
  */
 public class JingleSession implements SessionAware {
 
@@ -31,16 +29,19 @@ public class JingleSession implements SessionAware {
     PENDING
   }
 
-  private UUID innerId = UUID.randomUUID();
+  private final AbstractSession session;
   private String sessionId;
-
   private State state;
+
+  public JingleSession(final @NonNull AbstractSession session) {
+    this.session = session;
+  }
 
   public State getState() {
     return state;
   }
 
-  public chat.viska.xmpp.Session getSession() {
-    throw new RuntimeException();
+  public AbstractSession getSession() {
+    return session;
   }
 }

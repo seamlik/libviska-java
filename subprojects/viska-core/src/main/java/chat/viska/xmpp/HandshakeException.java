@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+ * Copyright 2017 Kai-Chung Yan (殷啟聰)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ *       http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,21 +14,22 @@
  * limitations under the License.
  */
 
-package chat.viska.commons.events;
+package chat.viska.xmpp;
 
-import io.reactivex.annotations.NonNull;
-import java.util.logging.Level;
+public class HandshakeException extends Exception {
 
-public class StateChangedEvent<T> extends Event {
-
-  private final T lastState;
-
-  public StateChangedEvent(@NonNull EventSource source, @NonNull T lastState) {
-    super(source, Level.FINE, null);
-    this.lastState = lastState;
+  public HandshakeException() {
   }
 
-  public @NonNull T getLastState() {
-    return lastState;
+  public HandshakeException(String s) {
+    super(s);
+  }
+
+  public HandshakeException(String s, Throwable throwable) {
+    super(s, throwable);
+  }
+
+  public HandshakeException(Throwable throwable) {
+    super(throwable);
   }
 }

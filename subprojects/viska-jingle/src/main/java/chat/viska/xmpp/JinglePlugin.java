@@ -16,31 +16,38 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.xmpp.BasePlugin;
-import chat.viska.xmpp.JingleSession;
-import chat.viska.xmpp.Plugin;
-import chat.viska.xmpp.stanzas.Stanza;
+import io.reactivex.annotations.NonNull;
+import java.util.AbstractMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * @since 0.1
  */
-public class JinglePlugin extends Plugin {
+public class JinglePlugin extends AbstractPlugin {
 
-  private Set<? extends JingleSession> jingleSessions;
+  private static final Set<Map.Entry<String, String>> SUPPORTED_STANZAS = new HashSet<>(1);
+  private static final String XMLNS_JINGLE = "urn:xmpp:jingle:1";
 
+  static {
+    SUPPORTED_STANZAS.add(new AbstractMap.SimpleImmutableEntry<>(
+        XMLNS_JINGLE,
+        "jingle"
+    ));
+  }
 
-  @Override
-  public Set<Class<? extends Plugin>> getDependencies() {
-    Set<Class<? extends Plugin>> dependencies = new HashSet<>(1);
-    dependencies.add(BasePlugin.class);
-    return dependencies;
+  private Set<JingleSession> jingleSessions;
+
+  public JinglePlugin(final @NonNull AbstractSession session) {
+    super(session);
   }
 
   @Override
-  public boolean quickMatch(Stanza stanza) {
-    throw new RuntimeException();
+  public Set<Class<? extends AbstractPlugin>> getDependencies() {
+    Set<Class<? extends AbstractPlugin>> dependencies = new HashSet<>(1);
+    dependencies.add(BasePlugin.class);
+    return dependencies;
   }
 
   @Override
@@ -48,5 +55,11 @@ public class JinglePlugin extends Plugin {
     Set<String> features = new HashSet<>();
     //features.add(JingleInfoQuery.Jingle.XMLNS);
     return features;
+  }
+
+  @Override
+  @NonNull
+  public Set<Map.Entry<String, String>> getSupportedStanzas() {
+    return SUPPORTED_STANZAS;
   }
 }

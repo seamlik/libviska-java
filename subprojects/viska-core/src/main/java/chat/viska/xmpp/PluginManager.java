@@ -16,42 +16,77 @@
 
 package chat.viska.xmpp;
 
+import io.reactivex.annotations.NonNull;
+import io.reactivex.annotations.Nullable;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
- * Contains information about plugins applied on a {@link Session}.
+ * Contains information of {@link AbstractPlugin}s applied on an {@link AbstractSession}.
  */
-public final class PluginManager implements SessionAware {
+public class PluginManager implements SessionAware {
 
-  private Session session;
-  private Set<Plugin> appliedPlugins = new HashSet<>();
+  private final AbstractSession session;
+  private final List<AbstractPlugin> appliedPlugins = new ArrayList<>();
 
-  PluginManager(Session session) {
+  PluginManager(final @NonNull AbstractSession session) {
     this.session = session;
   }
 
-  public void apply(Class<? extends Plugin> type) {
-    Plugin plugin;
+  /**
+   * Applies a {@link AbstractPlugin}. This method does nothing if the plugin
+   * has already been applied.
+   */
+  public void apply(final @NonNull Class<? extends AbstractPlugin> type) {
+    Objects.requireNonNull(type);
+    if (getPlugin(type) != null) {
+      return;
+    }
+    final AbstractPlugin plugin;
     try {
-      plugin = type.getConstructor(Session.class).newInstance(session);
+      plugin = type.getConstructor(AbstractSession.class).newInstance(session);
     } catch (Exception ex) {
       throw new PluginUnappliableException(ex);
     }
     appliedPlugins.add(plugin);
   }
 
-  public boolean hasPlugin(Class<? extends Plugin> type) {
-    for (Plugin plugin : appliedPlugins) {
+  /**
+   * Gets an applied plugin which is of a particular type.
+   * @return {@code null} if the plugin cannot be found.
+   */
+  @Nullable
+  public AbstractPlugin getPlugin(Class<? extends AbstractPlugin> type) {
+    for (AbstractPlugin plugin : appliedPlugins) {
       if (type.isInstance(plugin)) {
-        return true;
+        return plugin;
       }
     }
-    return false;
+    return null;
+  }
+
+  /**
+   * Gets a {@link Set} of features enabled by all plugins and the session. This
+   * method is part of
+   * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
+   * Discovery</a>.
+   * @return Empty {@link Set} if no feature is enabled.
+   */
+  @NonNull
+  public Set<String> getAllFeatures() {
+    final Set<String> features = new HashSet<>(session.getFeatures());
+    for (AbstractPlugin plugin : appliedPlugins) {
+      features.addAll(plugin.getFeatures());
+    }
+    return features;
   }
 
   @Override
-  public Session getSession() {
+  @NonNull
+  public AbstractSession getSession() {
     return session;
   }
 }

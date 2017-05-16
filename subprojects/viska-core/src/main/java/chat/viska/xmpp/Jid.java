@@ -16,7 +16,9 @@
 
 package chat.viska.xmpp;
 
+import io.reactivex.annotations.NonNull;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import rocks.xmpp.precis.InvalidCodePointException;
 import rocks.xmpp.precis.PrecisProfiles;
 
@@ -26,12 +28,12 @@ import rocks.xmpp.precis.PrecisProfiles;
  * <p>
  *   Also known as Jabber Identifier, an JID is an address for locating an XMPP
  *   entity. A typical example of a JID would be
- *   "{@literal local@domain/resource}".
+ *   "{@literal localPart@domainPart/resourcePart}".
  * </p>
  * <p>
- *   A JID usually consists of 3 parts: local part, domain part and resource
- *   part. The local part refers to the user name of an XMPP account, the domain
- *   part refers to an XMPP server, and the resource part refers to a client
+ *   A JID usually consists of 3 parts: localPart part, domainPart part and resourcePart
+ *   part. The localPart part refers to the user name of an XMPP account, the domainPart
+ *   part refers to an XMPP server, and the resourcePart part refers to a client
  *   connected to the server and logged in with the account.
  * </p>
  * <p>
@@ -56,75 +58,57 @@ public class Jid {
     '@'
   };
 
-  private String localpart;
-  private String domainpart;
-  private String resourcepart;
+  private final String localPart;
+  private final String domainPart;
+  private final String resourcePart;
 
   /**
    * Validates the local part of a Jid.
-   * <p>
-   *   The reason why a local part is invalid can be found in the documentation
-   *   of each exceptions it throws.
-   * </p>
-   * @return {@code true} if the local part is valid.
    */
-  public static boolean validateLocalpart(String localpart)
+  public static void validateLocalPart(final @NonNull String localPart)
       throws InvalidCodePointException,
              InvalidJidPartException,
              JidTooLongException {
-    if (localpart == null) {
-      return true;
-    }
-    if (localpart.getBytes(StandardCharsets.UTF_8).length > 1023) {
-      throw new JidTooLongException(localpart);
+    Objects.requireNonNull(localPart);
+    if (localPart.getBytes(StandardCharsets.UTF_8).length > 1023) {
+      throw new JidTooLongException(localPart);
     }
     for (char it : localpartExcludedChars) {
-      if (localpart.indexOf(it) >= 0) {
+      if (localPart.indexOf(it) >= 0) {
         throw new InvalidJidPartException();
       }
     }
-    PrecisProfiles.USERNAME_CASE_MAPPED.prepare(localpart);
-    return true;
+    PrecisProfiles.USERNAME_CASE_MAPPED.prepare(localPart);
   }
 
   /**
-   * Validates the domain part of a JID.
-   * @return {@code true} if the domain part is valid.
+   * Validates the domainpart of a JID.
    */
-  public static boolean validateDomainpart(String domainpart)
-      throws JidTooLongException, InvalidJidPartException {
-    if (domainpart == null || domainpart.isEmpty()) {
-      throw new InvalidJidPartException("Empty domain name!");
+  public static void validateDomainPart(final @NonNull String domainPart)
+      throws JidTooLongException {
+    Objects.requireNonNull(domainPart);
+    if (domainPart.getBytes(StandardCharsets.UTF_8).length > 1023) {
+      throw new JidTooLongException(domainPart);
     }
-    if (domainpart.getBytes(StandardCharsets.UTF_8).length > 1023) {
-      throw new JidTooLongException(domainpart);
-    }
-    // TODO: Validate if it is a domain or an IP address
-    return true;
+    // TODO: Validate if it is a domainPart or an IP address
   }
 
   /**
-   * Validates the resource part of a JID.
-   * @return {@code true} if the resource part is valid.
+   * Validates the resourcepart of a JID.
    */
-  public static boolean validateResourcepart(String resourcepart)
+  public static void validateResourcePart(final @NonNull String resourcePart)
       throws InvalidCodePointException, JidTooLongException {
-    if (resourcepart == null) {
-      return true;
+    Objects.requireNonNull(resourcePart);
+    if (resourcePart.getBytes(StandardCharsets.UTF_8).length > 1023) {
+      throw new JidTooLongException();
     }
-    if (resourcepart.getBytes(StandardCharsets.UTF_8).length > 1023) {
-      throw new JidTooLongException(
-        "The resource part `" + resourcepart + "` is too long."
-      );
-    }
-    PrecisProfiles.OPAQUE_STRING.prepare(resourcepart);
-    return true;
+    PrecisProfiles.OPAQUE_STRING.prepare(resourcePart);
   }
 
   /**
    * Parses a raw JID {@link String} and returns the parts of the JID.
-   * @return An array of {@link String} containing the local part, domain part
-   *         and the resource part in order.
+   * @return An array of {@link String} containing the localPart part, domainPart part
+   *         and the resourcePart part in order.
    * @throws InvalidJidSyntaxException If the value is not a valid {@link Jid}.
    */
   public static String[] parseJidParts(String rawJid) {
@@ -156,8 +140,8 @@ public class Jid {
 
   /**
    * Constructs a new JID using 3 specified parts of the JID.
-   * @param parts {@link String}s representing the local part, domain part and
-   *              and the resource part in order. The array must contains at
+   * @param parts {@link String}s representing the localPart part, domainPart part and
+   *              and the resourcePart part in order. The array must contains at
    *              at least 3 elements and any redundant elements are ignored.
    *              In order to omit any part of the {@link Jid}, place a
    *              {@code null} at the corresponding position.
@@ -167,15 +151,15 @@ public class Jid {
     if (parts.length < 3) {
       throw new InvalidJidSyntaxException();
     }
-    localpart = (parts[0] == null) ? "" : parts[0];
-    domainpart = (parts[1] == null) ? "" : parts[1];
-    resourcepart = (parts[2] == null) ? "" : parts[2];
+    localPart = (parts[0] == null) ? "" : parts[0];
+    domainPart = (parts[1] == null) ? "" : parts[1];
+    resourcePart = (parts[2] == null) ? "" : parts[2];
   }
 
-  public Jid(String localpart, String domainpart, String resourcepart) {
-    this.localpart = (localpart == null) ? "" : localpart;
-    this.domainpart = (domainpart == null) ? "" : domainpart;
-    this.resourcepart = (resourcepart == null) ? "" : resourcepart;
+  public Jid(String localPart, String domainPart, String resourcePart) {
+    this.localPart = (localPart == null) ? "" : localPart;
+    this.domainPart = (domainPart == null) ? "" : domainPart;
+    this.resourcePart = (resourcePart == null) ? "" : resourcePart;
   }
 
   public Jid(String jid) {
@@ -188,12 +172,12 @@ public class Jid {
    */
   @Override
   public String toString() {
-    StringBuilder result = new StringBuilder(domainpart);
-    if (!localpart.isEmpty()) {
-      result.insert(0, '@').insert(0, localpart);
+    StringBuilder result = new StringBuilder(domainPart);
+    if (!localPart.isEmpty()) {
+      result.insert(0, '@').insert(0, localPart);
     }
-    if (!resourcepart.isEmpty()) {
-      result.append('/').append(resourcepart);
+    if (!resourcePart.isEmpty()) {
+      result.append('/').append(resourcePart);
     }
     return result.toString();
   }
@@ -204,48 +188,49 @@ public class Jid {
    *         otherwise.
    */
   @Override
-  public boolean equals(Object object) {
-    if (object == null) {
+  public boolean equals(Object obj) {
+    if (this == obj) {
+      return true;
+    }
+    if (obj == null || getClass() != obj.getClass()) {
       return false;
     }
-    if (!(object instanceof Jid)) {
-      return false;
-    }
-    Jid jid = (Jid)object;
-    return localpart.equals(jid.localpart) && domainpart.equals(jid.domainpart)
-                                           && resourcepart.equals(jid.resourcepart);
+    Jid that = (Jid)obj;
+    return Objects.equals(localPart, that.localPart)
+        && Objects.equals(domainPart, that.domainPart)
+        && Objects.equals(resourcePart, that.resourcePart);
   }
 
   @Override
   public int hashCode() {
-    return toString().hashCode();
+    return Objects.hash(localPart, domainPart, resourcePart);
   }
 
   /**
-   * Returns the local part of this JID.
+   * Returns the localPart part of this JID.
    * @return never {@code null}.
    */
-  public String getLocalpart() {
-    return localpart;
+  public String getLocalPart() {
+    return localPart;
   }
 
   /**
-   * Returns the domain part of this JID.
+   * Returns the domainPart part of this JID.
    * @return {@code null}.
    */
-  public String getDomainpart() {
-    return domainpart;
+  public String getDomainPart() {
+    return domainPart;
   }
 
   /**
-   * Returns the resource part of this JID.
+   * Returns the resourcePart part of this JID.
    * @return never {@code null}.
    */
-  public String getResourcepart() {
-    return resourcepart;
+  public String getResourcePart() {
+    return resourcePart;
   }
 
   public Jid toBareJid() {
-    return resourcepart.isEmpty() ? this : new Jid(localpart, domainpart, "");
+    return resourcePart.isEmpty() ? this : new Jid(localPart, domainPart, "");
   }
 }

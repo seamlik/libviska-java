@@ -16,27 +16,92 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.xmpp.stanzas.Stanza;
+import io.reactivex.annotations.NonNull;
+import io.reactivex.annotations.Nullable;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- *@since 0.1
- */
-public class BasePlugin extends Plugin {
+public class BasePlugin extends AbstractPlugin {
 
-  @Override
-  public Set<Class<? extends Plugin>> getDependencies() {
-    return null;
+  public static final String XMLNS_SOFTWARE_VERSION = "jabber:iq:version";
+  public static final String XMLNS_SERVICE_DISCOVERY = "http://jabber.org/protocol/disco";
+
+  private static final String[] fixedFeatures = new String[] {
+      XMLNS_SOFTWARE_VERSION
+  };
+
+  private final Map<Jid, AbstractEntity> xmppEntityPool = new ConcurrentHashMap<>();
+  private LocalClient client;
+
+  public BasePlugin(final @NonNull AbstractSession session) {
+    super(session);
+  }
+
+  @Nullable
+  public AbstractEntity getXmppEntityInstance(final @NonNull Jid jid) {
+    Objects.requireNonNull(jid);
+    if (getSession().getState() == AbstractSession.State.DISPOSED) {
+      throw new IllegalStateException();
+    }
+    AbstractEntity entity = xmppEntityPool.get(jid);
+    if (entity != null) {
+      return entity;
+    }
+    if (jid.getLocalPart().isEmpty()) {
+      return xmppEntityPool.put(
+          jid,
+          new Server(getSession(), jid.getDomainPart())
+      );
+    } else if (jid.getResourcePart().isEmpty()) {
+      return xmppEntityPool.put(
+          jid,
+          new Account(getSession(), jid)
+      );
+    } else if (jid.getLocalPart().equals(getSession().getUsername())
+            && jid.getDomainPart().equals(getSession().getConnection().getDomain())
+            && jid.getResourcePart().equals(getSession().getResource())) {
+      return getLocalClient();
+    } else {
+      return xmppEntityPool.put(
+          jid,
+          new RemoteClient(
+              getSession(),
+              (Account) getXmppEntityInstance(jid.toBareJid()),
+              jid.getResourcePart())
+      );
+    }
+  }
+
+  @Nullable
+  public LocalClient getLocalClient() {
+    if (getSession().getState() != AbstractSession.State.ONLINE) {
+      throw new IllegalStateException();
+    }
+    if (client != null) {
+      return client;
+    }
+    return new LocalClient(getSession());
   }
 
   @Override
-  public boolean quickMatch(Stanza stanza) {
-    return false;
-  }
-
-  @Override
-  public Set<String> getFeatures() {
+  @NonNull
+  public Set<Class<? extends AbstractPlugin>> getDependencies() {
     return new HashSet<>(0);
+  }
+
+  @Override
+  @NonNull
+  public Set<String> getFeatures() {
+    return new HashSet<>(Arrays.asList(fixedFeatures));
+  }
+
+  @Override
+  @NonNull
+  public Set<Map.Entry<String, String>> getSupportedStanzas() {
+    return null;
   }
 }
