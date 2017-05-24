@@ -25,29 +25,29 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Contains information of {@link AbstractPlugin}s applied on an {@link AbstractSession}.
+ * Contains information of {@link Plugin}s applied on an {@link DefaultSession}.
  */
 public class PluginManager implements SessionAware {
 
-  private final AbstractSession session;
-  private final List<AbstractPlugin> appliedPlugins = new ArrayList<>();
+  private final DefaultSession session;
+  private final List<Plugin> appliedPlugins = new ArrayList<>();
 
-  PluginManager(final @NonNull AbstractSession session) {
+  PluginManager(final @NonNull DefaultSession session) {
     this.session = session;
   }
 
   /**
-   * Applies a {@link AbstractPlugin}. This method does nothing if the plugin
+   * Applies a {@link Plugin}. This method does nothing if the plugin
    * has already been applied.
    */
-  public void apply(final @NonNull Class<? extends AbstractPlugin> type) {
+  public void apply(final @NonNull Class<? extends Plugin> type) {
     Objects.requireNonNull(type);
     if (getPlugin(type) != null) {
       return;
     }
-    final AbstractPlugin plugin;
+    final Plugin plugin;
     try {
-      plugin = type.getConstructor(AbstractSession.class).newInstance(session);
+      plugin = type.getConstructor(DefaultSession.class).newInstance(session);
     } catch (Exception ex) {
       throw new PluginUnappliableException(ex);
     }
@@ -59,8 +59,8 @@ public class PluginManager implements SessionAware {
    * @return {@code null} if the plugin cannot be found.
    */
   @Nullable
-  public AbstractPlugin getPlugin(Class<? extends AbstractPlugin> type) {
-    for (AbstractPlugin plugin : appliedPlugins) {
+  public Plugin getPlugin(Class<? extends Plugin> type) {
+    for (Plugin plugin : appliedPlugins) {
       if (type.isInstance(plugin)) {
         return plugin;
       }
@@ -78,7 +78,7 @@ public class PluginManager implements SessionAware {
   @NonNull
   public Set<String> getAllFeatures() {
     final Set<String> features = new HashSet<>(session.getFeatures());
-    for (AbstractPlugin plugin : appliedPlugins) {
+    for (Plugin plugin : appliedPlugins) {
       features.addAll(plugin.getFeatures());
     }
     return features;
@@ -86,7 +86,7 @@ public class PluginManager implements SessionAware {
 
   @Override
   @NonNull
-  public AbstractSession getSession() {
+  public DefaultSession getSession() {
     return session;
   }
 }

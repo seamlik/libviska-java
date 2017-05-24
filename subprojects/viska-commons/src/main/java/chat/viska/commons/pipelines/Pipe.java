@@ -19,11 +19,10 @@ package chat.viska.commons.pipelines;
 import io.reactivex.annotations.NonNull;
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
-import java.lang.annotation.Inherited;
 import java.lang.annotation.Target;
 import java.util.List;
 
-public class Pipe {
+public interface Pipe {
 
   /**
    * Indicates that the same instance of the annotated {@link Pipe} can be added
@@ -33,36 +32,24 @@ public class Pipe {
    */
   @Documented
   @Target(value = ElementType.TYPE)
-  public @interface Shareable {}
+  @interface Shareable {}
 
-  public void catchInboundException(@NonNull Pipeline<?, ?> pipeline,
-                                    @NonNull Throwable cause)
-      throws Throwable {
-    throw cause;
-  }
+  void catchInboundException(@NonNull Pipeline<?, ?> pipeline,
+                             @NonNull Throwable cause) throws Throwable;
 
-  public void catchOutboundException(@NonNull Pipeline<?, ?> pipeline,
-                                     @NonNull Throwable cause)
-      throws Throwable {
-    throw cause;
-  }
+  void catchOutboundException(@NonNull Pipeline<?, ?> pipeline,
+                              @NonNull Throwable cause) throws Throwable;
 
-  public void onReading(@NonNull Pipeline<?, ?> pipeline,
-                        @NonNull Object toRead,
-                        @NonNull List<Object> toForward)
-      throws Exception {
-    toForward.add(toRead);
-  }
+  void onReading(@NonNull Pipeline<?, ?> pipeline,
+                 @NonNull Object toRead,
+                 @NonNull List<Object> toForward) throws Exception;
 
 
-  public void onWriting(@NonNull Pipeline<?, ?> pipeline,
-                        @NonNull Object toWrite,
-                        @NonNull List<Object> toForward)
-      throws Exception {
-    toForward.add(toWrite);
-  }
+  void onWriting(@NonNull Pipeline<?, ?> pipeline,
+                 @NonNull Object toWrite,
+                 @NonNull List<Object> toForward) throws Exception;
 
-  public void onAddedToPipeline(Pipeline<?, ?> pipeline) {}
+  void onAddedToPipeline(@NonNull Pipeline<?, ?> pipeline);
 
-  public void onRemovedFromPipeline(Pipeline<?, ?> pipeline) {}
+  void onRemovedFromPipeline(@NonNull Pipeline<?, ?> pipeline);
 }

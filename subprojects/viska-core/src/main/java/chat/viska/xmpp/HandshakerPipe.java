@@ -16,7 +16,7 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.pipelines.Pipe;
+import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipeline;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
@@ -38,7 +38,7 @@ import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
-public class HandshakerPipe extends Pipe implements SessionAware {
+public class HandshakerPipe extends BlankPipe implements SessionAware {
 
   private enum State {
 
@@ -104,7 +104,7 @@ public class HandshakerPipe extends Pipe implements SessionAware {
   }
 
   private final PublishSubject<EventObject> eventStream = PublishSubject.create();
-  private final AbstractSession session;
+  private final DefaultSession session;
   private String resource = "";
   private Pipeline pipeline;
   private String streamId;
@@ -185,7 +185,7 @@ public class HandshakerPipe extends Pipe implements SessionAware {
     return method.isTlsEnabled() && method.getProtocol() == Connection.Protocol.TCP;
   }
 
-  public HandshakerPipe(final @NonNull AbstractSession session) {
+  public HandshakerPipe(final @NonNull DefaultSession session) {
     Objects.requireNonNull(session);
     this.session = session;
   }
@@ -345,7 +345,7 @@ public class HandshakerPipe extends Pipe implements SessionAware {
   }
 
   @Override
-  public AbstractSession getSession() {
+  public DefaultSession getSession() {
     return session;
   }
 }

@@ -20,12 +20,10 @@ import io.reactivex.annotations.NonNull;
 import java.util.AbstractMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
-/**
- * @since 0.1
- */
-public class JinglePlugin extends AbstractPlugin {
+public class JinglePlugin implements Plugin {
 
   private static final Set<Map.Entry<String, String>> SUPPORTED_STANZAS = new HashSet<>(1);
   private static final String XMLNS_JINGLE = "urn:xmpp:jingle:1";
@@ -37,15 +35,17 @@ public class JinglePlugin extends AbstractPlugin {
     ));
   }
 
-  private Set<JingleSession> jingleSessions;
+  private Session session;
+  private Set<JingleSession> jingleSessions = new HashSet<>();
 
-  public JinglePlugin(final @NonNull AbstractSession session) {
-    super(session);
+  public JinglePlugin(final @NonNull Session session) {
+    Objects.requireNonNull(session);
+    this.session = session;
   }
 
   @Override
-  public Set<Class<? extends AbstractPlugin>> getDependencies() {
-    Set<Class<? extends AbstractPlugin>> dependencies = new HashSet<>(1);
+  public Set<Class<? extends Plugin>> getDependencies() {
+    Set<Class<? extends Plugin>> dependencies = new HashSet<>(1);
     dependencies.add(BasePlugin.class);
     return dependencies;
   }
@@ -61,5 +61,11 @@ public class JinglePlugin extends AbstractPlugin {
   @NonNull
   public Set<Map.Entry<String, String>> getSupportedStanzas() {
     return SUPPORTED_STANZAS;
+  }
+
+  @Override
+  @NonNull
+  public Session getSession() {
+    return session;
   }
 }

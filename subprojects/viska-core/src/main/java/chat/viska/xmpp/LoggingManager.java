@@ -24,13 +24,16 @@ import java.util.EventObject;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * Manages logging.
+ */
 public class LoggingManager implements SessionAware {
 
   private Level loggingLevel = Level.WARNING;
   private final Logger logger;
-  private final AbstractSession session;
+  private final DefaultSession session;
 
-  public LoggingManager(AbstractSession session) {
+  public LoggingManager(DefaultSession session) {
     this.session = session;
     logger = Logger.getLogger("chat.viska.xmpp.Session");
     session.getEventStream()
@@ -64,7 +67,7 @@ public class LoggingManager implements SessionAware {
   }
 
   @Override
-  public AbstractSession getSession() {
+  public DefaultSession getSession() {
     return session;
   }
 }

@@ -16,6 +16,9 @@
 
 package chat.viska.xmpp;
 
+/**
+ * Indicates an error happened during the handshaking or login process.
+ */
 public class HandshakeException extends Exception {
 
   public HandshakeException() {

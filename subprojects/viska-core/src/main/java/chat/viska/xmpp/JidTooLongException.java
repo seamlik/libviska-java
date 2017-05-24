@@ -17,13 +17,10 @@
 package chat.viska.xmpp;
 
 /**
- * Thrown to indicate that some part of a {@link Jid} is too long.
- * <p>
- *   According to the RFC, any part of a {@link Jid} must not excceed 1023 bytes
- *   after being encoded in UTF-8.
- * </p>
+ * Indicates a part of a {@link Jid} is too long.
+ * <p>According to the RFC, any part of a {@link Jid} must not excceed 1023 bytes
+ *   after being encoded in UTF-8.</p>
  * @see <a href="https://tools.ietf.org/html/rfc7622#section-3.1">RFC 7622</a>
- * @since 0.1
  */
 public class JidTooLongException extends Exception {
 

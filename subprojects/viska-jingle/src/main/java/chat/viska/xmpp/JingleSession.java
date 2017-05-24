@@ -29,11 +29,11 @@ public class JingleSession implements SessionAware {
     PENDING
   }
 
-  private final AbstractSession session;
+  private final DefaultSession session;
   private String sessionId;
   private State state;
 
-  public JingleSession(final @NonNull AbstractSession session) {
+  public JingleSession(final @NonNull DefaultSession session) {
     this.session = session;
   }
 
@@ -41,7 +41,7 @@ public class JingleSession implements SessionAware {
     return state;
   }
 
-  public AbstractSession getSession() {
+  public DefaultSession getSession() {
     return session;
   }
 }

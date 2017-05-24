@@ -24,13 +24,13 @@ public class LocalClient extends AbstractClient {
 
   private String softwareName = "";
   private String softwareVersion = "";
-  private String operatingSystemName = String.format(
+  private String operatingSystem = String.format(
       "%1s %2s",
       System.getProperty("os.name", "Unknown"),
       System.getProperty("os.version", "")
   ).trim();
 
-  public LocalClient(final @NonNull AbstractSession session) {
+  public LocalClient(final @NonNull Session session) {
     super(
         session,
         (Account) ((BasePlugin) session.getPluginManager().getPlugin(BasePlugin.class)).getXmppEntityInstance(new Jid(session.getUsername(), session.getConnection().getDomain(), null))
@@ -49,15 +49,15 @@ public class LocalClient extends AbstractClient {
     this.softwareVersion = softwareVersion == null ? "" : softwareVersion;
   }
 
-  public void setOperatingSystemName(String operatingSystemName) {
-    this.operatingSystemName = operatingSystemName == null ? "" : operatingSystemName;
+  public void setOperatingSystem(String operatingSystemName) {
+    this.operatingSystem = operatingSystemName == null ? "" : operatingSystemName;
   }
 
   @Override
   @NonNull
-  public Future<String[]> querySoftwareVersion() {
+  public Future<SoftwareInfo> querySoftwareVersion() {
     return ConcurrentUtils.constantFuture(
-        new String[] { softwareName, softwareVersion, operatingSystemName }
+        new SoftwareInfo(softwareName, softwareVersion, operatingSystem)
     );
   }
 

@@ -16,7 +16,11 @@
 
 package chat.viska.xmpp;
 
+/**
+ * Compression algorithm.
+ */
 public enum Compression {
+  AUTO,
   DEFLATE,
   LZW,
   ZLIB

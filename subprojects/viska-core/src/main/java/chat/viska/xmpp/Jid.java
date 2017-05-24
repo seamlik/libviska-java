@@ -23,24 +23,20 @@ import rocks.xmpp.precis.InvalidCodePointException;
 import rocks.xmpp.precis.PrecisProfiles;
 
 /**
- * An XMPP identifier.
+ * Jabber/XMPP ID.
  *
- * <p>
- *   Also known as Jabber Identifier, an JID is an address for locating an XMPP
- *   entity. A typical example of a JID would be
- *   "{@literal localPart@domainPart/resourcePart}".
- * </p>
- * <p>
- *   A JID usually consists of 3 parts: localPart part, domainPart part and resourcePart
- *   part. The localPart part refers to the user name of an XMPP account, the domainPart
- *   part refers to an XMPP server, and the resourcePart part refers to a client
- *   connected to the server and logged in with the account.
- * </p>
- * <p>
- *   This class is immutable and will not validate the JID before it is created.
- * </p>
+ * <p>Also known as Jabber Identifier, an JID is an address for locating an XMPP
+ * entity. A typical example of a JID would be
+ * "{@literal localPart@domainPart/resourcePart}".</p>
+ *
+ * <p>A JID usually consists of 3 parts: local part, domain part and resource
+ * part. The local part refers to the user name of an XMPP account, the domain
+ * part refers to an XMPP server, and the resource part refers to a client
+ * connected to the server and logged in with the account.</p>
+ *
+ * <p>This class is immutable and will not validate the JID before it is
+ * created.</p>
  * @see <a href="https://tools.ietf.org/html/rfc7622">RFC 7622</a>
- * @since 0.1
  */
 public class Jid {
 

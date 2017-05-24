@@ -44,11 +44,34 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+/**
+ * Connection method to an XMPP server.
+ */
 public class Connection {
 
+  /**
+   * The transport protocol used for the network connection.
+   */
   public enum Protocol {
+    /**
+     * <a href="https://xmpp.org/extensions/xep-0206.html">XEP-0206: XMPP Over
+     * BOSH</a>.
+     */
     BOSH,
+
+    /**
+     * Primary connection protocol defined in
+     * <a href="https://datatracker.ietf.org/doc/rfc6120">RFC 6120: Extensible
+     * Messaging and Presence Protocol (XMPP): Core</a>. This protocol supports
+     * StartTLS.
+     */
     TCP,
+
+    /**
+     * <a href="https://datatracker.ietf.org/doc/rfc7395">RFC 7395: An
+     * Extensible Messaging and Presence Protocol (XMPP) Subprotocol for
+     * WebSocket</a>
+     */
     WEBSOCKET;
 
     @Override
@@ -97,7 +120,7 @@ public class Connection {
     Validate.notNull(host, "`domain` must not be null.");
     InputStreamReader reader = null;
     InputStream stream = null;
-    JsonObject hostMeta = null;
+    JsonObject hostMeta;
     try {
       final URL hostMetaUrl = getHostMetaUrl(host, true);
       stream = proxy == null ? hostMetaUrl.openStream()

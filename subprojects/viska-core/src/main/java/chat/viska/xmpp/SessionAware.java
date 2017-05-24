@@ -19,9 +19,9 @@ package chat.viska.xmpp;
 import io.reactivex.annotations.NonNull;
 
 /**
- * Indicates the class is associated to an {@link AbstractSession}. Once the
- * session has been disposed of, this class must also be considered in the same
- * state and starts cleaning up system resources.
+ * Indicates this class is associated to an {@link Session}. Once the
+ * {@link Session} has been disposed of, this class must also be considered in
+ * the same state and start cleaning up resources.
  */
 public interface SessionAware {
 
@@ -29,5 +29,5 @@ public interface SessionAware {
    * Gets the associated XMPP session.
    */
   @NonNull
-  AbstractSession getSession();
+  Session getSession();
 }

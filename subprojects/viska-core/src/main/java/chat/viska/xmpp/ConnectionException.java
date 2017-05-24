@@ -16,6 +16,9 @@
 
 package chat.viska.xmpp;
 
+/**
+ * Indicates an error occurred during the attempt of connecting to an XMPP server.
+ */
 public class ConnectionException extends Exception {
 
   public ConnectionException() {

@@ -24,7 +24,7 @@ public class RemoteClient extends AbstractClient {
 
   private String resource;
 
-  public RemoteClient(final @NonNull AbstractSession session,
+  public RemoteClient(final @NonNull Session session,
                       final @NonNull Account account,
                       final @NonNull String resource) {
     super(session, account);
@@ -40,7 +40,7 @@ public class RemoteClient extends AbstractClient {
 
   @Override
   @NonNull
-  public Future<String[]> querySoftwareVersion() {
+  public Future<SoftwareInfo> querySoftwareVersion() {
     throw new UnsupportedOperationException();
   }
 }

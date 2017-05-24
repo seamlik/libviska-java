@@ -20,6 +20,9 @@ import io.reactivex.annotations.NonNull;
 import java.util.Objects;
 import org.apache.commons.lang3.Validate;
 
+/**
+ * Version of the XMPP standard.
+ */
 public class Version implements Comparable<Version> {
 
   private int major;

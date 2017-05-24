@@ -16,7 +16,7 @@
 
 /**
  * Provides fundamental classes for building an XMPP client.
- * {@link chat.viska.xmpp.AbstractSession} is the main entry point.
+ * {@link chat.viska.xmpp.DefaultSession} is the main entry point.
  *
  * <h1>To {@code null} or Not to {@code null}?</h1>
  *

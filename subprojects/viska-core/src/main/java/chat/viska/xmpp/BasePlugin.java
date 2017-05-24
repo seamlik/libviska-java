@@ -25,26 +25,39 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class BasePlugin extends AbstractPlugin {
+/**
+ * Most basic plugin. This plugin is built-in and needs not be applied manually.
+ *
+ * <p>This plugin supports the following XMPP extensions:</p>
+ * <ul>
+ *   <li><a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service Discovery</a></li>
+ *   <li><a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software Version</a></li>
+ * </ul>
+ */
+public class BasePlugin implements Plugin {
 
+  public static final String XMLNS_NICKNAME = "http://jabber.org/protocol/nick";
   public static final String XMLNS_SOFTWARE_VERSION = "jabber:iq:version";
   public static final String XMLNS_SERVICE_DISCOVERY = "http://jabber.org/protocol/disco";
 
   private static final String[] fixedFeatures = new String[] {
+      XMLNS_NICKNAME,
       XMLNS_SOFTWARE_VERSION
   };
 
+  private Session session;
   private final Map<Jid, AbstractEntity> xmppEntityPool = new ConcurrentHashMap<>();
   private LocalClient client;
 
-  public BasePlugin(final @NonNull AbstractSession session) {
-    super(session);
+  public BasePlugin(final @NonNull Session session) {
+    Objects.requireNonNull(session);
+    this.session = session;
   }
 
   @Nullable
   public AbstractEntity getXmppEntityInstance(final @NonNull Jid jid) {
     Objects.requireNonNull(jid);
-    if (getSession().getState() == AbstractSession.State.DISPOSED) {
+    if (getSession().getState() == Session.State.DISPOSED) {
       throw new IllegalStateException();
     }
     AbstractEntity entity = xmppEntityPool.get(jid);
@@ -64,7 +77,7 @@ public class BasePlugin extends AbstractPlugin {
     } else if (jid.getLocalPart().equals(getSession().getUsername())
             && jid.getDomainPart().equals(getSession().getConnection().getDomain())
             && jid.getResourcePart().equals(getSession().getResource())) {
-      return getLocalClient();
+      return xmppEntityPool.put(getLocalClient().getJid(), getLocalClient());
     } else {
       return xmppEntityPool.put(
           jid,
@@ -78,18 +91,19 @@ public class BasePlugin extends AbstractPlugin {
 
   @Nullable
   public LocalClient getLocalClient() {
-    if (getSession().getState() != AbstractSession.State.ONLINE) {
+    if (getSession().getState() != Session.State.ONLINE) {
       throw new IllegalStateException();
     }
     if (client != null) {
       return client;
     }
-    return new LocalClient(getSession());
+    client = new LocalClient(getSession());
+    return client;
   }
 
   @Override
   @NonNull
-  public Set<Class<? extends AbstractPlugin>> getDependencies() {
+  public Set<Class<? extends Plugin>> getDependencies() {
     return new HashSet<>(0);
   }
 
@@ -102,6 +116,12 @@ public class BasePlugin extends AbstractPlugin {
   @Override
   @NonNull
   public Set<Map.Entry<String, String>> getSupportedStanzas() {
-    return null;
+    return new HashSet<>(0);
+  }
+
+  @Override
+  @NonNull
+  public Session getSession() {
+    return session;
   }
 }

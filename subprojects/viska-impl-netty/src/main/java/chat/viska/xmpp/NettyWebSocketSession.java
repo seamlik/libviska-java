@@ -44,12 +44,14 @@ import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.subjects.CompletableSubject;
-import io.reactivex.subjects.MaybeSubject;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.security.cert.Certificate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLPeerUnverifiedException;
@@ -71,9 +73,10 @@ import org.xml.sax.SAXException;
 /**
  * XMPP session using WebSocket connections implemented using Netty.
  *
- * <p>This class does not implement the TLS level compression.</p>
+ * <p>This class does not support TLS level compression. For connection level
+ * compression, only Deflate is supported.</p>
  */
-public class NettyWebSocketSession extends AbstractSession {
+public class NettyWebSocketSession extends DefaultSession {
 
   private static final int CACHE_SIZE_BYTES = 1024 * 1024;
   private static final AtomicReference<Transformer> DOM_TRANSFORMER_INSTANCE;
@@ -129,7 +132,7 @@ public class NettyWebSocketSession extends AbstractSession {
   @Override
   protected void onOpeningConnection()
       throws ConnectionException, InterruptedException {
-    final AbstractSession thisSession = this;
+    final DefaultSession thisSession = this;
     final SslContext sslContext;
     try {
       sslContext = getConnection().isTlsEnabled()
@@ -264,16 +267,22 @@ public class NettyWebSocketSession extends AbstractSession {
   }
 
   @Override
-  public void setConnectionCompression(@Nullable Compression method) {
-    if (method != null && method != Compression.DEFLATE) {
-      throw new IllegalArgumentException(
-          "Only Deflate compression is available for WebSocket sessions."
-      );
-    }
+  public Compression getBestConnectionCompression() {
+    return Compression.DEFLATE;
+  }
+
+  @Override
+  public void setConnectionCompression(@Nullable Compression compression) {
     if (getState() != State.DISCONNECTED) {
       throw new IllegalStateException();
     }
-    this.connectionCompression = method;
+    if (compression == Compression.DEFLATE) {
+      this.connectionCompression = Compression.DEFLATE;
+    } else if (compression == null) {
+      this.connectionCompression = null;
+    } else {
+      throw new IllegalArgumentException();
+    }
   }
 
   @Override
@@ -283,22 +292,36 @@ public class NettyWebSocketSession extends AbstractSession {
   }
 
   @Override
-  public void setTlsCompression(Compression tlsCompression) {}
+  public Compression getBestTlsCompression() {
+    return null;
+  }
 
   @Override
-  @NonNull
-  public Certificate[] getTlsLocalCertificates() {
-    return tlsHandler == null
-        ? new Certificate[0]
-        : tlsHandler.engine().getSession().getLocalCertificates();
+  public void setTlsCompression(final @Nullable Compression compression) {
+    if (compression != null) {
+      throw new IllegalArgumentException();
+    }
   }
 
   @Override
   @NonNull
-  public Certificate[] getTlsPeerCertificates() throws SSLPeerUnverifiedException {
+  public List<Certificate> getTlsLocalCertificates() {
     return tlsHandler == null
-        ? new Certificate[0]
-        : tlsHandler.engine().getSession().getPeerCertificates();
+        ? new ArrayList<Certificate>(0)
+        : Arrays.asList(tlsHandler.engine().getSession().getLocalCertificates());
+  }
+
+  @Override
+  @NonNull
+  public List<Certificate> getTlsPeerCertificates() {
+    if (tlsHandler == null) {
+      return new ArrayList<Certificate>(0);
+    }
+    try {
+      return Arrays.asList(tlsHandler.engine().getSession().getPeerCertificates());
+    } catch (SSLPeerUnverifiedException ex) {
+      return new ArrayList<>(0);
+    }
   }
 
   @Override

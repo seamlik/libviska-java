@@ -20,8 +20,14 @@ import io.reactivex.annotations.NonNull;
 import java.util.Objects;
 import org.apache.commons.lang3.Validate;
 
+/**
+ * Indicates a stream error has occurred.
+ */
 public class StreamErrorException extends Exception {
 
+  /**
+   * Cause of a stream error.
+   */
   public enum Condition {
     BAD_FORMAT,
     BAD_NAMESPACE_PREFIX,

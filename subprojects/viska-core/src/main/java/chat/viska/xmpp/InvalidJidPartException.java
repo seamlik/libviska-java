@@ -39,7 +39,6 @@ package chat.viska.xmpp;
  *   profile of the PRECIS FreeformClass</a>.
  * </p>
  * @see <a href="https://tools.ietf.org/html/rfc7622#section-3.3">RFC 7622</a>
- * @since 0.1
  */
 public class InvalidJidPartException extends Exception {
 

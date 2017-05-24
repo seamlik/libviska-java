@@ -16,6 +16,9 @@
 
 package chat.viska.xmpp;
 
+/**
+ * Contains {@link String} constants of common XML namespaces.
+ */
 public final class CommonXmlns {
   public static final String BOSH = "urn:xmpp:alt-connections:xbosh";
   public static final String COMPRESSION = "http://jabber.org/features/compress";

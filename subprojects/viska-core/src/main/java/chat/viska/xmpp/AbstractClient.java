@@ -20,23 +20,39 @@ import io.reactivex.annotations.NonNull;
 import java.util.Objects;
 import java.util.concurrent.Future;
 
+/**
+ * XMPP client.
+ */
 public abstract class AbstractClient extends AbstractEntity {
 
   private final Account account;
 
-  protected AbstractClient(final @NonNull AbstractSession session,
+  protected AbstractClient(final @NonNull Session session,
                            final @NonNull Account account) {
     super(session);
     Objects.requireNonNull(account);
     this.account = account;
   }
 
+  /**
+   * Gets the device ID.
+   */
   @NonNull
   public abstract String getResource();
 
+  /**
+   * Queries information of the XMPP client software. This method is part of
+   * <a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software
+   * Version</a>.
+   * @return {@link Future} tracking the completion status of this method and
+   *         providing a way to cancel it.
+   */
   @NonNull
-  public abstract Future<String[]> querySoftwareVersion();
+  public abstract Future<SoftwareInfo> querySoftwareVersion();
 
+  /**
+   * Gets the {@link Account} logged in to this {@link AbstractClient}.
+   */
   @NonNull
   public Account getAccount() {
     return account;

@@ -18,32 +18,41 @@ package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.Future;
 
+/**
+ * XMPP user account.
+ */
 public class Account extends AbstractEntity {
 
   private Jid bareJid;
   private Server server;
 
-  protected Account(@NonNull AbstractSession session,
+  protected Account(@NonNull Session session,
                     @NonNull Jid bareJid) {
     super(session);
     Objects.requireNonNull(bareJid);
     this.bareJid = bareJid.toBareJid();
-    server = Server.getInstance(session, bareJid.getDomainPart());
+    final BasePlugin plugin = (BasePlugin)
+        session.getPluginManager().getPlugin(BasePlugin.class);
+    server = (Server) plugin.getXmppEntityInstance(this.bareJid);
   }
 
+  /**
+   * Gets the nickname. This method is part of
+   * <a href="https://xmpp.org/extensions/xep-0172.html">XEP-0172: User
+   * Nickname</a>.
+   * @return {@link Future} tracking the completion status of this method and
+   *         providing a way to cancel it.
+   */
   @NonNull
   public Future<String> getNickname() {
     throw new UnsupportedOperationException();
   }
 
-  @NonNull
-  public Future<Set<AbstractClient>> getClients() {
-    throw new UnsupportedOperationException();
-  }
-
+  /**
+   * Gets the home {@link Server}.
+   */
   @NonNull
   public Server getServer() {
     return server;
