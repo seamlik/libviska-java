@@ -16,81 +16,148 @@
 
 package chat.viska.sasl;
 
-import com.ibm.icu.text.StringPrep;
-import com.ibm.icu.text.StringPrepParseException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.spec.InvalidKeySpecException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import javax.crypto.Mac;
-import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.SecretKeySpec;
+import org.apache.commons.codec.binary.Base64;
 
 public class ScramMechanism {
 
   private final MessageDigest hash;
   private final Mac hmac;
-  private final SecretKeyFactory keyFactory;
-  private final StringPrep prep = StringPrep.getInstance(StringPrep.RFC4013_SASLPREP);
 
-  public ScramMechanism(String algorithm) throws NoSuchAlgorithmException {
-    hash = MessageDigest.getInstance(algorithm);
-    hmac = Mac.getInstance(algorithm);
-    keyFactory = SecretKeyFactory.getInstance(algorithm);
+  static final String GS2_HEADER = "n,,";
+
+  public ScramMechanism(final MessageDigest hash,
+                        final Mac hmac) {
+    Objects.requireNonNull(hash);
+    Objects.requireNonNull(hmac);
+    this.hash = hash;
+    this.hmac = hmac;
   }
 
-  public byte[] getSaltedPassword(final String rawPassword,
-                                  final byte[] salt,
-                                  int iteration)
-      throws StringPrepParseException {
-    final byte[] password = prep
-        .prepare(rawPassword, StringPrep.DEFAULT)
-        .getBytes(StandardCharsets.UTF_8);
-    try {
-      hmac.init(keyFactory.generateSecret(
-          new SecretKeySpec(password, getHashAlgorithm())
-      ));
-    } catch (InvalidKeySpecException | InvalidKeyException ex) {
-      throw new IllegalArgumentException(ex);
-    }
-    byte[] raw = new byte[password.length + 4];
-    raw[raw.length - 1] = 1;
-    byte[] result = hmac.doFinal(raw);
-    for (int it = 2; it <= iteration; ++it) {
-      raw = result;
-      result = hmac.doFinal(raw);
-    }
-    return raw;
+  static String getClientFirstMessageBare(final String username,
+                                          final String nounce) {
+    return String.format(
+        "n=%1s,r=%2s",
+        username.replace("=", "=3D").replace(",", "=2C"),
+        nounce
+    );
   }
 
-  public byte[] getClientKey(final byte[] saltedPassword) {
-    try {
-      hmac.init(keyFactory.generateSecret(
-          new SecretKeySpec(saltedPassword, getHashAlgorithm())
-      ));
-    } catch (InvalidKeySpecException | InvalidKeyException ex) {
-      throw new IllegalArgumentException(ex);
+
+  static String getServerFirstMessage(final String nounce,
+                                      final byte[] salt,
+                                      final int iteration) {
+    return String.format(
+        "r=%1s,s=%2s,i=%3s",
+        nounce,
+        Base64.encodeBase64String(salt),
+        iteration
+    );
+  }
+
+  static String getClientFinalMessageWithoutProof(String nounce) {
+    return String.format(
+        "c=%1s,r=%2s",
+        Base64.encodeBase64String(GS2_HEADER.getBytes(StandardCharsets.UTF_8)),
+        nounce
+    );
+  }
+
+  static String getAuthMessage(final String initialNounce,
+                               final String fullNounce,
+                               final String username,
+                               final byte[] salt,
+                               final int iteration) {
+    return String.format(
+        "%1s,%2s,%3s",
+        getClientFirstMessageBare(username, initialNounce),
+        getServerFirstMessage(fullNounce, salt, iteration),
+        getClientFinalMessageWithoutProof(fullNounce)
+    );
+  }
+
+  static Map<String, String> convertMessageToMap(final String msg)
+      throws ScramException {
+    if (!msg.startsWith(GS2_HEADER)) {
+      throw new ScramException("invalid-syntax");
     }
+    Map<String, String> params = new HashMap<>();
+    for (String it : msg.substring(GS2_HEADER.length()).split(",")) {
+      String[] pair = it.split("=");
+      if (pair.length > 2 || pair[0].isEmpty()) {
+        throw new ScramException("invalid-syntax");
+      }
+      if (params.containsKey(pair[0])) {
+        throw new ScramException("duplicated-attributes");
+      }
+      if (pair.length == 1) {
+        params.put(pair[0], "");
+      } else {
+        params.put(pair[0], pair[1]);
+      }
+    }
+    return params;
+  }
+
+  byte[] getSaltedPassword(final String password,
+                           final byte[] salt,
+                           int iteration) throws InvalidKeyException {
+    return hi(password.getBytes(StandardCharsets.UTF_8), salt, iteration);
+  }
+
+  byte[] getClientKey(final byte[] saltedPassword)
+      throws InvalidKeyException {
+    hmac.init(new SecretKeySpec(saltedPassword, hmac.getAlgorithm()));
     return hmac.doFinal("Client Key".getBytes(StandardCharsets.UTF_8));
   }
 
-  public byte[] getStoredKey(final byte[] clientKey) {
+  byte[] getStoredKey(final byte[] clientKey) {
     return hash.digest(clientKey);
   }
 
-  public byte[] getServerKey(final byte[] saltedPassword) {
-    try {
-      hmac.init(keyFactory.generateSecret(
-          new SecretKeySpec(saltedPassword, getHashAlgorithm())
-      ));
-    } catch (InvalidKeySpecException | InvalidKeyException ex) {
-      throw new IllegalArgumentException(ex);
-    }
+  byte[] getServerKey(final byte[] saltedPassword)
+      throws InvalidKeyException {
+    hmac.init(new SecretKeySpec(saltedPassword, hmac.getAlgorithm()));
     return hmac.doFinal("Server Key".getBytes(StandardCharsets.UTF_8));
   }
 
-  public String getHashAlgorithm() {
+  byte[] getClientSignature(final byte[] storedKey, final String authMessage)
+      throws InvalidKeyException {
+    hmac.init(new SecretKeySpec(storedKey, hmac.getAlgorithm()));
+    return hmac.doFinal(authMessage.getBytes(StandardCharsets.UTF_8));
+  }
+
+  byte[] getServerSignature(final byte[] serverKey, final String authMessage)
+      throws InvalidKeyException {
+    hmac.init(new SecretKeySpec(serverKey, hmac.getAlgorithm()));
+    return hmac.doFinal(authMessage.getBytes(StandardCharsets.UTF_8));
+  }
+
+  public String getAlgorithm() {
     return hash.getAlgorithm();
+  }
+
+  public byte[] hi(byte[] data, byte[] salt, int iteration) throws InvalidKeyException {
+    if (iteration < 1) {
+      throw new IllegalArgumentException();
+    }
+    hmac.init(new SecretKeySpec(data, hmac.getAlgorithm()));
+    byte[] raw = new byte[salt.length + 4];
+    raw[raw.length - 1] = 1;
+    byte[] rawNext = hmac.doFinal(raw);
+    byte[] result = Bytes.xor(raw, rawNext);
+    for (int it = 2; it <= iteration; ++it) {
+      raw = rawNext;
+      rawNext = hmac.doFinal(raw);
+      result = Bytes.xor(result, rawNext);
+    }
+    return result;
   }
 }

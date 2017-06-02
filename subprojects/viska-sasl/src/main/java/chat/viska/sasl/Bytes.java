@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+ * Copyright 2017 Kai-Chung Yan (殷啟聰)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,18 @@
  * limitations under the License.
  */
 
-dependencies {
-  compile 'com.google.code.gson:gson:2.8.0'
-  compile 'rocks.xmpp:precis:0.1.0'
-  compile project(':viska-commons')
-  compile project(':viska-sasl')
+package chat.viska.sasl;
+
+class Bytes {
+
+  public static byte[] xor(final byte[] bytesA, final byte[] bytesB) {
+    if (bytesA.length != bytesB.length) {
+      throw new IllegalArgumentException();
+    }
+    byte[] result = new byte[bytesA.length];
+    for (int it = 0; it < bytesA.length; ++it) {
+      result[it] = (byte) (bytesA[it] ^ bytesB[it]);
+    }
+    return result;
+  }
 }

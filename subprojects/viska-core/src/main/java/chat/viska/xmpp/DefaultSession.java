@@ -20,6 +20,7 @@ import chat.viska.commons.ExceptionCaughtEvent;
 import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipe;
 import chat.viska.commons.pipelines.Pipeline;
+import chat.viska.sasl.PropertiesRetriever;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
@@ -34,6 +35,7 @@ import java.util.EventObject;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -58,6 +60,11 @@ import org.xml.sax.SAXException;
 public abstract class DefaultSession implements Session {
 
   private static final AtomicReference<DocumentBuilder> DOM_BUILDER_INSTANCE;
+  private static final String[] SASL_MECHANISMS_DEFAULT = {
+      "SCRAM-SHA-512",
+      "SCRAM-SHA-256",
+      "SCRAM-SHA-1"
+  };
 
   static {
     DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
@@ -231,7 +238,7 @@ public abstract class DefaultSession implements Session {
             .subscribe(new Consumer<PropertyChangeEvent>() {
               @Override
               public void accept(PropertyChangeEvent event) throws Exception {
-                setResource((String) event.getNewValue());
+                resource = (String) event.getNewValue();
               }
             });
         setState(State.CONNECTED);
@@ -259,6 +266,16 @@ public abstract class DefaultSession implements Session {
         return null;
       }
     });
+  }
+
+  @Override
+  public Future<Void> login(String username, Map<String, ?> properties) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public Future<Void> login(String username, PropertiesRetriever retriever) {
+    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -353,11 +370,6 @@ public abstract class DefaultSession implements Session {
   }
 
   @Override
-  public Compression getBestStreamCompression() {
-    return null;
-  }
-
-  @Override
   public void setStreamCompression(final @Nullable Compression streamCompression) {
     if (state.get() != State.DISCONNECTED) {
       throw new IllegalStateException();
@@ -403,10 +415,6 @@ public abstract class DefaultSession implements Session {
   @NonNull
   public String getResource() {
     return resource;
-  }
-
-  public void setResource(final @NonNull String resource) {
-    throw new UnsupportedOperationException();
   }
 
   @Override

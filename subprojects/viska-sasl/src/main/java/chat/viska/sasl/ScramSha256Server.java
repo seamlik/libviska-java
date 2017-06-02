@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+ * Copyright 2017 Kai-Chung Yan (殷啟聰)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,22 @@
  * limitations under the License.
  */
 
-dependencies {
-  compile 'com.google.code.gson:gson:2.8.0'
-  compile 'rocks.xmpp:precis:0.1.0'
-  compile project(':viska-commons')
-  compile project(':viska-sasl')
+package chat.viska.sasl;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import javax.crypto.Mac;
+
+public class ScramSha256Server extends ScramServer {
+
+  public ScramSha256Server(PropertiesRetriever retriever)
+      throws NoSuchAlgorithmException {
+    super(
+        new ScramMechanism(
+            MessageDigest.getInstance("SHA-256"),
+            Mac.getInstance("HmacSHA256")
+        ),
+        retriever
+    );
+  }
 }

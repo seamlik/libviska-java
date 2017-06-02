@@ -267,11 +267,6 @@ public class NettyWebSocketSession extends DefaultSession {
   }
 
   @Override
-  public Compression getBestConnectionCompression() {
-    return Compression.DEFLATE;
-  }
-
-  @Override
   public void setConnectionCompression(@Nullable Compression compression) {
     if (getState() != State.DISCONNECTED) {
       throw new IllegalStateException();
@@ -288,11 +283,6 @@ public class NettyWebSocketSession extends DefaultSession {
   @Override
   @Nullable
   public Compression getTlsCompression() {
-    return null;
-  }
-
-  @Override
-  public Compression getBestTlsCompression() {
     return null;
   }
 

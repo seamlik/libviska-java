@@ -16,6 +16,7 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.sasl.PropertiesRetriever;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
@@ -23,6 +24,7 @@ import java.security.cert.Certificate;
 import java.util.EventObject;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 import javax.net.ssl.SSLSession;
@@ -157,6 +159,10 @@ public interface Session {
    */
   Future<Void> login(@NonNull String username, @NonNull String password);
 
+  Future<Void> login(@NonNull String username, @NonNull Map<String, ?> properties);
+
+  Future<Void> login(@NonNull String username, @NonNull PropertiesRetriever retriever);
+
   /**
    * Starts closing the connection. This method is non-blocking but cancellation
    * is not supported. In order to get informed when the method completes,
@@ -192,9 +198,6 @@ public interface Session {
   @Nullable
   Compression getConnectionCompression();
 
-  @Nullable
-  Compression getBestConnectionCompression();
-
   /**
    * Sets the connection level {@link Compression}.
    * @throws IllegalStateException If this class is in an inappropriate {@link State}.
@@ -213,9 +216,6 @@ public interface Session {
   @Nullable
   Compression getTlsCompression();
 
-  @Nullable
-  Compression getBestTlsCompression();
-
   /**
    * Sets the TLS level {@link Compression} which is defined in
    * <a href="https://datatracker.ietf.org/doc/rfc3749">RFC 3749: Transport
@@ -231,9 +231,6 @@ public interface Session {
    */
   @Nullable
   Compression getStreamCompression();
-
-  @Nullable
-  Compression getBestStreamCompression();
 
   /**
    * Sets the stream level {@link Compression} which is standardized in
@@ -350,8 +347,6 @@ public interface Session {
    */
   @NonNull
   String getResource();
-
-  void setResource(@NonNull String resource);
 
   /**
    * Gets the {@link EventObject} stream. It never emits any errors but will
