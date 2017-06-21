@@ -19,5 +19,5 @@ package chat.viska.sasl;
 import java.util.Map;
 
 public interface PropertiesRetriever {
-  Map<String, ?> retrieve(String authorizationId, String mechanism) throws Exception;
+  Map<String, ?> retrieve(String authId, String mechanism) throws Exception;
 }

@@ -23,10 +23,6 @@ import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-/**
- * Tests of {@link Connection}.
- * @since 0.1
- */
 public class ConnectionTest {
 
   @Test

@@ -22,7 +22,9 @@ import javax.crypto.Mac;
 
 public class ScramSha1Client extends ScramClient {
 
-  public ScramSha1Client(final String username, final String password)
+  public ScramSha1Client(final String username,
+                         final String password,
+                         final String authzId)
       throws NoSuchAlgorithmException{
     super(
         new ScramMechanism(
@@ -30,14 +32,16 @@ public class ScramSha1Client extends ScramClient {
             Mac.getInstance("HmacSHA1")
         ),
         username,
-        password
+        password,
+        authzId
     );
   }
 
   public ScramSha1Client(final String username,
                          final byte[] saltedPassword,
                          final byte[] salt,
-                         final int iteration) throws NoSuchAlgorithmException {
+                         final int iteration,
+                         final String authzId) throws NoSuchAlgorithmException {
     super(
         new ScramMechanism(
             MessageDigest.getInstance("SHA-1"),
@@ -46,7 +50,8 @@ public class ScramSha1Client extends ScramClient {
         username,
         saltedPassword,
         salt,
-        iteration
+        iteration,
+        authzId
     );
   }
 }

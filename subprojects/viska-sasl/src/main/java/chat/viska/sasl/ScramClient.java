@@ -16,7 +16,6 @@
 
 package chat.viska.sasl;
 
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.SecureRandom;
@@ -26,13 +25,19 @@ import java.util.Map;
 import java.util.Objects;
 import org.apache.commons.codec.binary.Base64;
 
+/**
+ * SASL client of SCRAM mechanism specified in
+ * <a href="https://datatracker.ietf.org/doc/rfc5802">RFC 5802: Salted Challenge
+ * Response Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms</a>.
+ * Note that this implementation does not support Channel Binding.
+ */
 public class ScramClient implements Client {
 
   private enum State {
     INITIALIZED,
-    AWAITING_CHALLENGE,
+    INITIAL_RESPONSE_SENT,
     CHALLENGE_RECEIVED,
-    AWAITING_RESULT,
+    FINAL_RESPONSE_SENT,
     COMPLETED
   }
 
@@ -41,6 +46,7 @@ public class ScramClient implements Client {
   private final String username;
   private final String password;
   private final String initialNounce;
+  private final String authzId;
   private State state = State.INITIALIZED;
   private String fullNounce = "";
   private byte[] saltedPassword = new byte[0];
@@ -48,10 +54,19 @@ public class ScramClient implements Client {
   private int iteration = -1;
   private ScramException error;
 
+  private String getGs2Header() {
+    final StringBuilder result = new StringBuilder("n,");
+    if (!authzId.isEmpty()) {
+      result.append("a=").append(authzId);
+    }
+    result.append(',');
+    return result.toString();
+  }
+
   private String getInitialResponse() {
     return String.format(
         "%1s%2s",
-        ScramMechanism.GS2_HEADER,
+        getGs2Header(),
         ScramMechanism.getClientFirstMessageBare(username, initialNounce)
     );
   }
@@ -59,7 +74,7 @@ public class ScramClient implements Client {
   private void consumeChallenge(final String challenge) {
     final Map<String, String> params;
     try {
-      params = ScramMechanism.convertMessageToMap(challenge);
+      params = ScramMechanism.convertMessageToMap(challenge, false);
     } catch (ScramException ex) {
       error = ex;
       state = State.COMPLETED;
@@ -136,7 +151,6 @@ public class ScramClient implements Client {
     if (iteration >= 1 && !(iteration == serverIteration)) {
       state = State.COMPLETED;
       error = new ScramException("invalid-iteration");
-      return;
     } else {
       iteration = serverIteration;
     }
@@ -157,7 +171,8 @@ public class ScramClient implements Client {
               fullNounce,
               username,
               salt,
-              iteration
+              iteration,
+              getGs2Header()
           )
       );
       clientProof = Bytes.xor(clientKey,clientSig);
@@ -166,7 +181,7 @@ public class ScramClient implements Client {
     }
     return String.format(
         "%1s,p=%2s",
-        ScramMechanism.getClientFinalMessageWithoutProof(fullNounce),
+        ScramMechanism.getClientFinalMessageWithoutProof(fullNounce, getGs2Header()),
         base64.encodeToString(clientProof)
     );
   }
@@ -191,7 +206,8 @@ public class ScramClient implements Client {
                   fullNounce,
                   username,
                   salt,
-                  iteration
+                  iteration,
+                  getGs2Header()
               )
           );
         } catch (InvalidKeyException ex) {
@@ -211,17 +227,19 @@ public class ScramClient implements Client {
 
   public ScramClient(final ScramMechanism scram,
                      final String username,
-                     final String password) {
+                     final String password,
+                     final String authzId) {
     this.scram = scram;
     this.username = username == null ? "" : username;
     this.password = password == null ? "" : password;
+    this.authzId = authzId == null ? "" : authzId;
 
     Objects.requireNonNull(scram);
     if (this.username.isEmpty()) {
-      throw new IllegalArgumentException();
+      throw new IllegalArgumentException("`username` is absent.");
     }
     if (this.password.isEmpty()) {
-      throw new IllegalArgumentException();
+      throw new IllegalArgumentException("`password` is absent.");
     }
 
     byte[] randomBytes = new byte[6];
@@ -233,7 +251,8 @@ public class ScramClient implements Client {
                      final String username,
                      final byte[] saltedPassword,
                      final byte[] salt,
-                     final int iteration) {
+                     final int iteration,
+                     final String authzId) {
     this.scram = scram;
     this.username = username == null ? "" : username;
     this.password = "";
@@ -242,6 +261,7 @@ public class ScramClient implements Client {
         : Arrays.copyOf(saltedPassword, saltedPassword.length);
     this.salt = salt == null ? new byte[0] : Arrays.copyOf(salt, salt.length);
     this.iteration = iteration;
+    this.authzId = authzId == null ? "" : authzId;
 
     Objects.requireNonNull(scram);
     if (this.username.isEmpty()) {
@@ -277,32 +297,34 @@ public class ScramClient implements Client {
   }
 
   @Override
-  public String respond() {
+  public byte[] respond() {
     switch (state) {
       case INITIALIZED:
-        state = State.AWAITING_CHALLENGE;
-        return getInitialResponse();
+        state = State.INITIAL_RESPONSE_SENT;
+        return getInitialResponse().getBytes(StandardCharsets.UTF_8);
       case CHALLENGE_RECEIVED:
-        state = State.AWAITING_RESULT;
-        return getFinalResponse();
+        state = State.FINAL_RESPONSE_SENT;
+        return getFinalResponse().getBytes(StandardCharsets.UTF_8);
+      case COMPLETED:
+        return new byte[0];
       default:
-        throw new IllegalStateException();
+        throw new IllegalStateException("Not about to respond.");
     }
   }
 
   @Override
-  public void acceptChallenge(String challenge) {
+  public void acceptChallenge(final byte[] challenge) {
     switch (state) {
-      case AWAITING_CHALLENGE:
-        consumeChallenge(challenge);
+      case INITIAL_RESPONSE_SENT:
+        consumeChallenge(new String(challenge, StandardCharsets.UTF_8));
         state = State.CHALLENGE_RECEIVED;
         break;
-      case AWAITING_RESULT:
-        consumeResult(challenge);
+      case FINAL_RESPONSE_SENT:
+        consumeResult(new String(challenge, StandardCharsets.UTF_8));
         state = State.COMPLETED;
         break;
       default:
-        throw new IllegalStateException();
+        throw new IllegalStateException("Not waiting for a challenge.");
     }
   }
 
@@ -321,7 +343,15 @@ public class ScramClient implements Client {
   }
 
   @Override
-  public Charset getCharset() {
-    return StandardCharsets.UTF_8;
+  public Map<String, ?> getNegotiatedProperties() {
+    if (this.state != State.COMPLETED) {
+      return null;
+    }
+    final Map<String, Object> result = new HashMap<>();
+    result.put("salt", this.salt);
+    result.put("salted-password", this.saltedPassword);
+    result.put("username", this.username);
+    result.put("iteration", this.iteration);
+    return result;
   }
 }

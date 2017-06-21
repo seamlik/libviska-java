@@ -16,7 +16,7 @@
 
 package chat.viska.sasl;
 
-import java.nio.charset.Charset;
+import java.util.Map;
 
 /**
  * SASL client.
@@ -33,14 +33,14 @@ public interface Client {
    * @throws IllegalStateException If still waiting for another challenge after
    *         sending the last response.
    */
-  String respond();
+  byte[] respond();
 
   /**
-   * Accept an challenge sent from the server.
+   * Accepts a challenge sent from the server.
    * @throws IllegalStateException If invoked before sending a response after
    *         accepting the last challenge.
    */
-  void acceptChallenge(String challenge);
+  void acceptChallenge(byte[] challenge);
 
   /**
    * Indicates if the mechanism requires the client to send an initial response.
@@ -55,7 +55,11 @@ public interface Client {
   boolean isCompleted() throws AuthenticationException;
 
   /**
-   * Gets the {@link Charset} used in transferring responses and challenges.
+   * Gets a {@link Map} containing properties negotiated during the
+   * authentication. What key-value pairs it will contain is defined by the
+   * implementations.
+   * @return {@code null} if authentication not completed, otherwise a
+   *         {@link Map} which is either empty or containing properties.
    */
-  Charset getCharset();
+  Map<String, ?> getNegotiatedProperties();
 }

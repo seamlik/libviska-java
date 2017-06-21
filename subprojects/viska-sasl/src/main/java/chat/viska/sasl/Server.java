@@ -16,22 +16,47 @@
 
 package chat.viska.sasl;
 
-import java.nio.charset.Charset;
+import java.util.Map;
 
 /**
  * SASL server.
  */
 public interface Server {
 
+  /**
+   * Gets the name of the SASL mechanism.
+   */
   String getMechanism();
 
-  String challenge();
+  byte[] challenge();
 
-  void acceptResponse(String response);
+  void acceptResponse(byte[] response);
 
+  /**
+   * Indicates if the mechanism requires the server to send an initial challenge.
+   */
   boolean isServerFirst();
 
+  /**
+   * Indicates if the authentication is finished and successful or is still in
+   * progress.
+   * @throws AuthenticationException If the authentication failed.
+   */
   boolean isCompleted() throws AuthenticationException;
 
-  Charset getCharset();
+  /**
+   * Gets the authorization ID in effect for the client of this session. If the
+   * client did not specify one, it returns the authentication ID instead.
+   * @return {@code null} if authentication not completed.
+   */
+  String getAuthorizationId();
+
+  /**
+   * Gets a {@link Map} containing properties negotiated during the
+   * authentication. What key-value pairs it will contain is defined by the
+   * implementations.
+   * @return {@code null} if authentication not completed, otherwise a
+   *         {@link Map} which is either empty or containing properties.
+   */
+  Map<String, ?> getNegotiatedProperties();
 }

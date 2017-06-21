@@ -19,7 +19,7 @@ buildscript {
     jcenter()
   }
   dependencies {
-    classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0-M3'
+    classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0-M4'
   }
 }
 
@@ -48,7 +48,7 @@ subprojects {
   }
 
   checkstyle {
-    toolVersion = '7.7'
+    toolVersion = '7.8.1'
     File styleFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
     if (!styleFile.exists()) {
       mkdir "${rootDir}/config/checkstyle"
