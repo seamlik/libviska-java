@@ -18,6 +18,18 @@ package chat.viska.sasl;
 
 import java.util.Map;
 
+/**
+ * Function that retrieves sensitive data during an
+ * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> authentication.
+ */
 public interface PropertiesRetriever {
-  Map<String, ?> retrieve(String authId, String mechanism) throws Exception;
+
+  /**
+   * Retrieves a {@link Map} containing sensitive data. What data types and key
+   * should be provided is defined by the mechanism.
+   * @param authnId Authentication ID.
+   * @param mechanism Name of the SASL Mechanism.
+   * @throws Exception If any error occurred during the retrieval.
+   */
+  Map<String, ?> retrieve(String authnId, String mechanism) throws Exception;
 }

@@ -18,6 +18,10 @@ package chat.viska.sasl;
 
 import java.util.ResourceBundle;
 
+/**
+ * Error occurred during a
+ * <a href="https://datatracker.ietf.org/doc/rfc5802">SCRAM</a> authentication.
+ */
 public class ScramException extends AuthenticationException {
 
   public ScramException() {

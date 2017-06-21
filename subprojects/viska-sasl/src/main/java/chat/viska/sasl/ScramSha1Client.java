@@ -20,6 +20,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import javax.crypto.Mac;
 
+/**
+ * <a href="https://datatracker.ietf.org/doc/rfc5802">SCRAM</a> client of
+ * {@code SCRAM-SHA-1} mechanism.
+ */
 public class ScramSha1Client extends ScramClient {
 
   public ScramSha1Client(final String username,

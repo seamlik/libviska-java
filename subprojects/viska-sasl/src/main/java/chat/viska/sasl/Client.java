@@ -19,7 +19,7 @@ package chat.viska.sasl;
 import java.util.Map;
 
 /**
- * SASL client.
+ * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> client.
  */
 public interface Client {
 
@@ -50,9 +50,14 @@ public interface Client {
   /**
    * Indicates if the authentication is finished and successful or is still in
    * progress.
-   * @throws AuthenticationException If the authentication failed.
    */
-  boolean isCompleted() throws AuthenticationException;
+  boolean isCompleted();
+
+  /**
+   * Gets the error occurred during the authentication.
+   * @throws IllegalStateException If authentication not completed.
+   */
+  AuthenticationException getError();
 
   /**
    * Gets a {@link Map} containing properties negotiated during the

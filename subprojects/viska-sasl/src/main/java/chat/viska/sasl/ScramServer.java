@@ -25,6 +25,12 @@ import java.util.Map;
 import java.util.Objects;
 import org.apache.commons.codec.binary.Base64;
 
+/**
+ * SASL server of SCRAM mechanism specified in
+ * <a href="https://datatracker.ietf.org/doc/rfc5802">RFC 5802: Salted Challenge
+ * Response Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms</a>.
+ * Note that this implementation does not support Channel Binding.
+ */
 public class ScramServer implements Server {
 
   private enum State {
@@ -35,9 +41,11 @@ public class ScramServer implements Server {
     COMPLETED
   }
 
+  private static final int DEFAULT_ITERATION = 4096;
+
   private final ScramMechanism scram;
   private final String initialNounce;
-  private final Base64 base64 = new Base64(false);
+  private final Base64 base64 = new Base64(0, new byte[0], false);
   private final PropertiesRetriever retriever;
   private String gs2Header = "";
   private String username = "";
@@ -49,17 +57,42 @@ public class ScramServer implements Server {
   private State state = State.INITIALIZED;
   private ScramException error;
 
+  /**
+   * Constructs a SCRAM server. The data retrieved by the {@code retriever} must
+   * contain the following key-value pairs:
+   * <ul>
+   *   <li>
+   *     {@code password} ({@link String}): The raw password in
+   *     {@code stringprep}ed form. If this property is present, the server will
+   *     generate {@code salted-password} on demand using random {@code salt}
+   *     and {@code iteration}.
+   *   </li>
+   *   <li>
+   *     {@code salted-password} ({@link Byte}): Optional if {@code password} is
+   *     present.
+   *   </li>
+   *   <li>
+   *     {@code salt} ({@link Byte}): Optional if {@code password} is present.
+   *   </li>
+   *   <li>
+   *     {@code iteration} ({@link Integer}): Optional if {@code password} is
+   *     present.
+   *   </li>
+   * </ul>
+   * @param retriever Method to retrieve sensitive data for the authentication.
+   * @throws NullPointerException if either of the parameters are {@code null}.
+   */
   public ScramServer(final ScramMechanism scram,
                      final PropertiesRetriever retriever) {
-    Objects.requireNonNull(scram);
-    Objects.requireNonNull(retriever);
+    Objects.requireNonNull(scram, "`scram` is absent.");
+    Objects.requireNonNull(retriever, "`retriever` is absent.");
 
     this.scram = scram;
     this.retriever = retriever;
 
     byte[] randomBytes = new byte[12]; // Making a 16-letter nounce
     new SecureRandom().nextBytes(randomBytes);
-    this.initialNounce = base64.encodeToString(randomBytes);
+    this.initialNounce = base64.encodeToString(randomBytes).trim();
   }
 
   private void consumeInitialResponse(final String response) {
@@ -150,8 +183,9 @@ public class ScramServer implements Server {
       this.iteration = iteration == null ? -1 : iteration;
     } else {
       final SecureRandom random = new SecureRandom();
+      this.salt = new byte[64 / 8];
       random.nextBytes(this.salt);
-      iteration = random.nextInt() + 4096;
+      this.iteration = DEFAULT_ITERATION;
       try {
         this.saltedPassword = scram.getSaltedPassword(password, this.salt, this.iteration);
       } catch (InvalidKeyException ex) {
@@ -252,13 +286,8 @@ public class ScramServer implements Server {
   public byte[] challenge() {
     switch (state) {
       case INITIAL_RESPONSE_RECEIVED:
-        if (error != null) {
-          state = State.COMPLETED;
-          return ("e=" + error.getMessage()).getBytes(StandardCharsets.UTF_8);
-        } else {
-          state = State.CHALLENGE_SENT;
-          return getChallenge().getBytes(StandardCharsets.UTF_8);
-        }
+        state = State.CHALLENGE_SENT;
+        return getChallenge().getBytes(StandardCharsets.UTF_8);
       case FINAL_RESPONSE_RECEIVED:
         if (error != null) {
           state = State.COMPLETED;
@@ -294,14 +323,30 @@ public class ScramServer implements Server {
   }
 
   @Override
-  public boolean isCompleted() throws ScramException {
-    if (error == null) {
-      return state == State.COMPLETED;
-    } else {
-      throw error;
-    }
+  public boolean isCompleted() {
+    return state == State.COMPLETED;
   }
 
+  @Override
+  public ScramException getError() {
+    if (!isCompleted()) {
+      throw new IllegalStateException("Authentication not completed.");
+    }
+    return error;
+  }
+
+  /**
+   * Gets a {@link Map} containing properties negotiated during the
+   * authentication. It will contain the following key-value pairs:
+   * <ul>
+   *   <li>{@code salted-password} ({@link Byte})</li>
+   *   <li>{@code salt} ({@link Byte})</li>
+   *   <li>{@code iteration} ({@link Integer})</li>
+   *   <li>{@code username} ({@link String})</li>
+   * </ul>
+   * @return {@code null} if authentication not completed, otherwise a
+   *         {@link Map} which is either empty or containing properties.
+   */
   @Override
   public Map<String, ?> getNegotiatedProperties() {
     if (this.state != State.COMPLETED) {

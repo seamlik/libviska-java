@@ -42,7 +42,7 @@ public class ScramClient implements Client {
   }
 
   private final ScramMechanism scram;
-  private final Base64 base64 = new Base64(false);
+  private final Base64 base64 = new Base64(0, new byte[0], false);
   private final String username;
   private final String password;
   private final String initialNounce;
@@ -244,7 +244,7 @@ public class ScramClient implements Client {
 
     byte[] randomBytes = new byte[6];
     new SecureRandom().nextBytes(randomBytes);
-    this.initialNounce = base64.encodeToString(randomBytes);
+    this.initialNounce = base64.encodeToString(randomBytes).trim();
   }
 
   public ScramClient(final ScramMechanism scram,
@@ -279,18 +279,6 @@ public class ScramClient implements Client {
     this.initialNounce = base64.encodeToString(randomBytes);
   }
 
-  public int getIteration() {
-    return iteration;
-  }
-
-  public byte[] getSaltedPassword() {
-    return Arrays.copyOf(saltedPassword, saltedPassword.length);
-  }
-
-  public byte[] getSalt() {
-    return Arrays.copyOf(salt, salt.length);
-  }
-
   @Override
   public String getMechanism() {
     return "SCRAM-" + scram.getAlgorithm();
@@ -305,8 +293,6 @@ public class ScramClient implements Client {
       case CHALLENGE_RECEIVED:
         state = State.FINAL_RESPONSE_SENT;
         return getFinalResponse().getBytes(StandardCharsets.UTF_8);
-      case COMPLETED:
-        return new byte[0];
       default:
         throw new IllegalStateException("Not about to respond.");
     }
@@ -334,14 +320,29 @@ public class ScramClient implements Client {
   }
 
   @Override
-  public boolean isCompleted() throws ScramException {
-    if (error == null) {
-      return state == State.COMPLETED;
-    } else {
-      throw error;
-    }
+  public boolean isCompleted() {
+    return state == State.COMPLETED;
   }
 
+  @Override
+  public ScramException getError() {
+    if (!isCompleted()) {
+      throw new IllegalStateException("Authentication not completed.");
+    }
+    return error;
+  }
+
+  /**
+   * Gets a {@link Map} containing properties negotiated during the
+   * authentication. It will contain the following key-value pairs:
+   * <ul>
+   *   <li>{@code salted-password} ({@link Byte})</li>
+   *   <li>{@code salt} ({@link Byte})</li>
+   *   <li>{@code iteration} ({@link Integer})</li>
+   * </ul>
+   * @return {@code null} if authentication not completed, otherwise a
+   *         {@link Map} which is either empty or containing properties.
+   */
   @Override
   public Map<String, ?> getNegotiatedProperties() {
     if (this.state != State.COMPLETED) {

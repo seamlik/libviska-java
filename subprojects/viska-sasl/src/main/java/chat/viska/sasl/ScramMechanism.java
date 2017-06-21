@@ -26,13 +26,14 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.apache.commons.codec.binary.Base64;
 
+/**
+ * Represents the hash algorithm used by a {@code SCRAM-*} mechanism.
+ */
 public class ScramMechanism {
 
   private final MessageDigest hash;
   private final Mac hmac;
   private final String algorithm;
-
-  static final String DEFAULT_GS2_HEADER = "n,,";
 
   public ScramMechanism(final MessageDigest hash,
                         final Mac hmac,
@@ -96,9 +97,6 @@ public class ScramMechanism {
   static Map<String, String> convertMessageToMap(final String msg,
                                                  final boolean hasGs2Header)
       throws ScramException {
-    if (!msg.startsWith(DEFAULT_GS2_HEADER)) {
-      throw new ScramException("invalid-syntax");
-    }
     final String msgBare;
     final String gs2Header;
     if (hasGs2Header) {
@@ -114,18 +112,16 @@ public class ScramMechanism {
     }
     Map<String, String> params = new HashMap<>();
     for (String it : msgBare.split(",")) {
-      String[] pair = it.split("=");
-      if (pair.length > 2 || pair[0].isEmpty()) {
+      final int equalSignIndex = it.indexOf('=');
+      if (equalSignIndex < 1) {
         throw new ScramException("invalid-syntax");
       }
-      if (params.containsKey(pair[0])) {
+      final String key = it.substring(0, equalSignIndex);
+      final String value = it.substring(equalSignIndex + 1);
+      if (params.containsKey(key)) {
         throw new ScramException("duplicated-attributes");
       }
-      if (pair.length == 1) {
-        params.put(pair[0], "");
-      } else {
-        params.put(pair[0], pair[1]);
-      }
+      params.put(key, value);
     }
     if (!gs2Header.isEmpty()) {
       params.put("gs2-header", gs2Header);
@@ -184,7 +180,7 @@ public class ScramMechanism {
     byte[] raw = new byte[salt.length + 4];
     raw[raw.length - 1] = 1;
     byte[] rawNext = hmac.doFinal(raw);
-    byte[] result = Bytes.xor(raw, rawNext);
+    byte[] result = rawNext;
     for (int it = 2; it <= iteration; ++it) {
       raw = rawNext;
       rawNext = hmac.doFinal(raw);

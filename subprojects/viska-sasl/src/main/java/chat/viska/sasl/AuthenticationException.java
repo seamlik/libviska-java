@@ -16,6 +16,10 @@
 
 package chat.viska.sasl;
 
+/**
+ * Error occurred during an
+ * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> authentication.
+ */
 public class AuthenticationException extends Exception {
 
   public AuthenticationException() {
