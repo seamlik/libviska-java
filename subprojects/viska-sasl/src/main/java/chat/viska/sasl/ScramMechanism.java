@@ -96,7 +96,7 @@ public class ScramMechanism {
 
   static Map<String, String> convertMessageToMap(final String msg,
                                                  final boolean hasGs2Header)
-      throws ScramException {
+      throws IllegalArgumentException {
     final String msgBare;
     final String gs2Header;
     if (hasGs2Header) {
@@ -104,7 +104,7 @@ public class ScramMechanism {
       msgBare = msg.substring(gs2HeaderEndIndex);
       gs2Header = msg.substring(0, gs2HeaderEndIndex);
       if (gs2Header.isEmpty()) {
-        throw new ScramException("invalid-syntax");
+        throw new IllegalArgumentException("Invalid syntax.");
       }
     } else {
       msgBare = msg;
@@ -114,12 +114,12 @@ public class ScramMechanism {
     for (String it : msgBare.split(",")) {
       final int equalSignIndex = it.indexOf('=');
       if (equalSignIndex < 1) {
-        throw new ScramException("invalid-syntax");
+        throw new IllegalArgumentException("Invalid syntax.");
       }
       final String key = it.substring(0, equalSignIndex);
       final String value = it.substring(equalSignIndex + 1);
       if (params.containsKey(key)) {
-        throw new ScramException("duplicated-attributes");
+        throw new IllegalArgumentException("Duplicated attributes.");
       }
       params.put(key, value);
     }

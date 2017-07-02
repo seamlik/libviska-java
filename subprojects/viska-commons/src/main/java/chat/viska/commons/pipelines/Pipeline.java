@@ -51,8 +51,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     STOPPED
   }
 
-  private static final ExecutorService THREAD_POOL_INSTANCE = Executors.newCachedThreadPool();
-
+  private final ExecutorService threadpool = Executors.newCachedThreadPool();
   private final LinkedList<Map.Entry<String, Pipe>> pipes = new LinkedList<>();
   private final Subject<I> inboundStream;
   private final Subject<Throwable> inboundExceptionStream;
@@ -61,8 +60,8 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   private final PublishSubject<EventObject> eventStream = PublishSubject.create();
   private final BlockingQueue<Object> readQueue = new LinkedBlockingQueue<>();
   private final BlockingQueue<Object> writeQueue = new LinkedBlockingQueue<>();
+  private final ReadWriteLock pipeLock = new ReentrantReadWriteLock(true);
   private State state;
-  private ReadWriteLock pipeLock = new ReentrantReadWriteLock(true);
   private Future<Void> readTask;
   private Future<Void> writeTask;
 
@@ -197,7 +196,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         break;
     }
     setState(State.RUNNING);
-    readTask = THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
+    readTask = threadpool.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         while (true) {
@@ -221,7 +220,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         }
       }
     });
-    writeTask = THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
+    writeTask = threadpool.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         while (true) {
@@ -285,7 +284,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     inboundExceptionStream.onComplete();
     outboundStream.onComplete();
     outboundExceptionStream.onComplete();
-    THREAD_POOL_INSTANCE.shutdown();
+    threadpool.shutdown();
     setState(State.SHUTDOWN);
     eventStream.onComplete();
   }
@@ -296,7 +295,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Validate.notBlank(previous);
     Objects.requireNonNull(pipe);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
+    return threadpool.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
@@ -330,7 +329,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Objects.requireNonNull(previous);
     Objects.requireNonNull(pipe);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
+    return threadpool.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
@@ -364,7 +363,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Validate.notBlank(next);
     Objects.requireNonNull(pipe);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
+    return threadpool.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
@@ -397,7 +396,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Objects.requireNonNull(next);
     Objects.requireNonNull(pipe);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
+    return threadpool.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
@@ -428,7 +427,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
                                         final @NonNull Pipe pipe) {
     Objects.requireNonNull(pipe);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
+    return threadpool.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
@@ -455,7 +454,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
                                        final @NonNull Pipe pipe) {
     Objects.requireNonNull(pipe);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Void>() {
+    return threadpool.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         pipeLock.writeLock().lock();
@@ -486,7 +485,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   public @NonNull Future<Pipe> remove(final @NonNull String name) {
     Validate.notBlank(name);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+    return threadpool.submit(new Callable<Pipe>() {
       @Override
       public Pipe call() throws Exception {
         final Pipe pipe;
@@ -512,7 +511,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   public @NonNull Future<Pipe> remove(final @NonNull Pipe pipe) {
     Objects.requireNonNull(pipe);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+    return threadpool.submit(new Callable<Pipe>() {
       @Override
       public Pipe call() throws Exception {
         pipeLock.writeLock().lock();
@@ -536,7 +535,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   public @NonNull Future<Pipe> removeFirst() {
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+    return threadpool.submit(new Callable<Pipe>() {
       @Override
       public Pipe call() throws Exception {
         final Pipe pipe;
@@ -558,7 +557,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   public @NonNull Future<Pipe> removeLast() {
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+    return threadpool.submit(new Callable<Pipe>() {
       @Override
       public Pipe call() throws Exception {
         pipeLock.writeLock().lock();
@@ -583,7 +582,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Validate.notBlank(name);
     Objects.requireNonNull(newPipe);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+    return threadpool.submit(new Callable<Pipe>() {
       @Override
       public Pipe call() throws Exception {
         pipeLock.writeLock().lock();
@@ -615,7 +614,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     Objects.requireNonNull(oldPipe);
     Objects.requireNonNull(newPipe);
     final Pipeline thisPipeline = this;
-    return THREAD_POOL_INSTANCE.submit(new Callable<Pipe>() {
+    return threadpool.submit(new Callable<Pipe>() {
       @Override
       public Pipe call() throws Exception {
         pipeLock.writeLock().lock();

@@ -16,24 +16,58 @@
 
 package chat.viska.sasl;
 
+import java.util.Objects;
+
 /**
  * Error occurred during an
  * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> authentication.
  */
 public class AuthenticationException extends Exception {
 
-  public AuthenticationException() {
+  public enum Condition {
+    ABORTED,
+    ACCOUNT_DISABLED,
+    CLIENT_NOT_AUTHORIZED,
+    CREDENTIALS_EXPIRED,
+    CREDENTIALS_NOT_FOUND,
+    ENCRYPTION_REQUIRED,
+    INCORRECT_ENCODING,
+    INVALID_AUTHZID,
+    INVALID_MECHANISM,
+    MALFORMED_REQUEST,
+    MECHANISM_TOO_WEEK,
+    SERVER_NOT_AUTHORIZED,
+    TEPORARY_AUTH_FAILURE
   }
 
-  public AuthenticationException(String s) {
-    super(s);
+  private final Condition condition;
+
+  public AuthenticationException(Condition condition) {
+    Objects.requireNonNull(condition, "`condition` is absent.");
+    this.condition = condition;
   }
 
-  public AuthenticationException(String s, Throwable throwable) {
-    super(s, throwable);
+  public AuthenticationException(Condition condition, String text) {
+    super(text);
+    Objects.requireNonNull(condition, "`condition` is absent.");
+    this.condition = condition;
   }
 
-  public AuthenticationException(Throwable throwable) {
+  public AuthenticationException(Condition condition,
+                                 String text,
+                                 Throwable throwable) {
+    super(text, throwable);
+    Objects.requireNonNull(condition, "`condition` is absent.");
+    this.condition = condition;
+  }
+
+  public AuthenticationException(Condition condition, Throwable throwable) {
     super(throwable);
+    Objects.requireNonNull(condition, "`condition` is absent.");
+    this.condition = condition;
+  }
+
+  public Condition getCondition() {
+    return condition;
   }
 }

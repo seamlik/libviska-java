@@ -29,7 +29,7 @@ public class ScramTest {
     properties.put("username", "admin");
     properties.put("password", "pencil");
     final ScramSha512Server server = new ScramSha512Server(
-        new PropertiesRetriever() {
+        new PropertyRetriever() {
           @Override
           public Map<String, ?> retrieve(String authnId, String mechanism)
               throws Exception {

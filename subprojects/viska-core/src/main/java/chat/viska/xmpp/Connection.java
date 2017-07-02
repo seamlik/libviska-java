@@ -383,7 +383,7 @@ public class Connection {
     }
   }
 
-  public boolean isStartTlsEnabled() {
+  public boolean isStartTlsRequired() {
     if (protocol == Protocol.TCP && isTlsEnabled()) {
       return startTlsEnabled;
     } else {

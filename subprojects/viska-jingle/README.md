@@ -1,4 +1,4 @@
-XMPP Jingle Plugin for libviska-java
-====================================
+Jingle Support for libviska-java
+================================
 
-This library provides the plugin for supporting XMPP Jingle.
+This library provides the plugins for supporting XMPP Jingle.

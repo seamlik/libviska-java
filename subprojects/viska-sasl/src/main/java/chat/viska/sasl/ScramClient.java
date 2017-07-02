@@ -16,6 +16,7 @@
 
 package chat.viska.sasl;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.SecureRandom;
@@ -44,15 +45,15 @@ public class ScramClient implements Client {
   private final ScramMechanism scram;
   private final Base64 base64 = new Base64(0, new byte[0], false);
   private final String username;
-  private final String password;
   private final String initialNounce;
   private final String authzId;
+  private final PropertyRetriever retriever;
   private State state = State.INITIALIZED;
   private String fullNounce = "";
   private byte[] saltedPassword = new byte[0];
   private byte[] salt = new byte[0];
   private int iteration = -1;
-  private ScramException error;
+  private AuthenticationException error;
 
   private String getGs2Header() {
     final StringBuilder result = new StringBuilder("n,");
@@ -75,8 +76,11 @@ public class ScramClient implements Client {
     final Map<String, String> params;
     try {
       params = ScramMechanism.convertMessageToMap(challenge, false);
-    } catch (ScramException ex) {
-      error = ex;
+    } catch (Exception ex) {
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Invalid syntax."
+      );
       state = State.COMPLETED;
       return;
     }
@@ -84,7 +88,10 @@ public class ScramClient implements Client {
     // Extension
     if (params.containsKey("m")) {
       state = State.COMPLETED;
-      error = new ScramException("extensions-not-supported");
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Extension not supported."
+      );
       return;
     }
 
@@ -92,86 +99,123 @@ public class ScramClient implements Client {
     final String serverNounce = params.get("r");
     if (serverNounce == null || serverNounce.isEmpty()) {
       state = State.COMPLETED;
-      error = new ScramException("invalid-nounce");
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Empty nounce."
+      );
       return;
     }
     if (!serverNounce.startsWith(initialNounce)) {
       state = State.COMPLETED;
-      error = new ScramException("invalid-nounce");
+      error = new AuthenticationException(
+          AuthenticationException.Condition.SERVER_NOT_AUTHORIZED,
+          "Server nounce does not match."
+      );
       return;
     }
     fullNounce = serverNounce;
 
     // Salt
-    if (!params.containsKey("s")) {
-      state = State.COMPLETED;
-      error = new ScramException("invalid-salt");
-      return;
-    }
-    final byte[] serverSalt;
     try {
-      serverSalt = base64.decode(params.get("s"));
+      this.salt = base64.decode(params.get("s"));
     } catch (Exception ex) {
       state = State.COMPLETED;
-      error = new ScramException("invalid-salt", ex);
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Invalid salt."
+      );
       return;
     }
-    if (serverSalt.length == 0) {
+    if (this.salt.length == 0) {
       state = State.COMPLETED;
-      error = new ScramException("invalid-salt");
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Empty salt."
+      );
       return;
-    }
-    if (salt.length != 0 && !Arrays.equals(serverSalt, salt)) {
-      state = State.COMPLETED;
-      error = new ScramException("invalid-salt");
-      return;
-    } else {
-      salt = serverSalt;
     }
 
     // Iteration
-    if (!params.containsKey("i")) {
-      state = State.COMPLETED;
-      error = new ScramException("invalid-iteration");
-      return;
-    }
-    final int serverIteration;
     try {
-      serverIteration = Integer.parseInt(params.get("i"));
+      this.iteration = Integer.parseInt(params.get("i"));
     } catch (Exception ex) {
       state = State.COMPLETED;
-      error = new ScramException("invalid-iteration");
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Invalid iteration."
+      );
       return;
     }
-    if (serverIteration < 1) {
+    if (this.iteration < 1) {
       state = State.COMPLETED;
-      error = new ScramException("invalid-iteration");
-      return;
-    }
-    if (iteration >= 1 && !(iteration == serverIteration)) {
-      state = State.COMPLETED;
-      error = new ScramException("invalid-iteration");
-    } else {
-      iteration = serverIteration;
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Invalid iteration."
+      );
     }
   }
 
   private String getFinalResponse() {
+
+    // Retrieving password or salted-password
+    try {
+      final byte[] saltedPassword = (byte[]) retriever.retrieve(
+          username,
+          getMechanism(),
+          "salted-password"
+      );
+      if (saltedPassword != null) {
+        final byte[] salt = (byte[]) retriever.retrieve(
+            username, getMechanism(), "salt"
+        );
+        final int iteration = (Integer) retriever.retrieve(
+            username, getMechanism(), "iteration"
+        );
+        if (Arrays.equals(salt, this.salt) && Objects.equals(iteration, this.iteration)) {
+          this.saltedPassword = saltedPassword;
+        } else {
+          this.saltedPassword = scram.getSaltedPassword(
+              (String) retriever.retrieve(
+                  username, getMechanism(), "password"
+              ),
+              this.salt,
+              this.iteration
+          );
+        }
+      }
+      if (this.saltedPassword == null) {
+        throw new AuthenticationException(
+            AuthenticationException.Condition.CREDENTIALS_NOT_FOUND
+        );
+      }
+    } catch (AuthenticationException ex) {
+      this.error = ex;
+      return "";
+    } catch (AbortedException ex) {
+      this.error = new AuthenticationException(
+          AuthenticationException.Condition.ABORTED
+      );
+    } catch (Exception ex) {
+      this.error = new AuthenticationException(
+          AuthenticationException.Condition.CREDENTIALS_NOT_FOUND,
+          ex
+      );
+      return "";
+    }
+
+    // Calculating proof
     final byte[] clientProof;
     try {
-      if (saltedPassword.length == 0) {
-        saltedPassword = scram.getSaltedPassword(password, salt, iteration);
-      }
-      final byte[] clientKey = scram.getClientKey(saltedPassword);
-      final byte[] storedKey = scram.getStoredKey(clientKey);
-      final byte[] clientSig = scram.getClientSignature(
+      final byte[] clientKey = this.scram.getClientKey(this.saltedPassword);
+      final byte[] storedKey = this.scram.getStoredKey(clientKey);
+      final byte[] clientSig = this.scram.getClientSignature(
           storedKey,
           ScramMechanism.getAuthMessage(
-              initialNounce,
-              fullNounce,
-              username,
-              salt,
-              iteration,
+              this.initialNounce,
+              this.fullNounce,
+              this.username,
+              this.salt,
+              this.iteration,
               getGs2Header()
           )
       );
@@ -189,12 +233,18 @@ public class ScramClient implements Client {
   private void consumeResult(final String result) {
     final String[] pair = result.split(",")[0].split("=");
     if (pair.length != 2) {
-      error = new ScramException("invalid-syntax");
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Invalid syntax."
+      );
       return;
     }
     switch (pair[0]) {
       case "e":
-        error = new ScramException(pair[1]);
+        error = new AuthenticationException(
+            AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED,
+            pair[1]
+        );
         break;
       case "v":
         final byte[] serverSig;
@@ -216,67 +266,38 @@ public class ScramClient implements Client {
         if (Arrays.equals(serverSig, base64.decode(pair[1]))) {
           break;
         } else {
-          error = new ScramException("server-signature-incorrect");
+          error = new AuthenticationException(
+              AuthenticationException.Condition.SERVER_NOT_AUTHORIZED
+          );
           break;
         }
       default:
-        error = new ScramException("invalid-syntax");
+        error = new AuthenticationException(
+            AuthenticationException.Condition.MALFORMED_REQUEST,
+            "Invalid syntax."
+        );
         break;
     }
   }
 
   public ScramClient(final ScramMechanism scram,
-                     final String username,
-                     final String password,
-                     final String authzId) {
+                     final String authnId,
+                     final String authzId,
+                     final PropertyRetriever retriever) {
     this.scram = scram;
-    this.username = username == null ? "" : username;
-    this.password = password == null ? "" : password;
+    this.username = authnId;
     this.authzId = authzId == null ? "" : authzId;
+    this.retriever = retriever;
 
     Objects.requireNonNull(scram);
+    Objects.requireNonNull(retriever);
     if (this.username.isEmpty()) {
-      throw new IllegalArgumentException("`username` is absent.");
-    }
-    if (this.password.isEmpty()) {
-      throw new IllegalArgumentException("`password` is absent.");
+      throw new IllegalArgumentException("`authnId` is absent.");
     }
 
     byte[] randomBytes = new byte[6];
     new SecureRandom().nextBytes(randomBytes);
     this.initialNounce = base64.encodeToString(randomBytes).trim();
-  }
-
-  public ScramClient(final ScramMechanism scram,
-                     final String username,
-                     final byte[] saltedPassword,
-                     final byte[] salt,
-                     final int iteration,
-                     final String authzId) {
-    this.scram = scram;
-    this.username = username == null ? "" : username;
-    this.password = "";
-    this.saltedPassword = saltedPassword == null
-        ? new byte[0]
-        : Arrays.copyOf(saltedPassword, saltedPassword.length);
-    this.salt = salt == null ? new byte[0] : Arrays.copyOf(salt, salt.length);
-    this.iteration = iteration;
-    this.authzId = authzId == null ? "" : authzId;
-
-    Objects.requireNonNull(scram);
-    if (this.username.isEmpty()) {
-      throw new IllegalArgumentException();
-    }
-    if (this.saltedPassword.length == 0) {
-      throw new IllegalArgumentException();
-    }
-    if (this.salt.length == 0) {
-      throw new IllegalArgumentException();
-    }
-
-    byte[] randomBytes = new byte[6];
-    new SecureRandom().nextBytes(randomBytes);
-    this.initialNounce = base64.encodeToString(randomBytes);
   }
 
   @Override
@@ -325,7 +346,7 @@ public class ScramClient implements Client {
   }
 
   @Override
-  public ScramException getError() {
+  public AuthenticationException getError() {
     if (!isCompleted()) {
       throw new IllegalStateException("Authentication not completed.");
     }
@@ -351,7 +372,6 @@ public class ScramClient implements Client {
     final Map<String, Object> result = new HashMap<>();
     result.put("salt", this.salt);
     result.put("salted-password", this.saltedPassword);
-    result.put("username", this.username);
     result.put("iteration", this.iteration);
     return result;
   }

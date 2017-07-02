@@ -14,25 +14,22 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp;
+package chat.viska.sasl;
 
-/**
- * Indicates an error happened during the handshaking or login process.
- */
-public class HandshakeException extends Exception {
+public class AbortedException extends Exception {
 
-  public HandshakeException() {
+  public AbortedException() {
   }
 
-  public HandshakeException(String s) {
+  public AbortedException(String s) {
     super(s);
   }
 
-  public HandshakeException(String s, Throwable throwable) {
+  public AbortedException(String s, Throwable throwable) {
     super(s, throwable);
   }
 
-  public HandshakeException(Throwable throwable) {
+  public AbortedException(Throwable throwable) {
     super(throwable);
   }
 }

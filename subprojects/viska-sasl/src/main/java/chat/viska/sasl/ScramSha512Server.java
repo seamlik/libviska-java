@@ -26,7 +26,7 @@ import javax.crypto.Mac;
  */
 public class ScramSha512Server extends ScramServer {
 
-  public ScramSha512Server(PropertiesRetriever retriever)
+  public ScramSha512Server(PropertyRetriever retriever)
       throws NoSuchAlgorithmException {
     super(
         new ScramMechanism(

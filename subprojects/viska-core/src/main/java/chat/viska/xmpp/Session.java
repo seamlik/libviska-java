@@ -16,7 +16,7 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.sasl.PropertiesRetriever;
+import chat.viska.sasl.PropertyRetriever;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
@@ -24,7 +24,6 @@ import java.security.cert.Certificate;
 import java.util.EventObject;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 import javax.net.ssl.SSLSession;
@@ -91,6 +90,25 @@ public interface Session {
 
   /**
    * State of a {@link Session}.
+   *
+   * <p>The following figure shows the state diagram:</p>
+   * <pre>
+   *   +--------------+                 +--------------+                 +--------------+           +--------------+               +--------------+        +--------------+
+   *   |              |    dispose()    |              |    connect()    |              |           |              |    login()    |              |        |              |
+   *   |   DISPOSED   | <-------------+ | DISCONNECTED | +------------>  |  CONNECTING  | +-------> |  CONNECTED   | +---------->  | HANDSHAKING  | +----> |   ONLINE     |
+   *   |              |                 |              |                 |              |           |              |               |              |        |              |
+   *   +--------------+                 +--------------+                 +--------------+           +--------------+               +--------------+        +--------------+
+   *
+   *                                           ^                                                            +                                                     +
+   *                                           |                                                            | disconnect()                                        |
+   *                                           |                                                            v                                                     |
+   *                                           |                                                                                                                  | disconnect()
+   *                                           |                                                    +---------------+                                             |
+   *                                           |                                                    |               |                                             |
+   *                                           +--------------------------------------------------+ | DISCONNECTING | <-------------------------------------------+
+   *                                                                                                |               |
+   *                                                                                                +---------------+
+   * </pre>
    */
   enum State {
 
@@ -157,11 +175,13 @@ public interface Session {
    *         providing a way to cancel it.
    * @throws IllegalStateException If this class is in an inappropriate {@link State}.
    */
+  @NonNull
   Future<Void> login(@NonNull String username, @NonNull String password);
 
-  Future<Void> login(@NonNull String username, @NonNull Map<String, ?> properties);
-
-  Future<Void> login(@NonNull String username, @NonNull PropertiesRetriever retriever);
+  @NonNull
+  Future<Void> login(@NonNull Jid authnId,
+                     @Nullable Jid authzId,
+                     @NonNull PropertyRetriever retriever);
 
   /**
    * Starts closing the connection. This method is non-blocking but cancellation
@@ -181,14 +201,6 @@ public interface Session {
    * @throws IllegalStateException If this class is in an inappropriate {@link State}.
    */
   void send(@NonNull String xml) throws SAXException;
-
-  /**
-   * Sends a stream error if receiving any stanzas that violates XMPP rules.
-   * Since stream errors are unrecoverable, the connection will be closed
-   * immediately after they are sent.
-   * @throws IllegalStateException If this class is in an inappropriate {@link State}.
-   */
-  void sendStreamError();
 
   /**
    * Gets the connection level {@link Compression}.
@@ -309,26 +321,8 @@ public interface Session {
   PluginManager getPluginManager();
 
   /**
-   * Gets the current {@link State}. When an {@link Session} is just
+   * Gets the current {@link State}. When an {@link Session} is first
    * created, the {@link State} is always {@link State#DISCONNECTED}.
-   * <p>The following figure shows the {@link State} diagram:</p>
-   * <pre>
-   *   +--------------+                 +--------------+                 +--------------+           +--------------+               +--------------+        +--------------+
-   *   |              |    dispose()    |              |    connect()    |              |           |              |    login()    |              |        |              |
-   *   |   DISPOSED   | <-------------+ | DISCONNECTED | +------------>  |  CONNECTING  | +-------> |  CONNECTED   | +---------->  | HANDSHAKING  | +----> |   ONLINE     |
-   *   |              |                 |              |                 |              |           |              |               |              |        |              |
-   *   +--------------+                 +--------------+                 +--------------+           +--------------+               +--------------+        +--------------+
-   *
-   *                                           ^                                                            +                                                     +
-   *                                           |                                                            | disconnect()                                        |
-   *                                           |                                                            v                                                     |
-   *                                           |                                                                                                                  | disconnect()
-   *                                           |                                                    +---------------+                                             |
-   *                                           |                                                    |               |                                             |
-   *                                           +--------------------------------------------------+ | DISCONNECTING | <-------------------------------------------+
-   *                                                                                                |               |
-   *                                                                                                +---------------+
-   * </pre>
    */
   @NonNull
   State getState();
@@ -349,8 +343,8 @@ public interface Session {
   String getResource();
 
   /**
-   * Gets the {@link EventObject} stream. It never emits any errors but will
-   * emit a completion when this class is disposed of.
+   * Gets a stream of emitted {@link EventObject}s. It never emits any errors
+   * but will emit a completion when this class is disposed of.
    *
    * <p>This class emits only the following types of {@link EventObject}:</p>
    *
@@ -378,21 +372,25 @@ public interface Session {
   Set<String> getFeatures();
 
   /**
-   * Gets a {@link List} of preferred {@link Locale}s. Some properties of or
+   * Gets the preferred {@link Locale}s. Some properties of or
    * results queried from XMPP peers are human-readable texts and therefore may
    * have multiple localized versions. For example, the "category" and "type" of
    * an {@link chat.viska.xmpp.DiscoInfo.Identity} returned by a feature query
    * in <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
-   * Discovery</a>. In this case, only the result matched by the {@link Locale}
-   * {@link List} is returned to the method caller.
+   * Discovery</a>. In this case, only the result matched by the preferred
+   * {@link Locale}s is returned to the method caller.
    *
-   * <p>This {@link List} by default contains only the default {@link Locale}
-   * set by the system.</p>
-   *
-   * <p>Users can directly modify the {@link List} returned by this method. But
-   * how to determine the matched {@link Locale} depends on the plugin
-   * developers.</p>
+   * <p>By default it is set to the JVM's system {@link Locale} which is a
+   * single one. On platforms where users can set multiple {@link Locale}s,
+   * it needs to be set manually for this class.</p>
    */
   @NonNull
-  List<Locale> getLocales();
+  Locale[] getLocales();
+
+  void setLocales(Locale... locales);
+
+  @NonNull
+  String[] getSaslMechanisms();
+
+  void setSaslMechanisms(String... mechanisms);
 }

@@ -30,6 +30,9 @@ public interface Client {
 
   /**
    * Gets a response.
+   * @return {@code null} if the authentication fails while generating the
+   *         response, or a {@link String} containing the response which is
+   *         either empty or not.
    * @throws IllegalStateException If still waiting for another challenge after
    *         sending the last response.
    */

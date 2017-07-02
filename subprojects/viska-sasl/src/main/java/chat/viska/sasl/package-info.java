@@ -24,7 +24,7 @@
  * <p>When using the classes of this package, string normalization like
  * {@code stringprep} or
  * <a href="https://datatracker.ietf.org/wg/precis">PRECIS</a> needs to be done
- * by the user manually, and they always assume strings like username and
- * password are already normalized.</p>
+ * by the user manually, and strings like username and password are always
+ * assumed already normalized.</p>
  */
 package chat.viska.sasl;

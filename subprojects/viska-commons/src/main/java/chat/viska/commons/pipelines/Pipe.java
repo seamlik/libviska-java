@@ -22,6 +22,10 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Target;
 import java.util.List;
 
+/**
+ * Pipe as in a {@link Pipeline}. All methods must be thread-safe because
+ * {@link Pipeline}s use multi-threads internally to schedule tasks.
+ */
 public interface Pipe {
 
   /**
@@ -40,6 +44,13 @@ public interface Pipe {
   void catchOutboundException(@NonNull Pipeline<?, ?> pipeline,
                               @NonNull Throwable cause) throws Throwable;
 
+  /**
+   * Invoked when the Pipe is reading data.
+   * @param pipeline The {@link Pipeline} it is attached to.
+   * @param toRead The data it is reading.
+   * @param toForward An output placeholder for forwarding.
+   * @throws Exception If any {@link Exception} is thrown during the reading.
+   */
   void onReading(@NonNull Pipeline<?, ?> pipeline,
                  @NonNull Object toRead,
                  @NonNull List<Object> toForward) throws Exception;
