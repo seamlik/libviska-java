@@ -14,26 +14,22 @@
  * limitations under the License.
  */
 
-package chat.viska.sasl;
+package chat.viska.xmpp;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import javax.crypto.Mac;
+public class HandshakeException extends Exception {
 
-/**
- * <a href="https://datatracker.ietf.org/doc/rfc5802">SCRAM</a> server of
- * {@code SCRAM-SHA-1} mechanism.
- */
-public class ScramSha1Server extends ScramServer {
+  public HandshakeException() {
+  }
 
-  public ScramSha1Server(final CredentialRetriever retriever)
-      throws NoSuchAlgorithmException {
-    super(
-        new ScramMechanism(
-            MessageDigest.getInstance("SHA-1"),
-            Mac.getInstance("HmacSHA1")
-        ),
-        retriever
-    );
+  public HandshakeException(String message) {
+    super(message);
+  }
+
+  public HandshakeException(String message, Throwable cause) {
+    super(message, cause);
+  }
+
+  public HandshakeException(Throwable cause) {
+    super(cause);
   }
 }

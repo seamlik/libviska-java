@@ -16,7 +16,6 @@
 
 package chat.viska.sasl;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.SecureRandom;
@@ -47,7 +46,7 @@ public class ScramClient implements Client {
   private final String username;
   private final String initialNounce;
   private final String authzId;
-  private final PropertyRetriever retriever;
+  private final CredentialRetriever retriever;
   private State state = State.INITIALIZED;
   private String fullNounce = "";
   private byte[] saltedPassword = new byte[0];
@@ -182,6 +181,14 @@ public class ScramClient implements Client {
               this.iteration
           );
         }
+      } else {
+        this.saltedPassword = scram.getSaltedPassword(
+            (String) retriever.retrieve(
+                username, getMechanism(), "password"
+            ),
+            this.salt,
+            this.iteration
+        );
       }
       if (this.saltedPassword == null) {
         throw new AuthenticationException(
@@ -283,7 +290,7 @@ public class ScramClient implements Client {
   public ScramClient(final ScramMechanism scram,
                      final String authnId,
                      final String authzId,
-                     final PropertyRetriever retriever) {
+                     final CredentialRetriever retriever) {
     this.scram = scram;
     this.username = authnId;
     this.authzId = authzId == null ? "" : authzId;

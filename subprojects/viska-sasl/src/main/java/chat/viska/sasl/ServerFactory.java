@@ -22,7 +22,7 @@ public class ServerFactory {
 
   public static Server newServer(final String mechanism,
                                  final String name,
-                                 final PropertyRetriever retriever) {
+                                 final CredentialRetriever retriever) {
     switch (mechanism) {
       case "SCRAM-SHA-1":
         try {

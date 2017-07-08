@@ -30,15 +30,8 @@ public class LocalClient extends AbstractClient {
       System.getProperty("os.version", "")
   ).trim();
 
-  public LocalClient(final @NonNull Session session) {
-    super(
-        session,
-        (Account) ((BasePlugin) session.getPluginManager().getPlugin(BasePlugin.class)).getXmppEntityInstance(new Jid(session.getUsername(), session.getConnection().getDomain(), null))
-    );
-  }
-
-  public Future<Void> setResource() {
-    throw new UnsupportedOperationException();
+  LocalClient(final @NonNull Session session) {
+    super(session, session.getJid());
   }
 
   public void setSoftwareName(String softwareName) {
@@ -59,11 +52,5 @@ public class LocalClient extends AbstractClient {
     return ConcurrentUtils.constantFuture(
         new SoftwareInfo(softwareName, softwareVersion, operatingSystem)
     );
-  }
-
-  @Override
-  @NonNull
-  public String getResource() {
-    return getSession().getResource();
   }
 }

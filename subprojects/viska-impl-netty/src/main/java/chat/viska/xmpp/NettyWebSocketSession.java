@@ -132,6 +132,16 @@ public class NettyWebSocketSession extends DefaultSession {
   @Override
   protected void onOpeningConnection()
       throws ConnectionException, InterruptedException {
+    websocketHandler = new WebSocketClientProtocolHandler(
+        WebSocketClientHandshakerFactory.newHandshaker(
+            getConnection().getUri(),
+            WebSocketVersion.V13,
+            "xmpp",
+            true,
+            new DefaultHttpHeaders()
+        ),
+        true
+    );
     final DefaultSession thisSession = this;
     final SslContext sslContext;
     try {
@@ -240,24 +250,9 @@ public class NettyWebSocketSession extends DefaultSession {
     nettyEventLoopGroup.shutdownGracefully().awaitUninterruptibly();
   }
 
-  @Override
-  public void setConnection(Connection connection) {
-    super.setConnection(connection);
-    if (connection == null) {
-      return;
-    } else if (connection.getProtocol() != Connection.Protocol.WEBSOCKET) {
-      throw new IllegalArgumentException();
-    }
-    websocketHandler = new WebSocketClientProtocolHandler(
-        WebSocketClientHandshakerFactory.newHandshaker(
-            connection.getUri(),
-            WebSocketVersion.V13,
-            "xmpp",
-            true,
-            new DefaultHttpHeaders()
-        ),
-        true
-    );
+  public NettyWebSocketSession(@NonNull final Connection connection,
+                               final boolean streamManagement) {
+    super(connection, streamManagement);
   }
 
   @Override
@@ -295,22 +290,22 @@ public class NettyWebSocketSession extends DefaultSession {
 
   @Override
   @NonNull
-  public List<Certificate> getTlsLocalCertificates() {
+  public Certificate[] getTlsLocalCertificates() {
     return tlsHandler == null
-        ? new ArrayList<Certificate>(0)
-        : Arrays.asList(tlsHandler.engine().getSession().getLocalCertificates());
+        ? new Certificate[0]
+        : tlsHandler.engine().getSession().getLocalCertificates();
   }
 
   @Override
   @NonNull
-  public List<Certificate> getTlsPeerCertificates() {
+  public Certificate[] getTlsPeerCertificates() {
     if (tlsHandler == null) {
-      return new ArrayList<Certificate>(0);
+      return new Certificate[0];
     }
     try {
-      return Arrays.asList(tlsHandler.engine().getSession().getPeerCertificates());
+      return tlsHandler.engine().getSession().getPeerCertificates();
     } catch (SSLPeerUnverifiedException ex) {
-      return new ArrayList<>(0);
+      return new Certificate[0];
     }
   }
 

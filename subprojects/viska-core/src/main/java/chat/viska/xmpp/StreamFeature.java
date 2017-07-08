@@ -22,8 +22,10 @@ public enum StreamFeature {
 
   STARTTLS("starttls", CommonXmlns.STARTTLS, true, false),
   SASL("mechanisms", CommonXmlns.SASL, true, true),
-  STREAM_COMPRESSION("compression",CommonXmlns.STREAM_COMPRESSION,false,false),
-  RESOURCE_BINDING("bind", CommonXmlns.BIND, false, true);
+  STREAM_COMPRESSION("compression", CommonXmlns.STREAM_COMPRESSION, false, false),
+  STREAM_MANAGEMENT("SM", CommonXmlns.STREAM_MANAGEMENT, false, false),
+  RESOURCE_BINDING("bind", CommonXmlns.RESOURCE_BINDING, false, true),
+  RESOURCE_BINDING_2("bind", CommonXmlns.RESOURCE_BINDING_2, false, true);
 
   private final String name;
   private final String namespace;

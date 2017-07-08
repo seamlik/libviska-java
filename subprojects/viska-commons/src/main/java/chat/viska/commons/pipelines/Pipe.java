@@ -38,15 +38,27 @@ public interface Pipe {
   @Target(value = ElementType.TYPE)
   @interface Shareable {}
 
+  /**
+   * Invoked when the Pipe received an exception in the reading direction.
+   * @param pipeline Attached {@link Pipeline}.
+   * @param cause Received exception.
+   * @throws Throwable If the Pipe decides to forward the exception.
+   */
   void catchInboundException(@NonNull Pipeline<?, ?> pipeline,
                              @NonNull Throwable cause) throws Throwable;
 
+  /**
+   * Invoked when the Pipe received an exception in the writing direction.
+   * @param pipeline Attached {@link Pipeline}.
+   * @param cause Received exception.
+   * @throws Throwable If the Pipe decides to forward the exception.
+   */
   void catchOutboundException(@NonNull Pipeline<?, ?> pipeline,
                               @NonNull Throwable cause) throws Throwable;
 
   /**
    * Invoked when the Pipe is reading data.
-   * @param pipeline The {@link Pipeline} it is attached to.
+   * @param pipeline Attached {@link Pipeline}.
    * @param toRead The data it is reading.
    * @param toForward An output placeholder for forwarding.
    * @throws Exception If any {@link Exception} is thrown during the reading.
@@ -56,11 +68,26 @@ public interface Pipe {
                  @NonNull List<Object> toForward) throws Exception;
 
 
+  /**
+   * Invoked when the Pipe is writing data.
+   * @param pipeline Attached {@link Pipeline}.
+   * @param toWrite Data it is writing.
+   * @param toForward Output placeholder for forwarding.
+   * @throws Exception If any {@link Exception} is thrown during the writing.
+   */
   void onWriting(@NonNull Pipeline<?, ?> pipeline,
                  @NonNull Object toWrite,
                  @NonNull List<Object> toForward) throws Exception;
 
+  /**
+   * Invoked when the Pipe is inserted into a {@link Pipeline}.
+   * @param pipeline Attached {@link Pipeline}.
+   */
   void onAddedToPipeline(@NonNull Pipeline<?, ?> pipeline);
 
+  /**
+   * Invoked when the Pipe is removed from a {@link Pipeline}.
+   * @param pipeline
+   */
   void onRemovedFromPipeline(@NonNull Pipeline<?, ?> pipeline);
 }

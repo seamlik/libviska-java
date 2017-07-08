@@ -25,18 +25,24 @@ import java.util.concurrent.Future;
  */
 public abstract class AbstractEntity implements SessionAware {
 
-  private Session session;
+  private final Session session;
+  private final Jid jid;
 
-  protected AbstractEntity(final @NonNull Session session) {
+  protected AbstractEntity(@NonNull final Session session,
+                           @NonNull final Jid jid) {
     Objects.requireNonNull(session);
+    Objects.requireNonNull(jid);
     this.session = session;
+    this.jid = jid;
   }
 
   /**
    * Gets the Jabber/XMPP ID.
    */
   @NonNull
-  public abstract Jid getJid();
+  public Jid getJid() {
+    return jid;
+  }
 
   /**
    * Queries available features and {@link chat.viska.xmpp.DiscoInfo.Identity}s.

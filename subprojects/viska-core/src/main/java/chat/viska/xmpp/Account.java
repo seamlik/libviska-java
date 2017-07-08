@@ -25,17 +25,14 @@ import java.util.concurrent.Future;
  */
 public class Account extends AbstractEntity {
 
-  private Jid bareJid;
-  private Server server;
+  private final Server server;
 
-  protected Account(@NonNull Session session,
-                    @NonNull Jid bareJid) {
-    super(session);
+  Account(@NonNull final Session session, @NonNull final Jid bareJid) {
+    super(session, bareJid);
     Objects.requireNonNull(bareJid);
-    this.bareJid = bareJid.toBareJid();
     final BasePlugin plugin = (BasePlugin)
         session.getPluginManager().getPlugin(BasePlugin.class);
-    server = (Server) plugin.getXmppEntityInstance(this.bareJid);
+    server = (Server) plugin.getXmppEntityInstance(new Jid(bareJid.getDomainPart()));
   }
 
   /**
@@ -56,11 +53,5 @@ public class Account extends AbstractEntity {
   @NonNull
   public Server getServer() {
     return server;
-  }
-
-  @Override
-  @NonNull
-  public Jid getJid() {
-    return bareJid;
   }
 }

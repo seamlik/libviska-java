@@ -97,7 +97,9 @@ public class StreamErrorException extends Exception {
 
     /**
      * Indicates an entity has attempted to send XML data before the stream is
-     * authenticated.
+     * authenticated, or the
+     * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a>
+     * authentication fails.
      */
     NOT_AUTHORIZED,
 

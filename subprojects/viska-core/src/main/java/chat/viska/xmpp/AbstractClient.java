@@ -25,20 +25,11 @@ import java.util.concurrent.Future;
  */
 public abstract class AbstractClient extends AbstractEntity {
 
-  private final Account account;
-
-  protected AbstractClient(final @NonNull Session session,
-                           final @NonNull Account account) {
-    super(session);
-    Objects.requireNonNull(account);
-    this.account = account;
+  protected AbstractClient(@NonNull final Session session,
+                           @NonNull final Jid jid) {
+    super(session, jid);
+    Objects.requireNonNull(jid);
   }
-
-  /**
-   * Gets the device ID.
-   */
-  @NonNull
-  public abstract String getResource();
 
   /**
    * Queries information of the XMPP client software. This method is part of
@@ -55,16 +46,8 @@ public abstract class AbstractClient extends AbstractEntity {
    */
   @NonNull
   public Account getAccount() {
-    return account;
-  }
-
-  @Override
-  @NonNull
-  public Jid getJid() {
-    return new Jid(
-        account.getJid().getLocalPart(),
-        account.getJid().getDomainPart(),
-        getResource()
-    );
+    final BasePlugin plugin = (BasePlugin)
+        getSession().getPluginManager().getPlugin(BasePlugin.class);
+    return (Account) plugin.getXmppEntityInstance(getJid().toBareJid());
   }
 }

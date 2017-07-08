@@ -19,13 +19,13 @@ package chat.viska.sasl;
 import java.io.IOException;
 
 /**
- * Function that retrieves sensitive data during an
+ * Function that retrieves credential data during an
  * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> authentication.
  */
-public interface PropertyRetriever {
+public interface CredentialRetriever {
 
   /**
-   * Retrieves a sensitive property in a key-value manner. The data types and
+   * Retrieves a credential in a key-value manner. The data types and
    * queryable keys should be documented by the mechanisms.
    * @param authnId Authentication ID.
    * @param mechanism Name of the SASL Mechanism.

@@ -42,6 +42,26 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.commons.lang3.Validate;
 
+/**
+ * Serial container for a series of data processors (a.k.a {@link Pipe}s). This
+ * class represents a full duplex pipeline where the reading and writing is
+ * happening at the same time in 2 different {@link Thread}s.
+ * For any moment, there is only one reading thread and one writing thread
+ * running. As a result, Pipes can be dynamically added to, removed from or
+ * replaced in the Pipeline while it is running. The manipulations to these
+ * Pipes will only happen when neither of the reading or writing thread is
+ * running.
+ *
+ * <p>Because of the multi-thread nature, all methods of this class are
+ * non-blocking, and both the Pipes and the Pipeline must be designed as
+ * thread-safe.</p>
+ *
+ * <p>Beware that although a Pipe can manipulate all of the Pipes in a Pipeline,
+ * it must not wait for the operation to finish, otherwise a deadlock will
+ * occur.</p>
+ * @param <I> Type of the inbound output.
+ * @param <O> Type of the outbound output.
+ */
 public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   public enum State {

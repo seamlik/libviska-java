@@ -16,6 +16,7 @@
 
 package chat.viska.sasl;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.SecureRandom;
@@ -46,7 +47,7 @@ public class ScramServer implements Server {
   private final ScramMechanism scram;
   private final String initialNounce;
   private final Base64 base64 = new Base64(0, new byte[0], false);
-  private final PropertyRetriever retriever;
+  private final CredentialRetriever retriever;
   private String gs2Header = "";
   private String username = "";
   private byte[] saltedPassword;
@@ -83,7 +84,7 @@ public class ScramServer implements Server {
    * @throws NullPointerException if either of the parameters are {@code null}.
    */
   public ScramServer(final ScramMechanism scram,
-                     final PropertyRetriever retriever) {
+                     final CredentialRetriever retriever) {
     Objects.requireNonNull(scram, "`scram` is absent.");
     Objects.requireNonNull(retriever, "`retriever` is absent.");
 
@@ -93,6 +94,23 @@ public class ScramServer implements Server {
     byte[] randomBytes = new byte[12]; // Making a 16-letter nounce
     new SecureRandom().nextBytes(randomBytes);
     this.initialNounce = base64.encodeToString(randomBytes).trim();
+  }
+
+  private void generateSaltedPassword()
+      throws IOException, AbortedException, AuthenticationException, InvalidKeyException {
+    final String password = (String) retriever.retrieve(
+        username, getMechanism(), "password"
+    );
+    if (password == null) {
+      throw new AuthenticationException(
+          AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED
+      );
+    }
+    this.iteration = DEFAULT_ITERATION;
+    final SecureRandom random = new SecureRandom();
+    this.salt = new byte[64 / 8];
+    random.nextBytes(this.salt);
+    this.saltedPassword = scram.getSaltedPassword(password, this.salt, this.iteration);
   }
 
   private void consumeInitialResponse(final String response) {
@@ -195,20 +213,10 @@ public class ScramServer implements Server {
           this.salt = salt;
           this.iteration = iteration;
         } else {
-          this.iteration = DEFAULT_ITERATION;
-          final SecureRandom random = new SecureRandom();
-          this.salt = new byte[64 / 8];
-          random.nextBytes(this.salt);
-          final String password = (String) retriever.retrieve(
-              username, getMechanism(), "password"
-          );
-          if (password == null) {
-            throw new AuthenticationException(
-                AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED
-            );
-          }
-          this.saltedPassword = scram.getSaltedPassword(password, this.salt, this.iteration);
+          generateSaltedPassword();
         }
+      } else {
+        generateSaltedPassword();
       }
     } catch (AuthenticationException ex) {
       this.error = ex;

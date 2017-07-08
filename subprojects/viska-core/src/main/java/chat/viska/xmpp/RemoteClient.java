@@ -22,20 +22,9 @@ import org.apache.commons.lang3.Validate;
 
 public class RemoteClient extends AbstractClient {
 
-  private String resource;
-
-  public RemoteClient(final @NonNull Session session,
-                      final @NonNull Account account,
-                      final @NonNull String resource) {
-    super(session, account);
-    Validate.notBlank(resource);
-    this.resource = resource;
-  }
-
-  @Override
-  @NonNull
-  public String getResource() {
-    return resource;
+  RemoteClient(@NonNull final Session session,
+               @NonNull final Jid jid) {
+    super(session, jid);
   }
 
   @Override

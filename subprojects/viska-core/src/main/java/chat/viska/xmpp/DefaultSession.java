@@ -20,7 +20,7 @@ import chat.viska.commons.ExceptionCaughtEvent;
 import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipe;
 import chat.viska.commons.pipelines.Pipeline;
-import chat.viska.sasl.PropertyRetriever;
+import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
@@ -43,6 +43,7 @@ import java.util.concurrent.Future;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import org.apache.commons.lang3.Validate;
 import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
@@ -60,12 +61,12 @@ public abstract class DefaultSession implements Session {
   private final Subject<EventObject> eventStream = PublishSubject.create();
   private final LoggingManager loggingManager;
   private final PluginManager pluginManager;
+  private final Connection connection;
+  private final boolean streamManagementEnabled;
   private Locale[] locales = { Locale.getDefault() };
-  private Connection connection;
   private String username = "";
   private State state = State.DISCONNECTED;
   private Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
-  private HandshakerPipe handshakerPipe;
   private Compression streamCompression;
   private String[] saslMechanisms = {
       "SCRAM-SHA-512",
@@ -73,7 +74,32 @@ public abstract class DefaultSession implements Session {
       "SCRAM-SHA-1"
   };
 
-  protected DefaultSession() {
+  private synchronized void connect()
+      throws ConnectionException, InterruptedException {
+    switch (state) {
+      case HANDSHAKING:
+        return;
+      case CONNECTING:
+        return;
+      case DISCONNECTED:
+        throw new IllegalStateException("Session disconnecting.");
+      case ONLINE:
+        return;
+      case DISPOSED:
+        throw new IllegalStateException("Session disposed.");
+      default:
+        break;
+    }
+    setState(State.CONNECTING);
+    onOpeningConnection();
+    setState(State.CONNECTED);
+  }
+
+  protected DefaultSession(@NonNull final Connection connection,
+                           final boolean streamManagement) {
+    Objects.requireNonNull(connection, "`connection` is absent.");
+    this.connection = connection;
+    this.streamManagementEnabled = streamManagement;
     final DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
     builderFactory.setIgnoringComments(true);
     builderFactory.setNamespaceAware(true);
@@ -187,52 +213,19 @@ public abstract class DefaultSession implements Session {
   }
 
   @Override
-  @NonNull
-  public synchronized Future<Void> connect(final @NonNull Connection connection)
-      throws ConnectionException {
-    Objects.requireNonNull(connection);
-    switch (state) {
-      case HANDSHAKING:
-        return ConcurrentUtils.constantFuture(null);
-      case CONNECTING:
-        return ConcurrentUtils.constantFuture(null);
-      case DISCONNECTED:
-        throw new IllegalStateException("Session is disconnecting.");
-      case ONLINE:
-        return ConcurrentUtils.constantFuture(null);
-      case DISPOSED:
-        throw new IllegalStateException("Session has been disposed of.");
-      default:
-        break;
-    }
-    setState(State.CONNECTING);
-    this.connection = connection;
-    return threadPoolInstance.submit(new Callable<Void>() {
-      @Override
-      public Void call() throws Exception {
-        try {
-          onOpeningConnection();
-        } catch (InterruptedException ex) {
-          onClosingConnection();
-          throw ex;
-        }
-        setState(State.CONNECTED);
-        return null;
-      }
-    });
-  }
-
-  @Override
-  public synchronized Future<Void> login(@NonNull final String username,
+  public synchronized Future<Void> login(@NonNull final Jid jid,
                                          @NonNull final String password) {
-    if (state != State.CONNECTED) {
+    if (state != State.DISCONNECTED) {
       throw new IllegalStateException();
     }
-    if (username.isEmpty() || password.isEmpty()) {
-      throw new IllegalArgumentException();
-    }
+    Objects.requireNonNull(jid, "`jid` is absent.");
+    Validate.notEmpty(password, "`password` is absent.");
+    throw new UnsupportedOperationException();
+
+    // TODO
+    /*
     setState(State.HANDSHAKING);
-    this.username = username;
+    this.username = jid;
     return threadPoolInstance.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
@@ -241,53 +234,63 @@ public abstract class DefaultSession implements Session {
         return null;
       }
     });
+    */
   }
 
   @Override
+  @NonNull
   public synchronized
   Future<Void> login(@NonNull final Jid authnId,
                      @Nullable final Jid authzID,
-                     @NonNull final PropertyRetriever retriever) {
+                     @NonNull final CredentialRetriever retriever,
+                     @Nullable final String resource) {
     throw new UnsupportedOperationException();
+  }
+
+  @Override
+  @NonNull
+  public Future<Void> register(@NonNull final Jid jid,
+                               @NonNull final String password) {
+    return null;
+  }
+
+  @Override
+  @NonNull
+  public Future<Void> register(Jid authnId,
+                               Jid authzId,
+                               CredentialRetriever retriever,
+                               @Nullable final String resource) {
+    return null;
+  }
+
+  @NonNull
+  @Override
+  public Future<Void> reconnect() {
+    return null;
   }
 
   @Override
   public synchronized void disconnect() {
-    switch (state) {
-      case DISCONNECTED:
-        return;
-      case DISCONNECTING:
-        return;
-      case CONNECTING:
-        throw new IllegalStateException("Cannot disconnect while connecting.");
-      case DISPOSED:
-        throw new IllegalStateException("Session disposed of.");
-      default:
-        break;
+    // TODO: Highly unfinished!
+    if (state == State.ONLINE) {
+      ((HandshakerPipe) xmlPipeline.get("handshaker")).closeStream();
+      xmlPipeline.shutdown();
+      setState(State.DISCONNECTING);
+      onClosingConnection();
+      setState(State.DISCONNECTED);
     }
-    threadPoolInstance.submit(new Callable<Void>() {
-      @Override
-      public Void call() throws Exception {
-        handshakerPipe.closeStream();
-        setState(State.DISCONNECTING);
-        onClosingConnection();
-        setState(State.DISCONNECTED);
-        return null;
+    if (state == State.DISCONNECTED) {
+      setState(State.DISPOSED);
+      if (xmlPipeline.getState() != Pipeline.State.SHUTDOWN) {
+        xmlPipeline.shutdown();
       }
-    });
+    }
+    if (state == State.DISPOSED) {
+      throw new IllegalStateException("Session already disposed.");
+    }
   }
 
   @Override
-  public void dispose() {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Send an XML to the server. The XML needs even not be an XMPP stanza, so be
-   * wary that the server will close the connection once the sent XML violates
-   * any XMPP rules.
-   * @throws IllegalStateException If this class is in an inappropriate {@link Session.State}.
-   */
   public synchronized void send(@NonNull final Document xml) {
     if (state != State.ONLINE) {
       throw new IllegalStateException();
@@ -314,18 +317,6 @@ public abstract class DefaultSession implements Session {
   @Nullable
   public Connection getConnection() {
     return connection;
-  }
-
-  @Override
-  public synchronized void setConnection(@NonNull final Connection connection) {
-    switch (state) {
-      case DISCONNECTED:
-        break;
-      default:
-        throw new IllegalStateException();
-    }
-    Objects.requireNonNull(connection);
-    this.connection = connection;
   }
 
   @Override
@@ -373,18 +364,6 @@ public abstract class DefaultSession implements Session {
 
   @Override
   @NonNull
-  public String getUsername() {
-    return username;
-  }
-
-  @Override
-  @NonNull
-  public String getResource() {
-    return handshakerPipe == null ? null : handshakerPipe.getResource();
-  }
-
-  @Override
-  @NonNull
   public Observable<EventObject> getEventStream() {
     return eventStream;
   }
@@ -414,5 +393,10 @@ public abstract class DefaultSession implements Session {
   @Override
   public synchronized void setSaslMechanisms(String... mechanisms) {
     this.saslMechanisms = Arrays.copyOf(mechanisms, mechanisms.length);
+  }
+
+  @Override
+  public Jid getJid() {
+    return null;
   }
 }

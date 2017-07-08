@@ -48,10 +48,10 @@ subprojects {
   }
 
   checkstyle {
-    toolVersion = '7.8.1'
+    toolVersion = '8.0'
     File styleFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
     if (!styleFile.exists()) {
-      mkdir "${rootDir}/config/checkstyle"
+      mkdir styleFile.parent
       styleFile.createNewFile()
       styleFile.write(new URL(
         'https://raw.githubusercontent.com/checkstyle/checkstyle/master/src/main/resources/google_checks.xml'

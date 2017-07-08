@@ -21,7 +21,7 @@ import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.sasl.AuthenticationException;
 import chat.viska.sasl.Client;
 import chat.viska.sasl.ClientFactory;
-import chat.viska.sasl.PropertyRetriever;
+import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
@@ -40,11 +40,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -52,7 +52,24 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 /**
- * For handling handshaking, login and management of an XMPP stream.
+ * For handling handshaking, login and management of an XMPP stream. The
+ * handshake starts once the {@link Pipeline} starts running or it is already
+ * running when this Pipe is added to a Pipeline.
+ *
+ * <h1>Notes on Behavior</h1>
+ *
+ * <p>Some behavior of its handshaking process differs from XMPP standards,
+ * either because of security considerations or development convenience. These
+ * notes may hopefully help contributors understand the logic more easily.</p>
+ *
+ * <h2>SASL</h2>
+ *
+ * <p>According to <a href="https://datatracker.ietf.org/doc/rfc6120">RFC
+ * 6120</a>, the client may retry the
+ * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> authentication
+ * for a number of times or even try another mechanism if the authentication
+ * fails. However, this class aborts the handshake and close the stream without
+ * sending any stream error immediately after the authentication fails.</p>
  */
 public class HandshakerPipe extends BlankPipe implements SessionAware {
 
@@ -118,19 +135,22 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
       Arrays.asList(StreamFeature.getRecommendedNeogtiationOrder())
   );
   private final Set<StreamFeature> negotiatedFeatures = new HashSet<>();
-  private final String authnId;
-  private final String authzId;
-  private final PropertyRetriever retriever;
+  private final Jid authnId;
+  private final Jid authzId;
+  private final CredentialRetriever retriever;
   private final Base64 base64 = new Base64(0, new byte[0], false);
+  private final String presetResource;
   private Pipeline<?, ?> pipeline;
   private Client saslCient;
-  private String resource = "";
   private String streamId = "";
   private StreamFeature negotiatingFeature;
   private State state = State.STREAM_CLOSED;
   private Disposable pipelineStartedSubscription;
   private StreamErrorException serverStreamError;
   private StreamErrorException clientStreamError;
+  private HandshakeException handshakeError;
+  private Jid negotiatedJid;
+  private String resourceBindingIqId = "";
 
   private String[] convertToMechanismArray(NodeList nodes) {
     int cursor = 0;
@@ -246,8 +266,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     closeStream();
   }
 
-  private void consumeStreamOpening(@NonNull final Document document)
-      throws StreamErrorException {
+  private void consumeStreamOpening(@NonNull final Document document) {
     Objects.requireNonNull(document);
     Version serverVersion = null;
     final String serverVersionText = document.getDocumentElement().getAttributeNS(
@@ -314,11 +333,12 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     return null;
   }
 
-  private void initializeSaslNegotiation(@NonNull final Element featureElement) {
+  private void initializeSaslNegotiation(@NonNull final Element featureElement)
+      throws AuthenticationException {
     this.saslCient = new ClientFactory(this.session.getSaslMechanisms()).newClient(
         convertToMechanismArray(featureElement.getChildNodes()),
-        this.authnId,
-        this.authzId,
+        this.authnId.getLocalPart(),
+        this.authzId.toString(),
         this.retriever
     );
     if (this.saslCient == null) {
@@ -326,7 +346,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
           "<abort xmlns=\"%1s\"/>",
           CommonXmlns.SASL
       ));
-      return;
+      AuthenticationException saslException = new AuthenticationException(
+          AuthenticationException.Condition.INVALID_MECHANISM
+      );
+      sendStreamError(new StreamErrorException(
+          StreamErrorException.Condition.POLICY_VIOLATION,
+          saslException
+      ));
+      throw saslException;
     }
     String msg = "";
     if (this.saslCient.isClientFirst()) {
@@ -343,6 +370,28 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     ));
   }
 
+  private void initializeResourceBinding() {
+    if (this.resourceBindingIqId.isEmpty()) {
+      this.resourceBindingIqId = UUID.randomUUID().toString();
+    }
+    StringBuilder xml = new StringBuilder();
+    xml.append(String.format(
+        "<iq id=\"%1s\" type=\"set\"><bind xmlns=\"%2s\"",
+        this.resourceBindingIqId,
+        CommonXmlns.RESOURCE_BINDING
+    ));
+    if (!this.presetResource.isEmpty()) {
+      xml.append(">");
+      xml.append(String.format(
+          "<resource>%1s</resource>",
+          this.presetResource
+      ));
+      xml.append("</bind>");
+    }
+    xml.append("</iq>");
+    sendXml(xml.toString());
+  }
+
   private void consumeStartTls(@NonNull final Document document) {
     throw new UnsupportedOperationException();
   }
@@ -352,16 +401,64 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     final String rootName = document.getDocumentElement().getLocalName();
     final String text = document.getDocumentElement().getTextContent();
 
+    if (this.saslCient.isCompleted() && !text.isEmpty()) {
+      final AuthenticationException saslException = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST
+      );
+      sendStreamError(new StreamErrorException(
+          StreamErrorException.Condition.POLICY_VIOLATION,
+          saslException
+      ));
+      throw saslException;
+    }
+
     if ("failure".equals(rootName)) {
-      this.negotiatedFeatures.remove(StreamFeature.SASL);
+      this.negotiatedFeatures.remove(this.negotiatingFeature);
       this.negotiatingFeature = null;
-      throw new AuthenticationException(
+      closeStream();
+      final AuthenticationException saslException = new AuthenticationException(
           AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED
       );
+      this.handshakeError = new HandshakeException(saslException);
+      throw saslException;
     } else if ("success".equals(rootName) && text.isEmpty()) {
-      this.negotiatedFeatures.add(StreamFeature.SASL);
-      this.negotiatingFeature = null;
-    } else if ("success".equals(rootName) || "challenge".equals(rootName)) {
+      if (!this.saslCient.isCompleted()) {
+        final AuthenticationException saslException = new AuthenticationException(
+            AuthenticationException.Condition.MALFORMED_REQUEST
+        );
+        sendStreamError(new StreamErrorException(
+            StreamErrorException.Condition.POLICY_VIOLATION,
+            saslException
+        ));
+        throw saslException;
+      } else {
+        this.negotiatedFeatures.add(this.negotiatingFeature);
+        this.negotiatingFeature = null;
+        sendStreamOpening();
+      }
+    } else if ("success".equals(rootName) && !text.isEmpty()) {
+      this.saslCient.acceptChallenge(this.base64.decode(text));
+      if (!this.saslCient.isCompleted()) {
+        final AuthenticationException saslException = new AuthenticationException(
+            AuthenticationException.Condition.MALFORMED_REQUEST
+        );
+        sendStreamError(new StreamErrorException(
+            StreamErrorException.Condition.POLICY_VIOLATION,
+            saslException
+        ));
+        throw saslException;
+      } else if (this.saslCient.getError() != null) {
+        sendStreamError(new StreamErrorException(
+            StreamErrorException.Condition.POLICY_VIOLATION,
+            this.saslCient.getError()
+        ));
+        throw this.saslCient.getError();
+      } else {
+        this.negotiatedFeatures.add(this.negotiatingFeature);
+        this.negotiatingFeature = null;
+        sendStreamOpening();
+      }
+    } else if ("challenge".equals(rootName)) {
       this.saslCient.acceptChallenge(this.base64.decode(text));
       if (!this.saslCient.isCompleted()) {
         final byte[] response = this.saslCient.respond();
@@ -376,7 +473,10 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
               "<abort xmlns=\"%1s\"/>",
               CommonXmlns.SASL
           ));
-          closeStream();
+          sendStreamError(new StreamErrorException(
+              StreamErrorException.Condition.NOT_AUTHORIZED,
+              this.saslCient.getError()
+          ));
           throw this.saslCient.getError();
         }
       }
@@ -392,7 +492,82 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   }
 
   private void consumeResourceBinding(@NonNull final Document document) {
-    throw new UnsupportedOperationException();
+    if (!this.resourceBindingIqId.equals(document.getDocumentElement().getAttribute("id"))) {
+      sendStreamError(new StreamErrorException(
+          StreamErrorException.Condition.NOT_AUTHORIZED
+      ));
+    } else if ("error".equals(document.getDocumentElement().getAttribute("type"))) {
+      try {
+        this.handshakeError = new ResouceBindingException(
+            ResouceBindingException.Condition.of(
+                document.getDocumentElement()
+                    .getElementsByTagName("error")
+                    .item(0)
+                    .getFirstChild()
+                    .getLocalName()
+            )
+        );
+      } catch (Exception ex) {
+        this.handshakeError = null;
+        sendStreamError(new StreamErrorException(
+            StreamErrorException.Condition.INVALID_XML,
+            ex
+        ));
+      }
+    } else if ("result".equals(document.getDocumentElement().getAttribute("type"))) {
+      try {
+        final Element bindElement = (Element) document
+            .getDocumentElement()
+            .getElementsByTagNameNS(CommonXmlns.RESOURCE_BINDING, "bind")
+            .item(0);
+        final String[] results = bindElement
+            .getElementsByTagNameNS(CommonXmlns.RESOURCE_BINDING, "jid")
+            .item(0)
+            .getTextContent()
+            .split(" ");
+        if (results.length == 1) {
+          this.negotiatedJid = new Jid(results[0]);
+        }
+        switch (results.length) {
+          case 1:
+            this.negotiatedJid = new Jid(results[0]);
+            break;
+          case 2:
+            if (new Jid(results[0]).equals(this.authnId)) {
+              this.negotiatedJid = new Jid(
+                  this.authnId.getLocalPart(),
+                  this.authnId.getDomainPart(),
+                  results[1]
+              );
+            } else {
+              sendStreamError(new StreamErrorException(
+                  StreamErrorException.Condition.INVALID_XML,
+                  "Resource Binding result contains incorrect JID."
+              ));
+            }
+            break;
+          default:
+            sendStreamError(new StreamErrorException(
+                StreamErrorException.Condition.INVALID_XML
+            ));
+            break;
+        }
+      } catch (Exception ex) {
+        sendStreamError(new StreamErrorException(
+            StreamErrorException.Condition.INVALID_XML,
+            ex
+        ));
+      }
+    } else {
+      sendStreamError(new StreamErrorException(
+          StreamErrorException.Condition.INVALID_XML
+      ));
+    }
+
+    if (this.negotiatedJid != null) {
+      this.negotiatedFeatures.add(this.negotiatingFeature);
+      this.negotiatingFeature = null;
+    }
   }
 
   private void setState(final State state) {
@@ -401,18 +576,45 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     eventStream.onNext(new PropertyChangeEvent(this, "State", oldState, state));
   }
 
+  private synchronized void start() {
+    switch (state) {
+      case DISPOSED:
+        throw new IllegalStateException("HandshakePipe disposed.");
+      case STREAM_CLOSED:
+        setState(State.STARTED);
+        serverStreamError = null;
+        clientStreamError = null;
+        sendStreamOpening();
+        break;
+      default:
+    }
+  }
+
+  /**
+   * Default constructor.
+   * @param session Associated XMPP session.
+   * @param authnId Authentication ID, which is typically the local part of a
+   *        {@link Jid} for
+   *        <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a>
+   *        mechanisms which uses a "simple user name".
+   * @param authzId Authorization ID, which is a bare {@link Jid}.
+   * @param retriever Credential retriever.
+   */
   public HandshakerPipe(@NonNull final Session session,
-                        @NonNull final String authnId,
-                        @Nullable final String authzId,
-                        @NonNull final PropertyRetriever retriever) {
+                        @NonNull final Jid authnId,
+                        @Nullable final Jid authzId,
+                        @NonNull final CredentialRetriever retriever,
+                        @Nullable final String resource,
+                        final boolean registering) {
     Objects.requireNonNull(session, "`session` is absent.");
-    Validate.notEmpty(authnId, "`authnId` is absent.");
-    Validate.notEmpty(authzId, "`authzId` is absent.");
+    Objects.requireNonNull(authnId, "`authnId` is absent.");
+    Objects.requireNonNull(authzId, "`authzId` is absent.");
     Objects.requireNonNull(retriever, "`retriever` is absent.");
     this.session = session;
     this.authnId = authnId;
     this.authzId = authzId;
     this.retriever = retriever;
+    this.presetResource = resource == null ? "" : resource;
 
     // Initializing DOM builder
     DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
@@ -426,13 +628,22 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
 
     // Preprocessing stream features list
     if (!this.session.getConnection().isStartTlsRequired()) {
-      this.streamFeaturesOrder.remove(StreamFeature.STARTTLS);
+      this.negotiatedFeatures.add(StreamFeature.STARTTLS);
     }
     if (this.session.getStreamCompression() == null) {
-      this.streamFeaturesOrder.remove(StreamFeature.STREAM_COMPRESSION);
+      this.negotiatedFeatures.add(StreamFeature.STREAM_COMPRESSION);
+    }
+    if (registering) {
+      throw new UnsupportedOperationException();
     }
   }
 
+  /**
+   * Closes the XMPP stream. After the stream is closed, a full handshake is
+   * is required in order to reopen a stream, in which case this class can be
+   * reused if it is not removed from the attached {@link Pipeline} yet.
+   * @throws IllegalStateException If this class is in {@link State#DISPOSED}.
+   */
   public synchronized void closeStream() {
     switch (state) {
       case STREAM_CLOSING:
@@ -448,9 +659,13 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     sendStreamClosing();
   }
 
-  @NonNull
-  public String getResource() {
-    return resource;
+  /**
+   * Gets the JID negotiated during Resource Binding.
+   * @return {@code null} if the negotiation is not completed yet.
+   */
+  @Nullable
+  public Jid getJid() {
+    return negotiatedJid;
   }
 
   /**
@@ -475,27 +690,46 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     return eventStream;
   }
 
+  /**
+   * Gets the stream ID. It corresponds to the {@code id} attribute of the
+   * stream opening.
+   */
   @NonNull
   public synchronized String getStreamId() {
     return streamId;
   }
 
   /**
-   * Gets the current {@link State} of the class.
+   * Gets the current {@link State} of this class.
    */
   @NonNull
   public State getState() {
     return state;
   }
 
+  /**
+   * Gets the stream error sent by the server.
+   * @return {@code null} if the XMPP stream is still running, or if the server
+   *         did not send any stream error during the last stream.
+   */
   @Nullable
   public StreamErrorException getServerStreamError() {
     return serverStreamError;
   }
 
+  /**
+   * Gets the stream error sent by this class to the server.
+   * @return {@code null} if the XMPP stream is still running, or if this class
+   *         did not send any stream error during the last stream.
+   */
   @Nullable
   public StreamErrorException getClientStreamError() {
     return clientStreamError;
+  }
+
+  @Nullable
+  public HandshakeException getHandshakeError() {
+    return handshakeError;
   }
 
   /**
@@ -509,9 +743,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
                                      final List<Object> toForward)
       throws Exception {
     if (this.state == State.DISPOSED) {
-      throw new IllegalStateException(
-          "Cannot invoke `onReading()` of a disposed Pipe."
-      );
+      throw new IllegalStateException("Pipe disposed.");
     }
 
     final Document document;
@@ -535,22 +767,15 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     if ("open".equals(rootName) && CommonXmlns.STREAM_OPENING_WEBSOCKET.equals(rootNs)) {
       switch (state) {
         case STARTED:
-          try {
-            consumeStreamOpening(document);
-          } catch (StreamErrorException ex) {
-            sendStreamError(ex);
-            return;
-          }
+          consumeStreamOpening(document);
           setState(State.NEGOTIATING);
-          return;
+          break;
         case NEGOTIATING:
-          sendStreamError(new StreamErrorException(
-              StreamErrorException.Condition.UNDEFINED_CONDITION,
-              "Expecting stream features but a stream opening was received."
-          ));
+          consumeStreamOpening(document);
+          break;
         case COMPLETED:
           sendStreamError(new StreamErrorException(
-              StreamErrorException.Condition.UNDEFINED_CONDITION,
+              StreamErrorException.Condition.CONFLICT,
               "Server unexpectedly restarted the stream."
           ));
         case STREAM_CLOSING:
@@ -569,44 +794,41 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
           setState(State.STREAM_CLOSING);
           break;
       }
-    } else if ("features".equals(rootName) && CommonXmlns.STREAM_HEADER.equals(rootNs)) {
-      if (state == State.NEGOTIATING) {
-        final Element selectedFeature = consumeStreamFeatures(document);
-        if (selectedFeature == null) {
-          if (checkIfAllMandatoryFeaturesNegotiated()) {
-            setState(State.COMPLETED);
-          } else {
+    } else if ("features".equals(rootName)
+        && CommonXmlns.STREAM_HEADER.equals(rootNs)
+        && this.state == State.NEGOTIATING) {
+      final Element selectedFeature = consumeStreamFeatures(document);
+      if (selectedFeature == null) {
+        if (checkIfAllMandatoryFeaturesNegotiated()) {
+          setState(State.COMPLETED);
+        } else {
+          sendStreamError(new StreamErrorException(
+              StreamErrorException.Condition.UNSUPPORTED_FEATURE
+          ));
+        }
+      } else {
+        switch (negotiatingFeature) {
+          case SASL:
+            initializeSaslNegotiation(selectedFeature);
+            break;
+          case RESOURCE_BINDING:
+            initializeResourceBinding();
+            break;
+          default:
             sendStreamError(new StreamErrorException(
                 StreamErrorException.Condition.UNSUPPORTED_FEATURE
             ));
-          }
-        } else {
-          switch (negotiatingFeature) {
-            case SASL:
-              initializeSaslNegotiation(selectedFeature);
-              break;
-            default:
-              sendStreamError(new StreamErrorException(
-                  StreamErrorException.Condition.UNSUPPORTED_FEATURE
-              ));
-              break;
-          }
+            break;
         }
-      } else {
-        sendStreamError(new StreamErrorException(
-            StreamErrorException.Condition.UNDEFINED_CONDITION,
-            "Not negotiating stream features."
-        ));
       }
-    } else if (CommonXmlns.SASL.equals(rootNs)) {
-      if (state == State.NEGOTIATING && negotiatingFeature == StreamFeature.SASL) {
-        consumeSasl(document);
-      } else {
-        sendStreamError(new StreamErrorException(
-            StreamErrorException.Condition.UNDEFINED_CONDITION,
-            "Not negotiating SASL."
-        ));
-      }
+    } else if (CommonXmlns.SASL.equals(rootNs)
+        && this.state == State.NEGOTIATING
+        && negotiatingFeature == StreamFeature.SASL) {
+      consumeSasl(document);
+    } else if (this.negotiatingFeature == StreamFeature.RESOURCE_BINDING
+        && state == State.NEGOTIATING
+        && "iq".equals(rootName)) {
+      consumeResourceBinding(document);
     } else if ("error".equals(rootName) && CommonXmlns.STREAM_HEADER.equals(rootNs)) {
       closeStream();
       this.serverStreamError = convertToStreamErrorException(document);
@@ -615,8 +837,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         toForward.add(toRead);
       } else {
         sendStreamError(new StreamErrorException(
-            StreamErrorException.Condition.UNSUPPORTED_STANZA_TYPE,
-            "Unexpected data received, expecting a stream opening."
+            StreamErrorException.Condition.UNSUPPORTED_STANZA_TYPE
         ));
       }
     }
@@ -642,13 +863,11 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
           .subscribe(new Consumer<PropertyChangeEvent>() {
             @Override
             public void accept(PropertyChangeEvent event) throws Exception {
-              setState(State.STARTED);
-              sendStreamOpening();
+              start();
             }
           });
     } else {
-      setState(State.STARTED);
-      sendStreamOpening();
+      start();
     }
   }
 

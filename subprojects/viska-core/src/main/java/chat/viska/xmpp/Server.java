@@ -23,15 +23,11 @@ public class Server extends AbstractEntity {
 
   private String domain;
 
-  public Server(final @NonNull Session session,
-                final @NonNull String domain) {
-    super(session);
-    Validate.notBlank(domain);
-    this.domain = domain;
+  Server(@NonNull final Session session, @NonNull final String domain) {
+    super(session, new Jid(domain));
   }
 
-  @Override
-  public Jid getJid() {
-    return new Jid(domain);
+  Server(@NonNull final Session session, @NonNull final Jid jid) {
+    super(session, jid);
   }
 }

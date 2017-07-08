@@ -21,7 +21,8 @@ import java.util.List;
 
 /**
  * {@link Pipe} that does nothing but forwarding anything coming through. It can
- * serve as a parent class for an implementation of {@link Pipe} for convenience.
+ * serve as a parent class for an implementation of {@link Pipe} for convenience
+ * or as a placeholder in a {@link Pipeline}.
  */
 @Shareable
 public class BlankPipe implements Pipe {

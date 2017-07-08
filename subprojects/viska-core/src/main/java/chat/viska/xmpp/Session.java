@@ -16,13 +16,12 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.sasl.PropertyRetriever;
+import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.security.cert.Certificate;
 import java.util.EventObject;
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.Future;
@@ -46,7 +45,7 @@ import org.xml.sax.SAXException;
  * <p>The following is a brief workflow of using a {@link Session}:</p>
  *
  * <ol>
- *   <li>Initialize a {@link Session} implementation.</li>
+ *   <li>Initialize a {@link Session} subclass.</li>
  *   <li>
  *     Obtain a {@link Connection} based on the domain name of an XMPP server.
  *   </li>
@@ -55,66 +54,66 @@ import org.xml.sax.SAXException;
  *     <ul>
  *       <li>TLS.</li>
  *       <li>Compression.</li>
- *       <li>
- *         Preferred locale list. Systems like Android Nougat support locale
- *         list natively instead of setting a single locale, which is not
- *         supported by the Java platform. Therefore, the locale list of an
- *         {@link Session} only contains a single default {@link Locale}
- *         can needs to be manually set to match the system settings.
- *       </li>
+ *       <li>Preferred locale list.</li>
  *       <li>Device ID, a.k.a. XMPP resource (not recommended).</li>
  *     </ul>
  *   </li>
  *   <li>
- *     Apply some {@link Plugin}s using
- *     {@link #getPluginManager()} in order to support more XMPP
- *     extensions like Jingle VoIP calls, IoT and OMEMO encrypted messaging.
- *     Note that {@link BasePlugin} is a built-in one and need not to be applied
+ *     Apply some {@link Plugin}s in order to support more XMPP extensions.
+ *     Note that {@link BasePlugin} is a built-in one and need not be applied
  *     manually.
  *   </li>
+ *   <li>Login or register using {@code login()} and {@code register()}.</li>
  *   <li>
- *     Connect to the server using {@link #connect(Connection)}.
- *   </li>
- *   <li>Login using {@link #login(String, String)}.</li>
- *   <li>
- *     Possibly close the connection using {@link #disconnect()}
- *     and re-adjust some options.
- *   </li>
- *   <li>
- *     Shutdown the {@link Session} using
- *     {@link #dispose()}.
+ *     Shutdown the {@link Session} using {@link #disconnect()}.
  *   </li>
  * </ol>
  */
 public interface Session {
 
   /**
-   * State of a {@link Session}.
+   * Runtime state of a {@link Session}.
    *
-   * <p>The following figure shows the state diagram:</p>
-   * <pre>
-   *   +--------------+                 +--------------+                 +--------------+           +--------------+               +--------------+        +--------------+
-   *   |              |    dispose()    |              |    connect()    |              |           |              |    login()    |              |        |              |
-   *   |   DISPOSED   | <-------------+ | DISCONNECTED | +------------>  |  CONNECTING  | +-------> |  CONNECTED   | +---------->  | HANDSHAKING  | +----> |   ONLINE     |
-   *   |              |                 |              |                 |              |           |              |               |              |        |              |
-   *   +--------------+                 +--------------+                 +--------------+           +--------------+               +--------------+        +--------------+
+   * <h1>State diagram</h1>
+   * <pre>{@code
+   *                                                      +---------------+
+   *                          disconnect()                |               |
+   *         +------------------------------------------+ | DISCONNECTED  |    <------------+ <----------------------------+ <---------------------+
+   *         |                                            |               |                                                                        |
+   *         |                                            +---------------+                 ^                              ^                       |
+   *         |                                                                              |                              |                       |
+   *         |                                                  +  ^                        |                              |                       |
+   *         |                                      reconnect() |  | Connection loss        | Connection loss              | Connection loss       | Connection loss
+   *         v                                                  v  +                        +                              +                       +
    *
-   *                                           ^                                                            +                                                     +
-   *                                           |                                                            | disconnect()                                        |
-   *                                           |                                                            v                                                     |
-   *                                           |                                                                                                                  | disconnect()
-   *                                           |                                                    +---------------+                                             |
-   *                                           |                                                    |               |                                             |
-   *                                           +--------------------------------------------------+ | DISCONNECTING | <-------------------------------------------+
-   *                                                                                                |               |
-   *                                                                                                +---------------+
-   * </pre>
+   * +--------------+    +---------------+                +--------------+           +--------------+               +--------------+        +--------------+
+   * |              |    |               |    login()     |              |           |              |               |              |        |              |
+   * |   DISPOSED   |    |  INITIALIZED  | +----------->  |  CONNECTING  | +-------> |  CONNECTED   | +---------->  | HANDSHAKING  | +----> |   ONLINE     |
+   * |              |    |               |   register()   |              |           |              |               |              |        |              |
+   * +--------------+    +---------------+                +--------------+           +--------------+               +--------------+        +--------------+
+   *
+   *         ^                                                   +                           +                             +                       +
+   *         |                                                   | disconnect()              | disconnect()                | disconnect()          | disconnect()
+   *         |                                                   | Server disconnects        | Server disconnects          | Server disconnects    | Server disconnects
+   *         |                                                   v                           |                             |                       |
+   *         |                                                                               v                             v                       |
+   *         |                                            +---------------+                                                                        |
+   *         +------------------------------------------+ |               | <----------------+ <---------------------------+ <---------------------+
+   *                                                      | DISCONNECTING |
+   *                                                      |               |
+   *                                                      +---------------+
+   * }</pre>
    */
   enum State {
 
     /**
+     * Indicates the {@link Session} has just been created.
+     */
+    INITIALIZED,
+
+    /**
      * Indicates a network connection to the server is established and is
-     * waiting to login or perform in-band registration.
+     * about to login or perform in-band registration.
      */
     CONNECTED,
 
@@ -125,9 +124,11 @@ public interface Session {
     CONNECTING,
 
     /**
-     * Indicates the {@link Session} is currently not connected to any
-     * server either because it has just been created or a precious connection
-     * was closed.
+     * Indicates the network connection is lost and waiting to reconnect and
+     * resume the XMPP stream. However, it enters {@link State#DISPOSED} directly
+     * upon losing the connection if
+     * <a href="https://xmpp.org/extensions/xep-0198.html">Stream
+     * Management</a> is disabled.
      */
     DISCONNECTED,
 
@@ -138,69 +139,108 @@ public interface Session {
     DISCONNECTING,
 
     /**
-     * Indicates the {@link Session} has been disposed of. Any actions
-     * that changes the {@link Session}'s {@link State}, e.g. starting
-     * another connection, will throw an {@link IllegalStateException}.
+     * Indicates the {@link Session} has been shut down. Most actions
+     * that changes the state will throw an {@link IllegalStateException}.
      */
     DISPOSED,
 
     /**
-     * Indicates the {@link Session} is handshaking with the server
-     * and/or logging in.
+     * Indicates the {@link Session} is logging in.
      */
     HANDSHAKING,
 
     /**
-     * Indicates the user is online.
+     * Indicates the user has logged into the server.
      */
     ONLINE
   }
 
   /**
-   * Starts connecting to a server.
-   * @return {@link Future} tracking the completion status of this method and
-   *         providing a way to cancel it.
-   * @throws ConnectionException If the connection fails to be established.
-   * @throws IllegalStateException If this class is in an inappropriate {@link State}.
+   * Starts logging in.
+   * @return Token to track the completion status of this method and provide a
+   *         way to cancel it.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#INITIALIZED}.
    */
   @NonNull
-  Future<Void> connect(@NonNull Connection connection) throws ConnectionException;
+  Future<Void> login(@NonNull Jid jid, @NonNull String password);
 
   /**
-   * Starts logging in the server.
-   * @param username The local part of a {@link Jid}. It needs not to be
-   *                 {@code stringprep}ed first.
-   * @param password The password. It needs not to be {@code stringprep}ed first.
-   * @return {@link Future} tracking the completion status of this method and
-   *         providing a way to cancel it.
-   * @throws IllegalStateException If this class is in an inappropriate {@link State}.
+   * Starts logging in.
+   * @return Token to track the completion status of this method and provide a
+   *         way to cancel it.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#INITIALIZED}.
    */
-  @NonNull
-  Future<Void> login(@NonNull String username, @NonNull String password);
-
   @NonNull
   Future<Void> login(@NonNull Jid authnId,
                      @Nullable Jid authzId,
-                     @NonNull PropertyRetriever retriever);
+                     @NonNull CredentialRetriever retriever,
+                     @Nullable String resource);
 
   /**
-   * Starts closing the connection. This method is non-blocking but cancellation
-   * is not supported. In order to get informed when the method completes,
-   * capture a {@link java.beans.PropertyChangeEvent} with a property name of
-   * {@code State} and a new value of {@link State#DISCONNECTED}.
-   * @throws IllegalStateException If this class is in an inappropriate {@link State}.
+   * Starts an in-band registration and then log in.
+   * @return Token to track the completion status of this method and provide a
+   *         way to cancel it.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#INITIALIZED}.
+   */
+  @NonNull
+  Future<Void> register(@NonNull Jid jid, @NonNull String password);
+
+  /**
+   * Starts an in-band registration and then log in.
+   * @return Token to track the completion status of this method and provide a
+   *         way to cancel it.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#INITIALIZED}.
+   */
+  @NonNull
+  Future<Void> register(@NonNull Jid authnId,
+                        @Nullable Jid authzId,
+                        @NonNull CredentialRetriever retriever,
+                        @Nullable String resource);
+
+  /**
+   * Starts reconnecting and resuming the XMPP stream.
+   * @return Token to track the completion status of this method and provide a
+   *         way to cancel it.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#DISCONNECTED}.
+   * @throws UnsupportedOperationException If
+   *         <a href="https://xmpp.org/extensions/xep-0198.html"> Stream
+   *         Management</a> is disabled.
+   */
+  @NonNull
+  Future<Void> reconnect();
+
+  /**
+   * Starts closing the XMPP stream, the network connection and releasing system
+   * resources. This method is non-blocking but cancellation is not supported
+   * for it is non-recoverable. In order to get informed once the method
+   * completes, capture a {@link java.beans.PropertyChangeEvent} with the
+   * property name being {@code State} and the new value being
+   * {@link State#DISCONNECTED}.
    */
   void disconnect();
 
-  void dispose();
-
   /**
-   * Send an XML to the server. The XML needs even not be an XMPP stanza, so be
-   * wary that the server will close the connection once the sent XML violates
-   * any XMPP rules.
-   * @throws IllegalStateException If this class is in an inappropriate {@link State}.
+   * Sends an XML stanza to the server. The stanza will not be validated by any
+   * means, so beware that the server may close the connection once any policy
+   * is violated.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#INITIALIZED} or {@link State#DISCONNECTING}.
    */
   void send(@NonNull String xml) throws SAXException;
+
+  /**
+   * Sends an XML stanza to the server. The stanza will not be validated by any
+   * means, so beware that the server may close the connection once any policy
+   * is violated.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#INITIALIZED} or {@link State#DISCONNECTING}.
+   */
+  void send(@NonNull Document xml);
 
   /**
    * Gets the connection level {@link Compression}.
@@ -212,16 +252,17 @@ public interface Session {
 
   /**
    * Sets the connection level {@link Compression}.
-   * @throws IllegalStateException If this class is in an inappropriate {@link State}.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#INITIALIZED} or {@link State#DISCONNECTED}.
+   * @throws IllegalArgumentException If the specified {@link Compression} is
+   *         unsupported.
    */
   void setConnectionCompression(@Nullable Compression method);
 
   /**
    * Gets the TLS level {@link Compression} which is defined in
    * <a href="https://datatracker.ietf.org/doc/rfc3749">RFC 3749: Transport
-   * Layer Security Protocol Compression Methods</a>. Implementations may choose
-   * not to implement/enable TLS compression due to security flaws or other
-   * reasons.
+   * Layer Security Protocol Compression Methods</a>.
    * @return {@code null} if no {@link Compression} is used, always {@code null}
    *         if it is not implemented.
    */
@@ -232,7 +273,10 @@ public interface Session {
    * Sets the TLS level {@link Compression} which is defined in
    * <a href="https://datatracker.ietf.org/doc/rfc3749">RFC 3749: Transport
    * Layer Security Protocol Compression Methods</a>.
-   * @throws IllegalStateException If this class is in an inappropriate {@link State}.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#INITIALIZED} or {@link State#DISCONNECTED}.
+   * @throws IllegalArgumentException If the specified {@link Compression} is
+   *         unsupported.
    */
   void setTlsCompression(Compression compression);
 
@@ -248,8 +292,10 @@ public interface Session {
    * Sets the stream level {@link Compression} which is standardized in
    * <a href="https://xmpp.org/extensions/xep-0138.html">XEP-0138: Stream
    * Compression</a>.
-   * @throws IllegalStateException If this class is in an inappropriate {@link State}.
-   * @throws IllegalArgumentException If the specified {@link Compression} is unsupported.
+   * @throws IllegalStateException If this class is not in
+   *         {@link State#INITIALIZED} or {@link State#DISCONNECTED}.
+   * @throws IllegalArgumentException If the specified {@link Compression} is
+   *         unsupported.
    */
   void setStreamCompression(@Nullable Compression streamCompression);
 
@@ -270,35 +316,24 @@ public interface Session {
   String getTlsProtocol();
 
   /**
-   * Gets a {@link List} of {@link Certificate}s sent to the server during TLS
-   * handshaking.
+   * Gets the {@link Certificate}s sent to the server during TLS handshaking.
    * @see SSLSession#getLocalCertificates()
-   * @return An empty array if TLS is disabled or no certificates are sent.
    */
   @NonNull
-  List<Certificate> getTlsLocalCertificates();
+  Certificate[] getTlsLocalCertificates();
 
   /**
-   * Gets a {@link List} of {@link Certificate}s present by the server.
+   * Gets the {@link Certificate}s present by the server.
    * @see SSLSession#getPeerCertificates()
-   * @return An empty array if TLS is disabled or a non-certificate-based cipher
-   * suite such as Kerberos is used.
    */
   @NonNull
-  List<Certificate> getTlsPeerCertificates();
+  Certificate[] getTlsPeerCertificates();
 
   /**
    * Gets the {@link Connection} that is currently using or will be used.
-   * @return {@code null} if it is not set yet.
    */
   @Nullable
   Connection getConnection();
-
-  /**
-   * Sets the {@link Connection} to be used.
-   * @throws IllegalStateException If this class is in an inappropriate {@link State}.
-   */
-  void setConnection(@NonNull Connection connection);
 
   /**
    * Gets a stream of inbound XMPP stanzas. These include {@code <iq/>},
@@ -328,23 +363,16 @@ public interface Session {
   State getState();
 
   /**
-   * Gets the username which was used during {@link #login(String, String)}.
-   * @return A {@code stringprep}ed username or an empty {@link String} if it is
-   *         not yet logged in.
+   * Gets the bare JID logged in this session.
+   * @return {@code null} if the handshake has not completed yet.
    */
-  @NonNull
-  String getUsername();
-
-  /**
-   * Gets the device ID, also known as XMPP resource.
-   * @return Empty {@link String} if it is not yet logged in.
-   */
-  @NonNull
-  String getResource();
+  @Nullable
+  Jid getJid();
 
   /**
    * Gets a stream of emitted {@link EventObject}s. It never emits any errors
-   * but will emit a completion when this class is disposed of.
+   * but will emit a completion signal after this class enters
+   * {@link State#DISPOSED}.
    *
    * <p>This class emits only the following types of {@link EventObject}:</p>
    *
@@ -353,7 +381,7 @@ public interface Session {
    *   <li>
    *     {@link java.beans.PropertyChangeEvent}
    *     <ul>
-   *       <li>{@code State}</li>
+   *       <li>{@code State} ({@link State})</li>
    *     </ul>
    *   </li>
    * </ul>
@@ -379,14 +407,18 @@ public interface Session {
    * in <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
    * Discovery</a>. In this case, only the result matched by the preferred
    * {@link Locale}s is returned to the method caller.
-   *
-   * <p>By default it is set to the JVM's system {@link Locale} which is a
-   * single one. On platforms where users can set multiple {@link Locale}s,
-   * it needs to be set manually for this class.</p>
    */
   @NonNull
   Locale[] getLocales();
 
+  /**
+   * Sets the preferred locales. It can be set even while the session is up and
+   * running.
+   *
+   * <p>By default it is set to the JVM's system {@link Locale} which is a
+   * single one. On platforms such as Android Nougat where users can set
+   * multiple {@link Locale}s, it is needed to set this property manually.</p>
+   */
   void setLocales(Locale... locales);
 
   @NonNull

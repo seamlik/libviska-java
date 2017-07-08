@@ -28,7 +28,7 @@ public class ScramSha512Client extends ScramClient {
 
   public ScramSha512Client(final String authnId,
                            final String authzId,
-                           PropertyRetriever retriever)
+                           CredentialRetriever retriever)
       throws NoSuchAlgorithmException{
     super(
         new ScramMechanism(

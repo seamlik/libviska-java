@@ -27,7 +27,7 @@ public class ClientFactory {
   public static Client newClient(String mechanism,
                                  String authnId,
                                  String authzId,
-                                 PropertyRetriever retriever) {
+                                 CredentialRetriever retriever) {
     switch (mechanism) {
       case "SCRAM-SHA-1":
         try {
@@ -59,7 +59,7 @@ public class ClientFactory {
   public Client newClient(String[] mechanisms,
                           String authnId,
                           String authzId,
-                          PropertyRetriever retriever) {
+                          CredentialRetriever retriever) {
     final List<String> serverMechanisms = Arrays.asList(mechanisms);
     for (String mech : this.mechanisms) {
       if (serverMechanisms.contains(mech)) {

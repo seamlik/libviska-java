@@ -16,6 +16,7 @@
 
 package chat.viska.sasl;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Assertions;
@@ -29,18 +30,24 @@ public class ScramTest {
     properties.put("username", "admin");
     properties.put("password", "pencil");
     final ScramSha512Server server = new ScramSha512Server(
-        new PropertyRetriever() {
+        new CredentialRetriever() {
           @Override
-          public Map<String, ?> retrieve(String authnId, String mechanism)
-              throws Exception {
-            return properties;
+          public Object retrieve(String authnId, String mechanism, String key)
+              throws AbortedException, IOException {
+            return properties.get(key);
           }
         }
     );
     final ScramSha512Client client = new ScramSha512Client(
         "admin",
-        "pencil",
-        "viska"
+        "viska",
+        new CredentialRetriever() {
+          @Override
+          public Object retrieve(String authnId, String mechanism, String key)
+              throws IOException, AbortedException {
+            return properties.get(key);
+          }
+        }
     );
     if (client.isClientFirst()) {
       final byte[] msg = client.respond();
