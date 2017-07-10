@@ -1,24 +1,19 @@
-libviska-java: XMPP Client Library for Android and Java SE
-==========================================================
+Extensive XMPP Client Framework for Android and Java SE
+=======================================================
 
-`libviska-java` is an XMPP library written in Java. It aims to support as many
-modern or experimental features as possible. It is distinct from other
-counterparts with the following reasons:
+`libviska-java` is a set of Java libraries for developing an XMPP client. It 
+aims to support as many modern or experimental features as possible. It is 
+distinct from other counterparts by the following reasons:
 
-  * Supports VoIP calls using XMPP Jingle standards.
-  * Rapidly drop features or standards that we consider out of fashion or
-    outdated. We believe this can accelerate the evolution of XMPP standards.
+  * [Jingle](https://wiki.xmpp.org/web/Tech_pages/Jingle) support is first-class
+    citizen.
+  * Rapidly adopt features or standards that are still experimental. We believe 
+    this can accelerate the evolution of XMPP standards.
   * Designed for being used by both Java SE and Android applications.
-  * Supports end-to-end encryption.
+  * XEPs are implemented as plugins and work in a plug-and-play manner, which
+    gives high extensibility.
 
-This library can be used in Android API Level >= 19 and Java SE >= 7.
-
-Supported XEPs
---------------
-
-  * [XEP-0166: Jingle](https://xmpp.org/extensions/xep-0166.html)
-  * [XEP-0343: Signaling WebRTC datachannels in Jingle](https://xmpp.org/extensions/xep-0343.html)
-  * [XEP-0156: Discovering Alternative XMPP Connection Methods](https://xmpp.org/extensions/xep-0156.html)
+This library can be used in Android API Level >= 19 or Java SE >= 7.
 
 License
 -------
@@ -29,7 +24,7 @@ license is available in the `LICENSE` file.
 Contributing
 ------------
 
-The devteam behind the Viska project is relatively small compared to its
+The team behind the Viska project is relatively small compared to its
 proprietary counterparts who are backed by large companies. Therefore, we
 welcome all kinds of help!
 
@@ -41,8 +36,4 @@ Simply run
 gradle
 ```
 
-### TODOs
-
-* Supports video conferencing
-* Supports text messaging over OMEMO
-* Supports multimedia messaging
+This builds the binaries and the project-wise Javadoc without running any tests.
