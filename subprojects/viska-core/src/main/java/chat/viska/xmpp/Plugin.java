@@ -18,7 +18,6 @@ package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -37,15 +36,16 @@ public interface Plugin extends SessionAware {
    * Gets the features currently enabled by the plugin. Results of this method
    * are served when another peer entity is querying service info on this XMPP
    * client.
+   *
    * <p>This method is part of
    * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
    * Discovery</a></p>
    */
   @NonNull
-  Set<String> getFeatures();
+  Set<String> getDiscoFeatures();
 
   /**
-   * Gets the {@code <iq/>} subelement types currently supported by the plugin.
+   * Gets the {@code <iq/>} sub-element types currently supported by the plugin.
    * Results of this method are used to identify is an inbound stanza is
    * supported by this XMPP client. If no plugin handles a particular stanza,
    * the connection will be forcibly closed.

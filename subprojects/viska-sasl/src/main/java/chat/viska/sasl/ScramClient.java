@@ -26,10 +26,9 @@ import java.util.Objects;
 import org.apache.commons.codec.binary.Base64;
 
 /**
- * SASL client of SCRAM mechanism specified in
- * <a href="https://datatracker.ietf.org/doc/rfc5802">RFC 5802: Salted Challenge
- * Response Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms</a>.
- * Note that this implementation does not support Channel Binding.
+ * SASL client of <a href="https://datatracker.ietf.org/doc/rfc5802">SCRAM
+ * Mechanism</a>. Note that this implementation does not support Channel
+ * Binding.
  */
 public class ScramClient implements Client {
 

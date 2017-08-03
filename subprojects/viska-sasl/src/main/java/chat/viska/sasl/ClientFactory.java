@@ -17,12 +17,14 @@
 package chat.viska.sasl;
 
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class ClientFactory {
 
-  private final String[] mechanisms;
+  private final List<String> mechanisms;
 
   public static Client newClient(String mechanism,
                                  String authnId,
@@ -52,24 +54,23 @@ public class ClientFactory {
     }
   }
 
-  public ClientFactory(final String... mechanisms) {
-    this.mechanisms = Arrays.copyOf(mechanisms, mechanisms.length);
+  public ClientFactory(final List<String> mechanisms) {
+    this.mechanisms = new ArrayList<>(mechanisms);
   }
 
-  public Client newClient(String[] mechanisms,
+  public Client newClient(List<String> mechanisms,
                           String authnId,
                           String authzId,
                           CredentialRetriever retriever) {
-    final List<String> serverMechanisms = Arrays.asList(mechanisms);
     for (String mech : this.mechanisms) {
-      if (serverMechanisms.contains(mech)) {
+      if (mechanisms.contains(mech)) {
         return newClient(mech, authnId, authzId, retriever);
       }
     }
     return null;
   }
 
-  public String[] getPreferredMechanisms() {
-    return Arrays.copyOf(mechanisms, mechanisms.length);
+  public List<String> getPreferredMechanisms() {
+    return new ArrayList<>(mechanisms);
   }
 }

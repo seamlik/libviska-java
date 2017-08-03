@@ -17,33 +17,13 @@
 package chat.viska.commons;
 
 import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
-import java.util.EventObject;
-import java.util.logging.Level;
-import org.apache.commons.lang3.Validate;
+import java.util.List;
+import java.util.Locale;
 
-public class ExceptionCaughtEvent extends EventObject {
+public class LocaleUtils {
 
-  private Throwable cause;
-
-  public ExceptionCaughtEvent(@NonNull Object source,
-                              @NonNull Throwable cause) {
-    super(source);
-    Validate.notNull(cause);
-    this.cause = cause;
-  }
-
-  public Throwable getCause() {
-    return cause;
-  }
-
-  @Override
-  public String toString() {
-    return String.format(
-        "%1s[source=%2s; cause=%3s",
-        getClass().getCanonicalName(),
-        getSource().toString(),
-        cause.toString()
-    );
+  public static Locale matchLocales(@NonNull final List<Locale> preferred,
+                                    @NonNull final List<Locale> available) {
+    throw new UnsupportedOperationException();
   }
 }

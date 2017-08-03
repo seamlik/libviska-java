@@ -39,7 +39,6 @@ public class BasePlugin implements Plugin {
 
   static final String XMLNS_NICKNAME = "http://jabber.org/protocol/nick";
   static final String XMLNS_SOFTWARE_VERSION = "jabber:iq:version";
-  static final String XMLNS_SERVICE_DISCOVERY = "http://jabber.org/protocol/disco";
 
   private static final String[] fixedFeatures = new String[] {
       XMLNS_NICKNAME,
@@ -108,7 +107,7 @@ public class BasePlugin implements Plugin {
 
   @Override
   @NonNull
-  public Set<String> getFeatures() {
+  public Set<String> getDiscoFeatures() {
     return new HashSet<>(Arrays.asList(fixedFeatures));
   }
 

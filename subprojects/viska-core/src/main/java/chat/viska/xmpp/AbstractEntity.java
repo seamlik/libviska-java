@@ -16,9 +16,13 @@
 
 package chat.viska.xmpp;
 
+import io.reactivex.Maybe;
 import io.reactivex.annotations.NonNull;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.Future;
+import org.w3c.dom.Document;
 
 /**
  * XMPP entity.
@@ -34,6 +38,12 @@ public abstract class AbstractEntity implements SessionAware {
     Objects.requireNonNull(jid);
     this.session = session;
     this.jid = jid;
+  }
+
+  @NonNull
+  private DiscoInfo consumeDiscoInfo(@NonNull final Document document)
+      throws StanzaErrorException {
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -53,8 +63,19 @@ public abstract class AbstractEntity implements SessionAware {
    *         providing a way to cancel it.
    */
   @NonNull
-  public Future<DiscoInfo> queryFeatures() {
-    throw new UnsupportedOperationException();
+  public Maybe<DiscoInfo> queryDiscoInfo() {
+    final String id = UUID.randomUUID().toString();
+    final String query = String.format(
+        "<iq type=\"get\" to=\"%1s\" id=\"%2s\"><query xmlns=\"%3s#info\"/></iq>",
+        getJid().toString(),
+        id,
+        CommonXmlns.XEP_SERVICE_DISCOVERY
+    );
+    return this.session
+        .getInboundStanzaStream()
+        .filter(stanza -> stanza.getId().equals(id))
+        .firstElement()
+        .map(stanza -> this.consumeDiscoInfo(stanza.getDocument()));
   }
 
   /**
@@ -66,6 +87,19 @@ public abstract class AbstractEntity implements SessionAware {
   @NonNull
   public Future<DiscoItem> queryItems() {
     throw new UnsupportedOperationException();
+  }
+
+
+  /**
+   * Queries information of the XMPP client software. This method is part of
+   * <a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software
+   * Version</a>.
+   * @return {@link Future} tracking the completion status of this method and
+   *         providing a way to cancel it.
+   */
+  @NonNull
+  public Maybe<Map<String, String>> querySoftwareInfo() {
+    return null;
   }
 
   @Override

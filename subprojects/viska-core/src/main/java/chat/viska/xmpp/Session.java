@@ -22,9 +22,11 @@ import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.security.cert.Certificate;
 import java.util.EventObject;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.logging.Logger;
 import javax.net.ssl.SSLSession;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
@@ -45,7 +47,7 @@ import org.xml.sax.SAXException;
  * <p>The following is a brief workflow of using a {@link Session}:</p>
  *
  * <ol>
- *   <li>Initialize a {@link Session} subclass.</li>
+ *   <li>Initialize a {@link Session}.</li>
  *   <li>
  *     Obtain a {@link Connection} based on the domain name of an XMPP server.
  *   </li>
@@ -69,7 +71,7 @@ import org.xml.sax.SAXException;
  *   </li>
  * </ol>
  */
-public interface Session {
+public interface Session extends AutoCloseable {
 
   /**
    * Runtime state of a {@link Session}.
@@ -155,15 +157,12 @@ public interface Session {
     ONLINE
   }
 
-  /**
-   * Starts logging in.
-   * @return Token to track the completion status of this method and provide a
-   *         way to cancel it.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#INITIALIZED}.
-   */
-  @NonNull
-  Future<Void> login(@NonNull Jid jid, @NonNull String password);
+  class ConnectionTerminatedEvent extends EventObject {
+
+    public ConnectionTerminatedEvent(@NonNull final Object source) {
+      super(source);
+    }
+  }
 
   /**
    * Starts logging in.
@@ -173,33 +172,19 @@ public interface Session {
    *         {@link State#INITIALIZED}.
    */
   @NonNull
-  Future<Void> login(@NonNull Jid authnId,
+  Future<?> login(@NonNull Jid jid, @NonNull String password);
+
+  /**
+   * Starts logging in.
+   * @return Token to track the completion status of this method and provide a
+   *         way to cancel it.
+   */
+  @NonNull
+  Future<?> login(@NonNull Jid authnId,
                      @Nullable Jid authzId,
                      @NonNull CredentialRetriever retriever,
-                     @Nullable String resource);
-
-  /**
-   * Starts an in-band registration and then log in.
-   * @return Token to track the completion status of this method and provide a
-   *         way to cancel it.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#INITIALIZED}.
-   */
-  @NonNull
-  Future<Void> register(@NonNull Jid jid, @NonNull String password);
-
-  /**
-   * Starts an in-band registration and then log in.
-   * @return Token to track the completion status of this method and provide a
-   *         way to cancel it.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#INITIALIZED}.
-   */
-  @NonNull
-  Future<Void> register(@NonNull Jid authnId,
-                        @Nullable Jid authzId,
-                        @NonNull CredentialRetriever retriever,
-                        @Nullable String resource);
+                     @Nullable String resource,
+                     boolean registering);
 
   /**
    * Starts reconnecting and resuming the XMPP stream.
@@ -212,17 +197,25 @@ public interface Session {
    *         Management</a> is disabled.
    */
   @NonNull
-  Future<Void> reconnect();
+  Future<?> reconnect();
 
   /**
-   * Starts closing the XMPP stream, the network connection and releasing system
-   * resources. This method is non-blocking but cancellation is not supported
-   * for it is non-recoverable. In order to get informed once the method
-   * completes, capture a {@link java.beans.PropertyChangeEvent} with the
-   * property name being {@code State} and the new value being
-   * {@link State#DISCONNECTED}.
+   * Starts closing the XMPP stream and the network connection.
+   *
+   * <p>WARNING: This method must not be interrupted, otherwise expect undefined
+   * behavior.</p>
    */
-  void disconnect();
+  @NonNull
+  Future<?> disconnect();
+
+  /**
+   * Starts shutting down the Session and releasing all system resources.
+   *
+   * <p>WARNING: This method must not be interrupted, otherwise expect undefined
+   * behavior.</p>
+   */
+  @NonNull
+  Future<?> dispose();
 
   /**
    * Sends an XML stanza to the server. The stanza will not be validated by any
@@ -243,21 +236,18 @@ public interface Session {
   void send(@NonNull Document xml);
 
   /**
+   * Gets the pre-configured logger.
+   */
+  @NonNull
+  Logger getLogger();
+
+  /**
    * Gets the connection level {@link Compression}.
    * @return {@code null} is no {@link Compression} is used, always {@code null}
    *         if it is not implemented.
    */
   @Nullable
   Compression getConnectionCompression();
-
-  /**
-   * Sets the connection level {@link Compression}.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#INITIALIZED} or {@link State#DISCONNECTED}.
-   * @throws IllegalArgumentException If the specified {@link Compression} is
-   *         unsupported.
-   */
-  void setConnectionCompression(@Nullable Compression method);
 
   /**
    * Gets the TLS level {@link Compression} which is defined in
@@ -270,34 +260,12 @@ public interface Session {
   Compression getTlsCompression();
 
   /**
-   * Sets the TLS level {@link Compression} which is defined in
-   * <a href="https://datatracker.ietf.org/doc/rfc3749">RFC 3749: Transport
-   * Layer Security Protocol Compression Methods</a>.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#INITIALIZED} or {@link State#DISCONNECTED}.
-   * @throws IllegalArgumentException If the specified {@link Compression} is
-   *         unsupported.
-   */
-  void setTlsCompression(Compression compression);
-
-  /**
    * Gets the stream level {@link Compression} which is defined in
    * <a href="https://xmpp.org/extensions/xep-0138.html">XEP-0138: Stream
    * Compression</a>.
    */
   @Nullable
   Compression getStreamCompression();
-
-  /**
-   * Sets the stream level {@link Compression} which is standardized in
-   * <a href="https://xmpp.org/extensions/xep-0138.html">XEP-0138: Stream
-   * Compression</a>.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#INITIALIZED} or {@link State#DISCONNECTED}.
-   * @throws IllegalArgumentException If the specified {@link Compression} is
-   *         unsupported.
-   */
-  void setStreamCompression(@Nullable Compression streamCompression);
 
   /**
    * Gets the standard name of the cipher suite used in the TLS connection.
@@ -336,18 +304,11 @@ public interface Session {
   Connection getConnection();
 
   /**
-   * Gets a stream of inbound XMPP stanzas. These include {@code <iq/>},
-   * {@code <message/>} and {@code <presence/>} only. The stream will not emits
+   * Gets a stream of inbound XMPP stanzas. The stream will not emits
    * any errors but will emit a completion after this class is disposed of.
    */
   @NonNull
-  Observable<Document> getInboundStanzaStream();
-
-  /**
-   * Gets the logging manager.
-   */
-  @NonNull
-  LoggingManager getLoggingManager();
+  Observable<Stanza> getInboundStanzaStream();
 
   /**
    * Gets the plugin manager.
@@ -397,19 +358,20 @@ public interface Session {
    * @return Empty {@link Set} if no features is enabled currently.
    */
   @NonNull
-  Set<String> getFeatures();
+  Set<String> getDiscoFeatures();
 
   /**
    * Gets the preferred {@link Locale}s. Some properties of or
    * results queried from XMPP peers are human-readable texts and therefore may
    * have multiple localized versions. For example, the "category" and "type" of
    * an {@link chat.viska.xmpp.DiscoInfo.Identity} returned by a feature query
-   * in <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
+   * in <a href="https://xmpp.org/extensions/xep-0030.html">Service
    * Discovery</a>. In this case, only the result matched by the preferred
    * {@link Locale}s is returned to the method caller.
+   * @return Unmodifiable list.
    */
   @NonNull
-  Locale[] getLocales();
+  List<Locale> getLocales();
 
   /**
    * Sets the preferred locales. It can be set even while the session is up and
@@ -422,7 +384,11 @@ public interface Session {
   void setLocales(Locale... locales);
 
   @NonNull
-  String[] getSaslMechanisms();
+  List<String> getSaslMechanisms();
 
-  void setSaslMechanisms(String... mechanisms);
+  /**
+   * Indicates whether <a href="https://xmpp.org/extensions/xep-0198.html">Stream
+   * Management</a> is enabled.
+   */
+  boolean isStreamManagementEnabled();
 }

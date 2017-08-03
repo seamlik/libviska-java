@@ -14,22 +14,20 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp;
+package chat.viska.commons;
 
-public class HandshakeException extends Exception {
+import io.reactivex.annotations.NonNull;
 
-  public HandshakeException() {
+public class EnumUtils {
+
+  public static <T extends Enum<T>> T
+  fromXmlValue(@NonNull final Class<T> type,
+               @NonNull final String value) throws IllegalArgumentException {
+    return Enum.valueOf(type, value.replace('-', '_').toUpperCase());
   }
 
-  public HandshakeException(String message) {
-    super(message);
-  }
-
-  public HandshakeException(String message, Throwable cause) {
-    super(message, cause);
-  }
-
-  public HandshakeException(Throwable cause) {
-    super(cause);
+  public static <T extends Enum<T>> String
+  toXmlValue(@NonNull final T value) {
+    return value.name().replace('_', '-').toLowerCase();
   }
 }

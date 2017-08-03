@@ -18,9 +18,8 @@ package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -29,29 +28,31 @@ import java.util.Set;
  */
 public class PluginManager implements SessionAware {
 
-  private final DefaultSession session;
-  private final List<Plugin> appliedPlugins = new ArrayList<>();
+  private final Session session;
+  private final Set<Plugin> plugins = new HashSet<>();
 
   PluginManager(final @NonNull DefaultSession session) {
     this.session = session;
+    apply(BasePlugin.class);
   }
 
   /**
    * Applies a {@link Plugin}. This method does nothing if the plugin
    * has already been applied.
    */
-  public void apply(final @NonNull Class<? extends Plugin> type) {
+  public void apply(final @NonNull Class<? extends Plugin> type)
+      throws IllegalArgumentException {
     Objects.requireNonNull(type);
     if (getPlugin(type) != null) {
       return;
     }
     final Plugin plugin;
     try {
-      plugin = type.getConstructor(DefaultSession.class).newInstance(session);
+      plugin = type.getConstructor(Session.class).newInstance(session);
     } catch (Exception ex) {
-      throw new PluginUnappliableException(ex);
+      throw new IllegalArgumentException(ex);
     }
-    appliedPlugins.add(plugin);
+    plugins.add(plugin);
   }
 
   /**
@@ -60,7 +61,7 @@ public class PluginManager implements SessionAware {
    */
   @Nullable
   public Plugin getPlugin(Class<? extends Plugin> type) {
-    for (Plugin plugin : appliedPlugins) {
+    for (Plugin plugin : plugins) {
       if (type.isInstance(plugin)) {
         return plugin;
       }
@@ -68,25 +69,14 @@ public class PluginManager implements SessionAware {
     return null;
   }
 
-  /**
-   * Gets a {@link Set} of features enabled by all plugins and the session. This
-   * method is part of
-   * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
-   * Discovery</a>.
-   * @return Empty {@link Set} if no feature is enabled.
-   */
   @NonNull
-  public Set<String> getAllFeatures() {
-    final Set<String> features = new HashSet<>(session.getFeatures());
-    for (Plugin plugin : appliedPlugins) {
-      features.addAll(plugin.getFeatures());
-    }
-    return features;
+  public Set<Plugin> getPlugins() {
+    return Collections.unmodifiableSet(plugins);
   }
 
   @Override
   @NonNull
-  public DefaultSession getSession() {
+  public Session getSession() {
     return session;
   }
 }

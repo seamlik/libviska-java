@@ -174,7 +174,7 @@ public class ScramMechanism {
 
   public byte[] hi(byte[] data, byte[] salt, int iteration) throws InvalidKeyException {
     if (iteration < 1) {
-      throw new IllegalArgumentException();
+      throw new IllegalArgumentException("`iteration` less than 0.");
     }
     hmac.init(new SecretKeySpec(data, hmac.getAlgorithm()));
     byte[] raw = new byte[salt.length + 4];

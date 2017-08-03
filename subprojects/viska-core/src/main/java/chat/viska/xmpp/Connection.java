@@ -308,7 +308,7 @@ public class Connection {
     this.scheme = scheme;
     final String domainTrimmed = domain == null ? "" : domain.trim();
     if (domainTrimmed.isEmpty()) {
-      throw new IllegalArgumentException();
+      throw new IllegalArgumentException("`domain` is absent.");
     }
     this.domain = domainTrimmed;
     this.port = port;
@@ -341,7 +341,7 @@ public class Connection {
     path = "";
   }
 
-  public Connection(@NonNull Protocol protocol, @NonNull URI uri) {
+  public Connection(@NonNull final Protocol protocol, @NonNull final URI uri) {
     this(protocol, uri.getScheme(), uri.getHost(), uri.getPort(), uri.getPath());
   }
 
@@ -398,28 +398,5 @@ public class Connection {
     } catch (URISyntaxException ex) {
       throw new RuntimeException(ex);
     }
-  }
-
-  public @NonNull
-  Connection toTlsEnabled(final @Nullable Boolean enableStartTls) {
-    if (isTlsEnabled()) {
-      return this;
-    }
-    if (protocol == Protocol.TCP) {
-      Objects.requireNonNull(enableStartTls);
-      return new Connection(domain, port, tlsEnabled, enableStartTls);
-    }
-    final String secureScheme;
-    switch (scheme.toLowerCase()) {
-      case "http":
-        secureScheme = "https";
-        break;
-      case "ws":
-        secureScheme = "wss";
-        break;
-      default:
-        return this;
-    }
-    return new Connection(protocol, secureScheme, domain, port, path);
   }
 }

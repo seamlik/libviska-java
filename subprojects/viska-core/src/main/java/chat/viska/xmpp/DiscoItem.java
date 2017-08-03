@@ -60,8 +60,8 @@ public class DiscoItem {
       return false;
     }
     DiscoItem discoItem = (DiscoItem) obj;
-    return Objects.equals(jid, discoItem.jid) &&
-        Objects.equals(name, discoItem.name);
+    return Objects.equals(jid, discoItem.jid)
+        && Objects.equals(name, discoItem.name);
   }
 
   @Override

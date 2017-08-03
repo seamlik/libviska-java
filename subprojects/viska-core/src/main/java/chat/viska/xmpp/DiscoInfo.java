@@ -18,8 +18,8 @@ package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
-import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -36,14 +36,32 @@ public class DiscoInfo {
    */
   public static class Identity {
 
-    private final String category;
+    public enum Category {
+      ACCOUNT,
+      AUTH,
+      AUTOMATION,
+      CLIENT,
+      COLLABORATION,
+      COMPONENT,
+      CONFERENCE,
+      DIRECTORY,
+      GATEWAY,
+      HEADLNE,
+      HIERARCHY,
+      PROXY,
+      PUBSUB,
+      SERVER,
+      STORE
+    }
+
+    private final Category category;
     private final String type;
     private final String name;
 
-    public Identity(final @Nullable String category,
-                    final @Nullable String type,
-                    final @Nullable String name) {
-      this.category = category == null ? "" : category;
+    public Identity(@Nullable final Category category,
+                    @Nullable final String type,
+                    @Nullable final String name) {
+      this.category = category;
       this.type = type == null ? "" : type;
       this.name = name == null ? "" : name;
     }
@@ -52,7 +70,7 @@ public class DiscoInfo {
      * Gets the category.
      */
     @NonNull
-    public String getCategory() {
+    public Category getCategory() {
       return category;
     }
 
@@ -81,9 +99,9 @@ public class DiscoInfo {
         return false;
       }
       Identity identity = (Identity) obj;
-      return Objects.equals(category, identity.category) &&
-          Objects.equals(type, identity.type) &&
-          Objects.equals(name, identity.name);
+      return Objects.equals(category, identity.category)
+          && Objects.equals(type, identity.type)
+          && Objects.equals(name, identity.name);
     }
 
     @Override
@@ -95,48 +113,35 @@ public class DiscoInfo {
   private final Set<Identity> identities;
   private final Set<String> features;
 
-  public DiscoInfo(final @Nullable Collection<Identity> identities,
-                   final @Nullable Collection<String> features) {
-    if (identities == null) {
-      this.identities = new HashSet<>(0);
-    } else {
-      this.identities = new HashSet<>(identities);
-    }
-    if (features == null) {
-      this.features = new HashSet<>(0);
-    } else {
-      this.features = new HashSet<>(features);
-    }
-  }
-
-  public DiscoInfo(final @Nullable Identity[] identities,
-                   final @Nullable String[] features) {
-    if (identities == null) {
-      this.identities = new HashSet<>(0);
-    } else {
-      this.identities = new HashSet<>(Arrays.asList(identities));
-    }
-    if (features == null) {
-      this.features = new HashSet<>(0);
-    } else {
-      this.features = new HashSet<>(Arrays.asList(features));
-    }
+  /**
+   * Default constructor.
+   */
+  public DiscoInfo(@Nullable final Collection<Identity> identities,
+                   @Nullable final Collection<String> features) {
+    this.identities = identities == null
+        ? Collections.emptySet()
+        : new HashSet<>(identities);
+    this.features = features == null
+        ? Collections.emptySet()
+        : new HashSet<>(features);
   }
 
   /**
    * Gets the identities.
+   * @return Unmodifiable set.
    */
   @NonNull
   public Set<Identity> getIdentities() {
-    return new HashSet<>(identities);
+    return Collections.unmodifiableSet(identities);
   }
 
   /**
    * Gets the features.
+   * @return Unmodifiable set.
    */
   @NonNull
   public Set<String> getFeatures() {
-    return new HashSet<>(features);
+    return Collections.unmodifiableSet(features);
   }
 
   @Override
@@ -148,8 +153,8 @@ public class DiscoInfo {
       return false;
     }
     DiscoInfo that = (DiscoInfo) obj;
-    return Objects.equals(identities, that.identities) &&
-        Objects.equals(features, that.features);
+    return Objects.equals(identities, that.identities)
+        && Objects.equals(features, that.features);
   }
 
   @Override

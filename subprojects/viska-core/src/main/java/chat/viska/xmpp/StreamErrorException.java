@@ -16,10 +16,10 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.EnumUtils;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.Objects;
-import org.apache.commons.lang3.Validate;
 
 /**
  * Indicates a stream error has occurred.
@@ -115,7 +115,7 @@ public class StreamErrorException extends Exception {
 
     /**
      * Indicates the server is unable to properly connect to a remote entity
-     * that is needed for authentication or authorization
+     * that is needed for authentication or authorization.
      */
     REMOTE_CONNECTION_FAILED,
 
@@ -210,6 +210,7 @@ public class StreamErrorException extends Exception {
   private final Condition condition;
 
   public StreamErrorException(final @NonNull Condition condition) {
+    super("[" + EnumUtils.toXmlValue(condition) + "]");
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
@@ -217,21 +218,21 @@ public class StreamErrorException extends Exception {
   public StreamErrorException(@NonNull final Condition condition,
                               @NonNull final String text,
                               @NonNull final Throwable throwable) {
-    super(text, throwable);
+    super("[" + EnumUtils.toXmlValue(condition) + "]" + text, throwable);
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
 
   public StreamErrorException(@NonNull final Condition condition,
                               @NonNull final Throwable throwable) {
-    super(throwable);
+    super("[" + EnumUtils.toXmlValue(condition) + "]", throwable);
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
 
   public StreamErrorException(@NonNull final Condition condition,
                               @NonNull final String text) {
-    super(text);
+    super("[" + EnumUtils.toXmlValue(condition) + "]" + text);
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }

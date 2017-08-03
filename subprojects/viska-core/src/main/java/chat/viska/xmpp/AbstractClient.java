@@ -32,16 +32,6 @@ public abstract class AbstractClient extends AbstractEntity {
   }
 
   /**
-   * Queries information of the XMPP client software. This method is part of
-   * <a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software
-   * Version</a>.
-   * @return {@link Future} tracking the completion status of this method and
-   *         providing a way to cancel it.
-   */
-  @NonNull
-  public abstract Future<SoftwareInfo> querySoftwareVersion();
-
-  /**
    * Gets the {@link Account} logged in to this {@link AbstractClient}.
    */
   @NonNull

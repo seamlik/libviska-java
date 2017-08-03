@@ -17,19 +17,11 @@
 package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
-import java.util.concurrent.Future;
-import org.apache.commons.lang3.Validate;
 
 public class RemoteClient extends AbstractClient {
 
   RemoteClient(@NonNull final Session session,
                @NonNull final Jid jid) {
     super(session, jid);
-  }
-
-  @Override
-  @NonNull
-  public Future<SoftwareInfo> querySoftwareVersion() {
-    throw new UnsupportedOperationException();
   }
 }

@@ -1,6 +1,5 @@
 *.class
 *.iml
-*.jar
 .idea/
 /.gradle/
 /config/checkstyle/checkstyle.xml
@@ -8,3 +7,4 @@
 /gradlew
 /gradlew.bat
 build/
+out/

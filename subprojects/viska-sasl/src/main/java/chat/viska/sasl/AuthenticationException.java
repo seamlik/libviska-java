@@ -37,18 +37,23 @@ public class AuthenticationException extends Exception {
     MALFORMED_REQUEST,
     MECHANISM_TOO_WEEK,
     SERVER_NOT_AUTHORIZED,
-    TEPORARY_AUTH_FAILURE
+    TEPORARY_AUTH_FAILURE;
+
+    @Override
+    public String toString() {
+      return name().replace('_', '-').toLowerCase();
+    }
   }
 
   private final Condition condition;
 
-  public AuthenticationException(Condition condition) {
-    Objects.requireNonNull(condition, "`condition` is absent.");
+  public AuthenticationException(final Condition condition) {
+    super("[" + condition.toString() + "]");
     this.condition = condition;
   }
 
-  public AuthenticationException(Condition condition, String text) {
-    super(text);
+  public AuthenticationException(final Condition condition, final String text) {
+    super("[" + condition.toString() + "]" + text);
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
@@ -56,13 +61,13 @@ public class AuthenticationException extends Exception {
   public AuthenticationException(Condition condition,
                                  String text,
                                  Throwable throwable) {
-    super(text, throwable);
+    super("[" + condition.toString() + "]" + text, throwable);
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
 
   public AuthenticationException(Condition condition, Throwable throwable) {
-    super(throwable);
+    super("[" + condition.toString() + "]", throwable);
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }

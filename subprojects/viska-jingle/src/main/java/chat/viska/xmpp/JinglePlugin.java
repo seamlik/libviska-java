@@ -51,7 +51,7 @@ public class JinglePlugin implements Plugin {
   }
 
   @Override
-  public Set<String> getFeatures() {
+  public Set<String> getDiscoFeatures() {
     Set<String> features = new HashSet<>();
     //features.add(JingleInfoQuery.Jingle.XMLNS);
     return features;
