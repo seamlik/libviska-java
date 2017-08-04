@@ -19,10 +19,14 @@ package chat.viska.sasl;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import javax.crypto.Mac;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import org.apache.commons.codec.binary.Base64;
 
@@ -34,20 +38,31 @@ public class ScramMechanism {
   private final MessageDigest hash;
   private final Mac hmac;
   private final String algorithm;
+  private final SecretKeyFactory keyFactory;
 
   public ScramMechanism(final MessageDigest hash,
                         final Mac hmac,
+                        final SecretKeyFactory keyFactory,
                         final String algorithm) {
     Objects.requireNonNull(hash);
     Objects.requireNonNull(hmac);
     this.hash = hash;
     this.hmac = hmac;
+    this.keyFactory = keyFactory;
     this.algorithm = algorithm == null ? "" : algorithm;
   }
 
-  public ScramMechanism(final MessageDigest hash,
-                        final Mac hmac) {
-    this(hash, hmac, null);
+  public ScramMechanism(final String algorithm) throws NoSuchAlgorithmException {
+    Objects.requireNonNull(algorithm, "`algorithm` is absent.");
+    final String hmacAlgorithm = algorithm.startsWith("SHA3")
+        ? "Hmac" + algorithm
+        : "Hmac" + algorithm.replace("-", "");
+    this.algorithm = algorithm;
+    this.hash = MessageDigest.getInstance(algorithm);
+    this.hmac = Mac.getInstance(hmacAlgorithm);
+    this.keyFactory = SecretKeyFactory.getInstance(
+        "PBKDF2With" + hmacAlgorithm
+    );
   }
 
   static String getClientFirstMessageBare(final String username,
@@ -136,8 +151,8 @@ public class ScramMechanism {
 
   byte[] getSaltedPassword(final String password,
                            final byte[] salt,
-                           int iteration) throws InvalidKeyException {
-    return hi(password.getBytes(StandardCharsets.UTF_8), salt, iteration);
+                           int iteration) throws InvalidKeySpecException {
+    return hi(password, salt, iteration);
   }
 
   byte[] getClientKey(final byte[] saltedPassword)
@@ -169,23 +184,19 @@ public class ScramMechanism {
   }
 
   public String getAlgorithm() {
-    return algorithm.isEmpty() ? hash.getAlgorithm() : algorithm;
+    return algorithm;
   }
 
-  public byte[] hi(byte[] data, byte[] salt, int iteration) throws InvalidKeyException {
-    if (iteration < 1) {
-      throw new IllegalArgumentException("`iteration` less than 0.");
-    }
-    hmac.init(new SecretKeySpec(data, hmac.getAlgorithm()));
-    byte[] raw = new byte[salt.length + 4];
-    raw[raw.length - 1] = 1;
-    byte[] rawNext = hmac.doFinal(raw);
-    byte[] result = rawNext;
-    for (int it = 2; it <= iteration; ++it) {
-      raw = rawNext;
-      rawNext = hmac.doFinal(raw);
-      result = Bytes.xor(result, rawNext);
-    }
-    return result;
+  public byte[] hi(final String password,
+                   final byte[] salt,
+                   final int iteration) throws InvalidKeySpecException {
+    return keyFactory
+        .generateSecret(
+            new PBEKeySpec(password.toCharArray(),
+                salt,
+                iteration,
+                hmac.getMacLength()
+            ))
+        .getEncoded();
   }
 }

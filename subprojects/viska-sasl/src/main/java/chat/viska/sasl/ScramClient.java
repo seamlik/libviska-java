@@ -286,17 +286,26 @@ public class ScramClient implements Client {
     }
   }
 
+  /**
+   * Default constructor.
+   * @param scram Required.
+   * @param authnId Authentication ID, required.
+   * @param authzId Authorization ID, optional.
+   * @param retriever Required.
+   * @throws NullPointerException If any required parameters are {@code null}.
+   * @throws IllegalArgumentException If {@code authnId} is empty.
+   */
   public ScramClient(final ScramMechanism scram,
                      final String authnId,
                      final String authzId,
                      final CredentialRetriever retriever) {
     this.scram = scram;
-    this.username = authnId;
+    this.username = authnId == null ? "" : authnId;
     this.authzId = authzId == null ? "" : authzId;
     this.retriever = retriever;
 
-    Objects.requireNonNull(scram);
-    Objects.requireNonNull(retriever);
+    Objects.requireNonNull(scram, "`scram` is absent.");
+    Objects.requireNonNull(retriever, "`retriever` is absent.");
     if (this.username.isEmpty()) {
       throw new IllegalArgumentException("`authnId` is absent.");
     }

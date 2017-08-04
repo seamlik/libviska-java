@@ -19,7 +19,7 @@ buildscript {
     jcenter()
   }
   dependencies {
-    classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0-M5'
+    classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0-RC1'
   }
 }
 
@@ -43,8 +43,8 @@ subprojects {
   }
 
   dependencies {
-    testCompile("org.junit.jupiter:junit-jupiter-api:5.0.0-M5")
-    testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.0-M5")
+    testCompile("org.junit.jupiter:junit-jupiter-api:5.0.0-RC1")
+    testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.0-RC1")
   }
 
   checkstyle {

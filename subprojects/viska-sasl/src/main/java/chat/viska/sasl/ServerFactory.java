@@ -26,19 +26,19 @@ public class ServerFactory {
     switch (mechanism) {
       case "SCRAM-SHA-1":
         try {
-          return new ScramSha1Server(retriever);
+          return new ScramServer(new ScramMechanism("SHA-1"), retriever);
         } catch (NoSuchAlgorithmException ex) {
           return null;
         }
       case "SCRAM-SHA-256":
         try {
-          return new ScramSha256Server(retriever);
+          return new ScramServer(new ScramMechanism("SHA-256"), retriever);
         } catch (NoSuchAlgorithmException ex) {
           return null;
         }
       case "SCRAM-SHA-512":
         try {
-          return new ScramSha512Server(retriever);
+          return new ScramServer(new ScramMechanism("SHA-512"), retriever);
         } catch (NoSuchAlgorithmException ex) {
           return null;
         }

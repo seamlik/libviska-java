@@ -18,10 +18,14 @@ package chat.viska.sasl;
 
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+/**
+ * Factory to instantiate {@link Client}s from
+ * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> Mechanism names.
+ */
 public class ClientFactory {
 
   private final List<String> mechanisms;
@@ -33,19 +37,34 @@ public class ClientFactory {
     switch (mechanism) {
       case "SCRAM-SHA-1":
         try {
-          return new ScramSha1Client(authnId, authzId, retriever);
+          return new ScramClient(
+              new ScramMechanism("SHA-1"),
+              authnId,
+              authzId,
+              retriever
+          );
         } catch (NoSuchAlgorithmException ex) {
           return null;
         }
       case "SCRAM-SHA-256":
         try {
-          return new ScramSha256Client(authnId, authzId, retriever);
+          return new ScramClient(
+              new ScramMechanism("SHA-256"),
+              authnId,
+              authzId,
+              retriever
+          );
         } catch (NoSuchAlgorithmException ex) {
           return null;
         }
       case "SCRAM-SHA-512":
         try {
-          return new ScramSha512Client(authnId, authzId, retriever);
+          return new ScramClient(
+              new ScramMechanism("SHA-512"),
+              authnId,
+              authzId,
+              retriever
+          );
         } catch (NoSuchAlgorithmException ex) {
           return null;
         }

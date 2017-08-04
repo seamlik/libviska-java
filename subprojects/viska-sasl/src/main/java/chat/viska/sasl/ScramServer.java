@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -96,7 +97,7 @@ public class ScramServer implements Server {
   }
 
   private void generateSaltedPassword()
-      throws IOException, AbortedException, AuthenticationException, InvalidKeyException {
+      throws IOException, AbortedException, AuthenticationException, InvalidKeySpecException {
     final String password = (String) retriever.retrieve(
         username, getMechanism(), "password"
     );
@@ -349,7 +350,9 @@ public class ScramServer implements Server {
           return getResult().getBytes(StandardCharsets.UTF_8);
         }
       default:
-        throw new IllegalStateException("Not about to challenge.");
+        throw new IllegalStateException(
+            "Must not challenge before accepting a response."
+        );
     }
   }
 
@@ -365,7 +368,9 @@ public class ScramServer implements Server {
         state = State.FINAL_RESPONSE_RECEIVED;
         break;
       default:
-        throw new IllegalStateException();
+        throw new IllegalStateException(
+            "Must not accept another response before challenging."
+        );
     }
   }
 

@@ -28,10 +28,12 @@ public class ScramTest {
     final Map<String, String> properties = new HashMap<>();
     properties.put("username", "user");
     properties.put("password", "pencil");
-    final ScramSha1Server server = new ScramSha1Server(
+    final Server server = new ScramServer(
+        new ScramMechanism("SHA-512"),
         (authnId, mechanism, key) -> properties.get(key)
     );
-    final ScramSha1Client client = new ScramSha1Client(
+    final Client client = new ScramClient(
+        new ScramMechanism("SHA-512"),
         "user",
         "viska",
         (authnId, mechanism, key) -> properties.get(key)
@@ -42,11 +44,13 @@ public class ScramTest {
     }
     while (true) {
       final byte[] challenge = server.challenge();
+      Assertions.assertNotNull(challenge);
       client.acceptChallenge(challenge);
       if (client.isCompleted() && server.isCompleted()) {
         break;
       }
       final byte[] response = client.respond();
+      Assertions.assertNotNull(response);
       server.acceptResponse(response);
       if (client.isCompleted() && server.isCompleted()) {
         break;
