@@ -16,13 +16,14 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.EnumUtils;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
+import org.w3c.dom.Element;
 
 /**
  * Result of a service discovery query. This class is part of
@@ -36,32 +37,23 @@ public class DiscoInfo {
    */
   public static class Identity {
 
-    public enum Category {
-      ACCOUNT,
-      AUTH,
-      AUTOMATION,
-      CLIENT,
-      COLLABORATION,
-      COMPONENT,
-      CONFERENCE,
-      DIRECTORY,
-      GATEWAY,
-      HEADLNE,
-      HIERARCHY,
-      PROXY,
-      PUBSUB,
-      SERVER,
-      STORE
-    }
-
-    private final Category category;
+    private final String category;
     private final String type;
     private final String name;
 
-    public Identity(@Nullable final Category category,
+    public static Identity fromXml(@NonNull final Element xml) {
+      final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#info";
+      return new Identity(
+          xml.getAttribute("category"),
+          xml.getAttribute("type"),
+          xml.getAttribute("name")
+      );
+    }
+
+    public Identity(@Nullable final String category,
                     @Nullable final String type,
                     @Nullable final String name) {
-      this.category = category;
+      this.category = category == null ? "" : category;
       this.type = type == null ? "" : type;
       this.name = name == null ? "" : name;
     }
@@ -70,7 +62,7 @@ public class DiscoInfo {
      * Gets the category.
      */
     @NonNull
-    public Category getCategory() {
+    public String getCategory() {
       return category;
     }
 
@@ -108,6 +100,17 @@ public class DiscoInfo {
     public int hashCode() {
       return Objects.hash(category, type, name);
     }
+
+    @Override
+    @NonNull
+    public String toString() {
+      return String.format(
+          "Category: %1s, Type: %2s, Name: %3s",
+          category,
+          type,
+          name
+      );
+    }
   }
 
   private final Set<Identity> identities;
@@ -116,8 +119,8 @@ public class DiscoInfo {
   /**
    * Default constructor.
    */
-  public DiscoInfo(@Nullable final Collection<Identity> identities,
-                   @Nullable final Collection<String> features) {
+  public DiscoInfo(@Nullable final Set<Identity> identities,
+                   @Nullable final Set<String> features) {
     this.identities = identities == null
         ? Collections.emptySet()
         : new HashSet<>(identities);

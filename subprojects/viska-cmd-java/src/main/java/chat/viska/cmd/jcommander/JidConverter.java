@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-package chat.viska.commons.pipelines;
+package chat.viska.cmd.jcommander;
 
-import org.junit.jupiter.api.Test;
+import chat.viska.xmpp.Jid;
+import com.beust.jcommander.IStringConverter;
 
-class PipelineTest {
+public class JidConverter implements IStringConverter<Jid> {
 
-  @Test
-  void mainTest() {
-    final Pipeline<Integer, String> pipeline = new Pipeline<>();
+  @Override
+  public Jid convert(String value) {
+    return new Jid(value);
   }
 }

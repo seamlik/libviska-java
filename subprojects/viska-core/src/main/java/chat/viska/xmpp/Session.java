@@ -17,15 +17,13 @@
 package chat.viska.xmpp;
 
 import chat.viska.sasl.CredentialRetriever;
+import io.reactivex.Completable;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
-import java.security.cert.Certificate;
 import java.util.EventObject;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
-import java.util.concurrent.Future;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLSession;
 import org.w3c.dom.Document;
@@ -54,8 +52,7 @@ import org.xml.sax.SAXException;
  *   <li>
  *     Adjust options like:
  *     <ul>
- *       <li>TLS.</li>
- *       <li>Compression.</li>
+ *       <li>SASL Mechanisms.</li>
  *       <li>Preferred locale list.</li>
  *       <li>Device ID, a.k.a. XMPP resource (not recommended).</li>
  *     </ul>
@@ -74,7 +71,8 @@ import org.xml.sax.SAXException;
 public interface Session extends AutoCloseable {
 
   /**
-   * Runtime state of a {@link Session}.
+   * State of a {@link Session}.
+   * //TODO: redraw diagram
    *
    * <h1>State diagram</h1>
    * <pre>{@code
@@ -157,6 +155,9 @@ public interface Session extends AutoCloseable {
     ONLINE
   }
 
+  /**
+   * Indicates the connection is terminated.
+   */
   class ConnectionTerminatedEvent extends EventObject {
 
     public ConnectionTerminatedEvent(@NonNull final Object source) {
@@ -172,7 +173,7 @@ public interface Session extends AutoCloseable {
    *         {@link State#INITIALIZED}.
    */
   @NonNull
-  Future<?> login(@NonNull Jid jid, @NonNull String password);
+  Completable login(@NonNull String password);
 
   /**
    * Starts logging in.
@@ -180,24 +181,12 @@ public interface Session extends AutoCloseable {
    *         way to cancel it.
    */
   @NonNull
-  Future<?> login(@NonNull Jid authnId,
-                     @Nullable Jid authzId,
-                     @NonNull CredentialRetriever retriever,
-                     @Nullable String resource,
-                     boolean registering);
-
-  /**
-   * Starts reconnecting and resuming the XMPP stream.
-   * @return Token to track the completion status of this method and provide a
-   *         way to cancel it.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#DISCONNECTED}.
-   * @throws UnsupportedOperationException If
-   *         <a href="https://xmpp.org/extensions/xep-0198.html"> Stream
-   *         Management</a> is disabled.
-   */
-  @NonNull
-  Future<?> reconnect();
+  Completable login(@NonNull CredentialRetriever retriever,
+                    @Nullable String resource,
+                    boolean registering,
+                    @Nullable Compression connectionCompression,
+                    @Nullable Compression streamCompression,
+                    @Nullable Compression tlsCompression);
 
   /**
    * Starts closing the XMPP stream and the network connection.
@@ -206,7 +195,7 @@ public interface Session extends AutoCloseable {
    * behavior.</p>
    */
   @NonNull
-  Future<?> disconnect();
+  Completable disconnect();
 
   /**
    * Starts shutting down the Session and releasing all system resources.
@@ -215,7 +204,7 @@ public interface Session extends AutoCloseable {
    * behavior.</p>
    */
   @NonNull
-  Future<?> dispose();
+  Completable dispose();
 
   /**
    * Sends an XML stanza to the server. The stanza will not be validated by any
@@ -250,9 +239,9 @@ public interface Session extends AutoCloseable {
   Compression getConnectionCompression();
 
   /**
-   * Gets the TLS level {@link Compression} which is defined in
-   * <a href="https://datatracker.ietf.org/doc/rfc3749">RFC 3749: Transport
-   * Layer Security Protocol Compression Methods</a>.
+   * Gets the
+   * <a href="https://datatracker.ietf.org/doc/rfc3749">TLS level
+   * compression</a>. It is not recommended to use because of security reason.
    * @return {@code null} if no {@link Compression} is used, always {@code null}
    *         if it is not implemented.
    */
@@ -268,34 +257,13 @@ public interface Session extends AutoCloseable {
   Compression getStreamCompression();
 
   /**
-   * Gets the standard name of the cipher suite used in the TLS connection.
-   * @see SSLSession#getCipherSuite()
-   * @return An empty {@link String} if TLS is disabled.
+   * Gets the
+   * <a href="https://en.wikipedia.org/wiki/Transport_Layer_Security">TLS</a>
+   * information of the server connection.
+   * @return {@code null} if the connection is not using TLS.
    */
-  @NonNull
-  String getTlsCipherSuite();
-
-  /**
-   * Gets the name of the TLS protocol used in the connection.
-   * @see SSLSession#getProtocol()
-   * @return An empty {@link String} if TLS is disabled.
-   */
-  @NonNull
-  String getTlsProtocol();
-
-  /**
-   * Gets the {@link Certificate}s sent to the server during TLS handshaking.
-   * @see SSLSession#getLocalCertificates()
-   */
-  @NonNull
-  Certificate[] getTlsLocalCertificates();
-
-  /**
-   * Gets the {@link Certificate}s present by the server.
-   * @see SSLSession#getPeerCertificates()
-   */
-  @NonNull
-  Certificate[] getTlsPeerCertificates();
+  @Nullable
+  SSLSession getTlsSession();
 
   /**
    * Gets the {@link Connection} that is currently using or will be used.
@@ -324,7 +292,7 @@ public interface Session extends AutoCloseable {
   State getState();
 
   /**
-   * Gets the bare JID logged in this session.
+   * Gets the negotiated {@link Jid} after handshake.
    * @return {@code null} if the handshake has not completed yet.
    */
   @Nullable
@@ -339,6 +307,7 @@ public interface Session extends AutoCloseable {
    *
    * <ul>
    *   <li>{@link chat.viska.commons.ExceptionCaughtEvent}</li>
+   *   <li>{@link ConnectionTerminatedEvent}</li>
    *   <li>
    *     {@link java.beans.PropertyChangeEvent}
    *     <ul>
@@ -351,40 +320,23 @@ public interface Session extends AutoCloseable {
   Observable<EventObject> getEventStream();
 
   /**
-   * Gets a {@link Set} of XML namespaces representing XMPP extensions currently
-   * enabled. This method is part of
-   * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
-   * Discovery</a>.
-   * @return Empty {@link Set} if no features is enabled currently.
-   */
-  @NonNull
-  Set<String> getDiscoFeatures();
-
-  /**
-   * Gets the preferred {@link Locale}s. Some properties of or
-   * results queried from XMPP peers are human-readable texts and therefore may
-   * have multiple localized versions. For example, the "category" and "type" of
-   * an {@link chat.viska.xmpp.DiscoInfo.Identity} returned by a feature query
-   * in <a href="https://xmpp.org/extensions/xep-0030.html">Service
-   * Discovery</a>. In this case, only the result matched by the preferred
-   * {@link Locale}s is returned to the method caller.
-   * @return Unmodifiable list.
+   * Gets the preferred {@link Locale}s. It can be modified at anytime including
+   * even when this class is in {@link State#DISPOSED}.
+   *
+   * <p>Some properties of or results queried from XMPP entities are
+   * human-readable texts and therefore may have multiple localized versions.
+   * For example, the {@code category} and {@code type} of an
+   * {@link chat.viska.xmpp.DiscoInfo.Identity}. In this case, only the results
+   * matched with the preferred {@link Locale}s are returned.</p>
+   *
+   * <p>By default it only contains the JVM's system {@link Locale} which is a
+   * single one. On platforms such as Android where users can set multiple
+   * {@link Locale}s, it is required to set this property manually.</p>
+   *
+   * @return Modifiable {@link List}.
    */
   @NonNull
   List<Locale> getLocales();
-
-  /**
-   * Sets the preferred locales. It can be set even while the session is up and
-   * running.
-   *
-   * <p>By default it is set to the JVM's system {@link Locale} which is a
-   * single one. On platforms such as Android Nougat where users can set
-   * multiple {@link Locale}s, it is needed to set this property manually.</p>
-   */
-  void setLocales(Locale... locales);
-
-  @NonNull
-  List<String> getSaslMechanisms();
 
   /**
    * Indicates whether <a href="https://xmpp.org/extensions/xep-0198.html">Stream

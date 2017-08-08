@@ -176,33 +176,22 @@ public class Connection {
     return Observable.range(
         0,
         linkNodes.getLength()
-    ).map(new Function<Integer, Element>() {
-      @Override
-      public Element apply(Integer index) throws Exception {
-        return (Element) linkNodes.item(index);
+    ).map(index -> (Element) linkNodes.item(index)).filter(element -> {
+      final String rel = element.getAttribute("rel");
+      return rel.equals(CommonXmlns.BOSH) || rel.equals(CommonXmlns.WEBSOCKET);
+    }).map(element -> {
+      Protocol protocol = null;
+      switch (element.getAttribute("rel")) {
+        case CommonXmlns.BOSH:
+          protocol = Protocol.BOSH;
+          break;
+        case CommonXmlns.WEBSOCKET:
+          protocol = Protocol.WEBSOCKET;
+          break;
+        default:
+          break;
       }
-    }).filter(new Predicate<Element>() {
-      @Override
-      public boolean test(Element element) throws Exception {
-        final String rel = element.getAttribute("rel");
-        return rel.equals(CommonXmlns.BOSH) || rel.equals(CommonXmlns.WEBSOCKET);
-      }
-    }).map(new Function<Element, Connection>() {
-      @Override
-      public Connection apply(Element element) throws Exception {
-        Protocol protocol = null;
-        switch (element.getAttribute("rel")) {
-          case CommonXmlns.BOSH:
-            protocol = Protocol.BOSH;
-            break;
-          case CommonXmlns.WEBSOCKET:
-            protocol = Protocol.WEBSOCKET;
-            break;
-          default:
-            break;
-        }
-        return new Connection(protocol, new URI(element.getAttribute("href")));
-      }
+      return new Connection(protocol, new URI(element.getAttribute("href")));
     }).toList().blockingGet();
   }
 
@@ -234,40 +223,34 @@ public class Connection {
     Validate.notNull(hostMeta, "`hostMeta` must not be null.");
     return Observable.fromIterable(
         hostMeta.getAsJsonObject().getAsJsonArray("links")
-    ).filter(new Predicate<JsonElement>() {
-      @Override
-      public boolean test(JsonElement element) throws Exception {
-        final String rel = element.getAsJsonObject()
-                                  .getAsJsonPrimitive("rel")
-                                  .getAsString();
-        return rel.equals(CommonXmlns.BOSH) || rel.equals(CommonXmlns.WEBSOCKET);
+    ).filter(element -> {
+      final String rel = element.getAsJsonObject()
+                                .getAsJsonPrimitive("rel")
+                                .getAsString();
+      return rel.equals(CommonXmlns.BOSH) || rel.equals(CommonXmlns.WEBSOCKET);
+    }).map(element -> {
+      Protocol protocol = null;
+      final String rel = element.getAsJsonObject()
+                                .getAsJsonPrimitive("rel")
+                                .getAsString();
+      switch (rel) {
+        case CommonXmlns.BOSH:
+          protocol = Protocol.BOSH;
+          break;
+        case CommonXmlns.WEBSOCKET:
+          protocol = Protocol.WEBSOCKET;
+          break;
+        default:
+          break;
       }
-    }).map(new Function<JsonElement, Connection>() {
-      @Override
-      public Connection apply(JsonElement element) throws Exception {
-        Protocol protocol = null;
-        final String rel = element.getAsJsonObject()
-                                  .getAsJsonPrimitive("rel")
-                                  .getAsString();
-        switch (rel) {
-          case CommonXmlns.BOSH:
-            protocol = Protocol.BOSH;
-            break;
-          case CommonXmlns.WEBSOCKET:
-            protocol = Protocol.WEBSOCKET;
-            break;
-          default:
-            break;
-        }
-        return new Connection(
-            protocol,
-            new URI(
-                element.getAsJsonObject()
-                       .getAsJsonPrimitive("href")
-                       .getAsString()
-            )
-        );
-      }
+      return new Connection(
+          protocol,
+          new URI(
+              element.getAsJsonObject()
+                     .getAsJsonPrimitive("href")
+                     .getAsString()
+          )
+      );
     }).toList().blockingGet();
   }
 

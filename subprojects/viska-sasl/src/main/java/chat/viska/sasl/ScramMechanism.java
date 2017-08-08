@@ -195,7 +195,7 @@ public class ScramMechanism {
             new PBEKeySpec(password.toCharArray(),
                 salt,
                 iteration,
-                hmac.getMacLength()
+                hmac.getMacLength() * 8
             ))
         .getEncoded();
   }

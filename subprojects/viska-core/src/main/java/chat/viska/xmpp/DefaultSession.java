@@ -21,28 +21,25 @@ import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipe;
 import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.sasl.CredentialRetriever;
+import io.reactivex.Completable;
 import io.reactivex.Observable;
 import io.reactivex.Single;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
+import io.reactivex.functions.Action;
 import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
 import java.beans.PropertyChangeEvent;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.EventObject;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.xml.parsers.DocumentBuilder;
@@ -59,31 +56,27 @@ import org.xml.sax.SAXException;
  * <p>This class does not support stream level compression.</p>
  */
 public abstract class DefaultSession implements Session {
-
-  private static final String[] DEFAULT_SASL_MECHANISMS = {
-      "SCRAM-SHA-512",
-      "SCRAM-SHA-256",
-      "SCRAM-SHA-1"
-  };
   private static final Compression DEFAULT_STREAM_COMPRESSION = null;
   private static final Set<Compression> SUPPORTED_STREAM_COMPRESSION = new HashSet<>(0);
+  private static final String PIPE_NAME_COMPRESSION = "compression";
+  private static final String PIPE_NAME_HANDSHAKER = "handshaker";
 
-  private final ExecutorService threadPool = Executors.newCachedThreadPool();
   private final Subject<EventObject> eventStream;
   private final PluginManager pluginManager;
   private final Connection connection;
   private final boolean streamManagementEnabled;
   private final Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
-  private final List<String> saslMechanisms;
   private final Compression streamCompression;
   private final DocumentBuilder domBuilder;
   private final Logger logger = Logger.getLogger(this.getClass().getCanonicalName());
-  private AtomicReference<List<Locale>> locales = new AtomicReference<>(
-      Collections.singletonList(Locale.getDefault())
+  private final List<Locale> locales = new CopyOnWriteArrayList<>(
+      new Locale[] { Locale.getDefault() }
   );
+  private final Object stateLock = new Object();
+  private final Jid jid;
+  private final Jid authzId;
+  private final List<String> saslMechanisms;
   private State state;
-
-  protected static final String PIPE_NAME_HANDSHAKER = "handshaker";
 
   private void log(@NonNull final EventObject event) {
     logger.log(Level.FINE, event.toString());
@@ -97,14 +90,24 @@ public abstract class DefaultSession implements Session {
   }
 
   /**
-   * Sets the current {@link Session.State}. This method also triggers a
-   * {@link PropertyChangeEvent} with the property name {@code State}.
+   * Sets the current {@link Session.State} and triggers a
+   * {@link PropertyChangeEvent} with the property name {@code State}. If the
+   * new {@link Session.State} is {@link Session.State#DISPOSED}, also closes
+   * the event stream.
    */
-  private synchronized void setState(final @NonNull State state) {
+  private void setState(final @NonNull State state) {
     Objects.requireNonNull(state);
-    State oldState = this.state;
-    this.state = state;
-    triggerEvent(new PropertyChangeEvent(this, "State", oldState, state));
+    synchronized (stateLock) {
+      if (state == this.state) {
+        return;
+      }
+      State oldState = this.state;
+      this.state = state;
+      triggerEvent(new PropertyChangeEvent(this, "State", oldState, state));
+      if (state == State.DISPOSED) {
+        this.eventStream.onComplete();
+      }
+    }
   }
 
   /**
@@ -120,13 +123,20 @@ public abstract class DefaultSession implements Session {
    *        {@link Compression#AUTO} to specify the default one or {@code null}
    *        to disable it.
    */
-  protected DefaultSession(@NonNull final Connection connection,
+  protected DefaultSession(@Nullable final Jid jid,
+                           @Nullable final Jid authzId,
+                           @NonNull final Connection connection,
                            final boolean streamManagement,
                            @Nullable final List<String> saslMechanisms,
                            @Nullable final Compression streamCompression) {
     Objects.requireNonNull(connection, "`connection` is absent.");
     this.connection = connection;
     this.streamManagementEnabled = streamManagement;
+    this.jid = jid;
+    this.authzId = authzId;
+    this.saslMechanisms = saslMechanisms == null
+        ? null
+        : new ArrayList<>(saslMechanisms);
 
     // DOM
     final DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
@@ -149,21 +159,13 @@ public abstract class DefaultSession implements Session {
       );
     }
 
-    // SASL
-    this.saslMechanisms = saslMechanisms == null
-        ? Arrays.asList(DEFAULT_SASL_MECHANISMS)
-        : new ArrayList<>(saslMechanisms);
-
     // Event stream
     final Subject<EventObject> unsafeEventStream = PublishSubject.create();
     this.eventStream = unsafeEventStream.toSerialized();
     this.eventStream.subscribe(this::log);
     this.eventStream
         .ofType(ConnectionTerminatedEvent.class)
-        .subscribe(event -> {
-          setState(State.DISCONNECTED);
-          xmlPipeline.stop();
-        });
+        .subscribe(event -> setState(State.DISCONNECTED));
 
     // XML Pipeline
     this.xmlPipeline.getInboundExceptionStream().subscribe(
@@ -172,7 +174,22 @@ public abstract class DefaultSession implements Session {
     this.xmlPipeline.getOutboundExceptionStream().subscribe(
         cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
     );
-    this.xmlPipeline.addAtOutboundEnd(PIPE_NAME_HANDSHAKER, new BlankPipe());
+    this.xmlPipeline.addAtOutboundEnd(PIPE_NAME_COMPRESSION, BlankPipe.getInstance());
+    this.xmlPipeline.addAtOutboundEnd(PIPE_NAME_HANDSHAKER, BlankPipe.getInstance());
+    final Observable<State> stateEvents = this.eventStream
+        .ofType(PropertyChangeEvent.class)
+        .map(PropertyChangeEvent::getNewValue)
+        .ofType(Session.State.class);
+    stateEvents
+        .filter(it -> it == State.CONNECTED)
+        .subscribe(it -> this.xmlPipeline.start());
+    stateEvents
+        .filter(it -> it == State.DISCONNECTED)
+        .subscribe(it -> this.xmlPipeline.stopNow());
+    stateEvents
+        .filter(it -> it == State.DISPOSED)
+        .firstOrError()
+        .subscribe(it -> this.xmlPipeline.dispose());
 
     this.pluginManager = new PluginManager(this);
     setState(State.INITIALIZED);
@@ -186,43 +203,35 @@ public abstract class DefaultSession implements Session {
    * <ul>
    *   <li>Setting up a network connection to the server.</li>
    *   <li>
-   *     Decoding inbound data into {@link Document} and encoding outbound
-   *     {@link Document} into data packets.
+   *     Wiring the network data stream and the XML {@link Pipeline}
+   *     <ul>
+   *       <li>
+   *         Fetch outbound XML data using
+   *         {@link #getXmlPipelineOutboundStream()} and then send them to the
+   *         server.
+   *       </li>
+   *       <li>
+   *         Fetch inbound XML data sent by the server and feed it to
+   *         {@link DefaultSession} using {@link #feedXmlPipeline(Document)}.
+   *       </li>
+   *     </ul>
    *   </li>
-   *   <li>Wiring the network data stream and the XML {@link Pipeline}</li>
    *   <li>
    *     Setting up event handlers for connection errors or connection closing
    *     from the server.
    *   </li>
    * </ul>
    *
-   * <p>This method must be implemented in a single-threaded way and uses
-   * blocked I/O as much as possible as this method will be executed in a new
-   * thread and the method invoking this method is non-blocked. However,
-   * implementations need not perform their own synchronization as it will be
-   * handled by this class.</p>
-   *
-   * @throws ConnectionException If the connection fails be established.
-   * @throws InterruptedException If the thread running executing this method
-   *                              has been interrupted.
+   * Upon the occurrence of an {@link Exception}, this class will invoke
+   * {@link #onClosingConnection()} automatically.
    */
-  protected abstract void onOpeningConnection()
-      throws ConnectionException, InterruptedException;
+  @NonNull
+  protected abstract Completable onOpeningConnection();
 
   /**
    * Invoked when the user is actively closing the connection.
-   *
-   * <p>This method must be implemented in a single-threaded way and uses
-   * blocked I/O as much as possible as this method will be executed in a new
-   * thread and the method invoking this method is non-blocked. However,
-   * implementations need not perform their own synchronization as it will be
-   * handled by this class.</p>
-   *
-   * <p>This method is not invoked when the server is actively closing the
-   * connection. The logic for this situation must be implemented as an event
-   * handler.</p>
    */
-  protected abstract void onClosingConnection() throws InterruptedException;
+  protected abstract Completable onClosingConnection();
 
   /**
    * Triggers an {@link EventObject}.
@@ -232,196 +241,179 @@ public abstract class DefaultSession implements Session {
     eventStream.onNext(event);
   }
 
-  /**
-   * Gets the XML processing pipeline. This is where {@link Document}s are
-   * processed in a series of linearly ordered {@link Pipe}s, also the only
-   * place where {@link Document}s are allowed to be modified.
-   *
-   * <p>Below are {@link Pipe}s pre-installed in this {@link Pipeline} :</p>
-   *
-   * <ol>
-   *   <li>[Outbound end]</li>
-   *   <li>{@link #PIPE_NAME_HANDSHAKER} ({@link HandshakerPipe})</li>
-   *   <li>[Inbound end]</li>
-   * </ol>
-   *
-   * <p>Implementations may add its own {@link Pipe}s but must not remove any
-   * pre-installed ones.</p>
-   */
-  @NonNull
-  protected Pipeline<Document, Document> getXmlPipeline() {
-    return xmlPipeline;
+  protected Observable<Document> getXmlPipelineOutboundStream() {
+    return xmlPipeline.getOutboundStream();
+  }
+
+  protected void feedXmlPipeline(@NonNull final Document document) {
+    xmlPipeline.read(document);
   }
 
   @Override
   @NonNull
-  public synchronized Future<?> login(@NonNull final Jid jid,
-                                      @NonNull final String password) {
-    Objects.requireNonNull(jid, "`jid` is absent.");
+  public Completable login(@NonNull final String password) {
     Validate.notEmpty(password, "`password` is absent.");
     final CredentialRetriever retriever = (authnId, mechanism, key) -> {
-      if (jid.getLocalPart().equals(authnId) && "password".equals(key)) {
+      if (this.jid.getLocalPart().equals(authnId) && "password".equals(key)) {
         return password;
       } else {
         return null;
       }
     };
-    return login(jid, null, retriever, null, false);
+    return login(
+        retriever,
+        null,
+        false,
+        Compression.AUTO,
+        this.connection.getProtocol() == Connection.Protocol.TCP
+            ? Compression.AUTO
+            : null,
+        null
+    );
   }
 
+  // Synchronized for the access of `state`.
   @Override
   @NonNull
-  public Future<?> login(@NonNull final Jid authnId,
-                         @Nullable final Jid authzId,
-                         @NonNull final CredentialRetriever retriever,
-                         @Nullable final String resource,
-                         final boolean registering) {
-    Objects.requireNonNull(authnId, "`authnId` is absent.");
+  public Completable login(@NonNull final CredentialRetriever retriever,
+                           @Nullable final String resource,
+                           final boolean registering,
+                           @Nullable Compression connectionCompression,
+                           @Nullable Compression streamCompression,
+                           @Nullable Compression tlsCompression) {
     Objects.requireNonNull(retriever, "`retriever` is absent.");
-    return threadPool.submit(() -> {
-      if (state != State.INITIALIZED) {
-        throw new IllegalStateException("Cannot login if not in INITIALIZED.");
+
+    synchronized (this.stateLock) {
+      switch (this.state) {
+        case DISPOSED:
+          throw new IllegalStateException("Session disposed.");
+        case INITIALIZED:
+          break;
+        case DISCONNECTED:
+          break;
+        default:
+          throw new IllegalStateException("Must not login while " + state.toString());
       }
       setState(State.CONNECTING);
-      final HandshakerPipe handshakerPipe = new HandshakerPipe(
-          this,
-          authnId,
-          authzId,
-          retriever,
-          resource,
-          registering
-      );
-      handshakerPipe.getEventStream().subscribe(this::log);
-      this.xmlPipeline.replace("handshaker", handshakerPipe);
-      try {
-        onOpeningConnection();
+    }
+
+    final HandshakerPipe handshakerPipe = new HandshakerPipe(
+        this,
+        this.jid,
+        this.authzId,
+        retriever,
+        this.saslMechanisms,
+        resource,
+        registering
+    );
+    handshakerPipe.getEventStream().subscribe(this::log);
+    this.xmlPipeline.replace("handshaker", handshakerPipe);
+    final Single<HandshakerPipe.State> handshakeFinalState = handshakerPipe
+        .getEventStream()
+        .ofType(PropertyChangeEvent.class)
+        .filter(event -> {
+          final boolean isCompleted = event.getNewValue() == HandshakerPipe.State.COMPLETED;
+          final boolean isClosed = event.getNewValue() == HandshakerPipe.State.STREAM_CLOSED;
+          return isCompleted || isClosed;
+        })
+        .map(it -> (HandshakerPipe.State) it.getNewValue())
+        .firstOrError();
+
+    return Completable.fromSingle(onOpeningConnection().doOnComplete(() -> {
+      synchronized (this.stateLock) {
         setState(State.CONNECTED);
-        final Single<HandshakerPipe.State> handshakeTerminatedState = handshakerPipe
-            .getEventStream()
-            .ofType(PropertyChangeEvent.class)
-            .filter(event -> {
-              final boolean isCompleted = event.getNewValue() == HandshakerPipe.State.COMPLETED;
-              final boolean isClosed = event.getNewValue() == HandshakerPipe.State.STREAM_CLOSED;
-              return isCompleted || isClosed;
-            })
-            .map(event -> (HandshakerPipe.State) event.getNewValue())
-            .firstOrError();
         setState(State.HANDSHAKING);
-        xmlPipeline.start();
-        if (handshakeTerminatedState.blockingGet() == HandshakerPipe.State.COMPLETED) {
-          setState(State.ONLINE);
-        } else if (handshakerPipe.getHandshakeError() != null) {
-          throw handshakerPipe.getHandshakeError();
-        } else if (handshakerPipe.getServerStreamError() != null) {
-          throw handshakerPipe.getServerStreamError();
-        } else if (handshakerPipe.getClientStreamError() != null) {
-          throw handshakerPipe.getClientStreamError();
-        } else {
-          throw new ConnectionException(
-              "Connection unexpectedly terminated."
-          );
-        }
-      } finally {
-        if (state != State.ONLINE) {
-          disconnect();
-        }
       }
-      return null;
-    });
+      this.xmlPipeline.start();
+    }).andThen(handshakeFinalState).doOnSuccess(it -> {
+      if (it == HandshakerPipe.State.COMPLETED) {
+        setState(State.ONLINE);
+      } else if (handshakerPipe.getHandshakeError() != null) {
+        throw handshakerPipe.getHandshakeError();
+      } else if (handshakerPipe.getServerStreamError() != null) {
+        throw handshakerPipe.getServerStreamError();
+      } else if (handshakerPipe.getClientStreamError() != null) {
+        throw handshakerPipe.getClientStreamError();
+      } else {
+        throw new ConnectionException(
+            "Connection unexpectedly terminated."
+        );
+      }
+    })).doOnError(it -> disconnect());
   }
 
   @Override
   @NonNull
-  public Future<?> reconnect() {
-    throw new UnsupportedOperationException("Stream Management support required");
-  }
-
-  @Override
-  @NonNull
-  public Future<?> disconnect() {
-    return threadPool.submit(() -> {
+  public Completable disconnect() {
+    synchronized (this.stateLock) {
       switch (this.state) {
         case DISCONNECTING:
           return eventStream
               .ofType(PropertyChangeEvent.class)
               .filter(event -> event.getNewValue() == State.DISCONNECTED)
-              .blockingFirst();
+              .firstOrError()
+              .toCompletable();
         case DISCONNECTED:
-          return null;
+          return Completable.complete();
         case DISPOSED:
-          return null;
+          return Completable.complete();
         default:
+          setState(State.DISCONNECTING);
           break;
       }
-      setState(State.DISCONNECTING);
-      ((HandshakerPipe) xmlPipeline.get("handshaker")).closeStream();
-      xmlPipeline.dispose();
-      onClosingConnection();
-      return null;
-    });
+    }
+    final HandshakerPipe handshakerPipe = (HandshakerPipe) xmlPipeline.get("handshaker");
+    return handshakerPipe
+        .closeStream()
+        .andThen(onClosingConnection());
   }
 
   @Override
   @NonNull
-  public Future<?> dispose() {
-    return this.threadPool.submit(() -> {
+  public Completable dispose() {
+    final Action action = () -> {
+      setState(State.DISPOSED);
+    };
+    synchronized (this.stateLock) {
       switch (this.state) {
-        case CONNECTING:
-          disconnect().get();
-          break;
-        case CONNECTED:
-          disconnect().get();
-          break;
-        case HANDSHAKING:
-          disconnect().get();
-          break;
-        case ONLINE:
-          disconnect().get();
-          break;
+        case DISPOSED:
+          return Completable.complete();
         case DISCONNECTING:
-          this.eventStream
+          return eventStream
               .ofType(PropertyChangeEvent.class)
               .filter(event -> event.getNewValue() == State.DISCONNECTED)
-              .blockingFirst();
-          break;
-        case DISPOSED:
-          return null;
+              .firstOrError()
+              .toCompletable()
+              .andThen(Completable.fromAction(action));
+        case DISCONNECTED:
+          return Completable.fromAction(action);
         default:
-          break;
+          return disconnect().andThen(Completable.fromAction(action));
       }
-      this.xmlPipeline.dispose();
-      setState(State.DISPOSED);
-      this.eventStream.onComplete();
-      this.threadPool.shutdownNow();
-      return null;
-    });
+    }
   }
 
   @Override
   public void close() throws Exception {
-    dispose().get();
+    dispose().blockingAwait();
   }
 
   @Override
   public void send(@NonNull final Document xml) {
-    if (state == State.DISPOSED) {
-      throw new IllegalStateException("Session disposed.");
-    }
     xmlPipeline.write(xml);
   }
 
   @Override
-  public void send(@NonNull final String xml) throws SAXException {
-    if (state == State.DISPOSED) {
-      throw new IllegalStateException("Session disposed.");
-    }
+  public synchronized void send(@NonNull final String xml) throws SAXException {
     final Document document;
-    try {
-      document = domBuilder.parse(new InputSource(new StringReader(xml)));
-    } catch (IOException ex) {
-      throw new RuntimeException(ex);
+    synchronized (this.domBuilder) {
+      try {
+        document = domBuilder.parse(new InputSource(new StringReader(xml)));
+      } catch (IOException ex) {
+        throw new RuntimeException(ex);
+      }
+      document.normalizeDocument();
     }
-    document.normalizeDocument();
     xmlPipeline.write(document);
   }
 
@@ -476,18 +468,7 @@ public abstract class DefaultSession implements Session {
   @Override
   @NonNull
   public List<Locale> getLocales() {
-    return Collections.unmodifiableList(locales.get());
-  }
-
-  @Override
-  public void setLocales(Locale... locales) {
-    this.locales.set(Arrays.asList(locales));
-  }
-
-  @Override
-  @NonNull
-  public List<String> getSaslMechanisms() {
-    return new ArrayList<>(saslMechanisms);
+    return locales;
   }
 
   @Override

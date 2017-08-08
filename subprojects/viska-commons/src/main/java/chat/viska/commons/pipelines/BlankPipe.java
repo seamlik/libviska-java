@@ -27,6 +27,12 @@ import java.util.List;
 @Shareable
 public class BlankPipe implements Pipe {
 
+  private static final BlankPipe INSTANCE = new BlankPipe();
+
+  public static BlankPipe getInstance() {
+    return INSTANCE;
+  }
+
   @Override
   public void catchInboundException(final Pipeline<?, ?> pipeline,
                                     final Throwable cause)

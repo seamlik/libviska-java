@@ -28,11 +28,17 @@ public class Stanza implements SessionAware {
   /**
    * Stanza type.
    */
-  public static enum Type {
-
+  public enum Type {
     IQ,
     MESSAGE,
     PRESENCE
+  }
+
+  public enum IqType {
+    ERROR,
+    GET,
+    RESULT,
+    SET
   }
 
   private final Session session;
@@ -93,6 +99,14 @@ public class Stanza implements SessionAware {
     return EnumUtils.fromXmlValue(
         Type.class,
         document.getDocumentElement().getLocalName()
+    );
+  }
+
+  @Nullable
+  public IqType getIqType() {
+    return EnumUtils.fromXmlValue(
+        IqType.class,
+        document.getDocumentElement().getAttribute("type")
     );
   }
 

@@ -16,13 +16,20 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.DomUtils;
 import io.reactivex.Maybe;
+import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
+import io.reactivex.annotations.Nullable;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Future;
-import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
 /**
  * XMPP entity.
@@ -40,10 +47,61 @@ public abstract class AbstractEntity implements SessionAware {
     this.jid = jid;
   }
 
-  @NonNull
-  private DiscoInfo consumeDiscoInfo(@NonNull final Document document)
+  @Nullable
+  private DiscoInfo consumeDiscoInfo(@NonNull final Stanza stanza)
       throws StanzaErrorException {
-    throw new UnsupportedOperationException();
+    if (stanza.getIqType() == Stanza.IqType.ERROR) {
+      throw new StanzaErrorException(
+          stanza,
+          StanzaErrorException.Condition.BAD_REQUEST,
+          StanzaErrorException.Type.MODIFY,
+          "No IQ element found.", null,
+          null,
+          null
+      );
+    }
+    final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#info";
+    final Element queryElement = (Element) stanza
+        .getDocument()
+        .getDocumentElement()
+        .getElementsByTagNameNS(xmlns, "query")
+        .item(0);
+    if (queryElement == null) {
+      getSession().send(
+          new StanzaErrorException(
+              stanza,
+              StanzaErrorException.Condition.BAD_REQUEST,
+              StanzaErrorException.Type.MODIFY,
+              "No IQ element found.", null,
+              null,
+              null
+          ).toXml()
+      );
+      return null;
+    }
+    final List<DiscoInfo.Identity> identities = Observable
+        .fromIterable(
+            DomUtils.toList(
+                queryElement.getElementsByTagNameNS(xmlns, "identity")
+            )
+        )
+        .cast(Element.class)
+        .map(DiscoInfo.Identity::fromXml)
+        .toList()
+        .blockingGet();
+    final List<String> features = Observable
+        .fromIterable(
+            DomUtils.toList(
+                queryElement.getElementsByTagNameNS(xmlns, "feature")
+            )
+        )
+        .cast(Element.class)
+        .map(it -> it.getAttribute("var"))
+        .toList()
+        .blockingGet();
+    return new DiscoInfo(
+        new HashSet<>(identities), new HashSet<>(features)
+    );
   }
 
   /**
@@ -55,15 +113,17 @@ public abstract class AbstractEntity implements SessionAware {
   }
 
   /**
-   * Queries available features and {@link chat.viska.xmpp.DiscoInfo.Identity}s.
-   * This method is part of
-   * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
-   * Discovery</a>.
-   * @return {@link Future} tracking the completion status of this method and
-   *         providing a way to cancel it.
+   * Queries available features and {@link DiscoInfo.Identity}s.
+   * @return Token to notify the completion. Emits {@code null} if the
+   *         {@link Session} is disposed of or the received result is malformed
+   *         XML data. Emits a {@link StanzaErrorException} if received a stanza
+   *         error.
    */
   @NonNull
   public Maybe<DiscoInfo> queryDiscoInfo() {
+    if (getSession().getState() == Session.State.DISPOSED) {
+      return Maybe.never();
+    }
     final String id = UUID.randomUUID().toString();
     final String query = String.format(
         "<iq type=\"get\" to=\"%1s\" id=\"%2s\"><query xmlns=\"%3s#info\"/></iq>",
@@ -71,11 +131,16 @@ public abstract class AbstractEntity implements SessionAware {
         id,
         CommonXmlns.XEP_SERVICE_DISCOVERY
     );
+    try {
+      getSession().send(query);
+    } catch (SAXException ex) {
+      throw new RuntimeException(ex);
+    }
     return this.session
         .getInboundStanzaStream()
-        .filter(stanza -> stanza.getId().equals(id))
+        .filter(it -> it.getId().equals(id))
         .firstElement()
-        .map(stanza -> this.consumeDiscoInfo(stanza.getDocument()));
+        .map(this::consumeDiscoInfo);
   }
 
   /**
@@ -124,5 +189,10 @@ public abstract class AbstractEntity implements SessionAware {
   @Override
   public int hashCode() {
     return Objects.hash(session, getJid());
+  }
+
+  @Override
+  public String toString() {
+    return jid.toString();
   }
 }

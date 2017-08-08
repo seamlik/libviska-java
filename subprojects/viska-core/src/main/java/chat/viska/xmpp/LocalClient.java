@@ -21,42 +21,57 @@ import io.reactivex.annotations.Nullable;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicReference;
-import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 
 public class LocalClient extends AbstractClient {
 
-  private AtomicReference<String> softwareName = new AtomicReference<>("");
-  private AtomicReference<String> softwareVersion = new AtomicReference<>("");
-  private AtomicReference<String> operatingSystem = new AtomicReference<>(
-      String.format(
+  private String softwareName = "";
+  private String softwareVersion = "";
+  private String operatingSystem = String.format(
           "%1s %2s",
           System.getProperty("os.name", "Unknown"),
           System.getProperty("os.version", "")
-      ).trim()
-  );
-  private AtomicReference<DiscoClientType> discoClientType = new AtomicReference<>();
+  ).trim();
+  private DiscoClientType discoClientType;
 
-  LocalClient(final @NonNull Session session) {
+  LocalClient(@NonNull final Session session) {
     super(session, session.getJid());
   }
 
+  @NonNull
+  public String getSoftwareName() {
+    return softwareName;
+  }
+
+  @NonNull
+  public String getSoftwareVersion() {
+    return softwareVersion;
+  }
+
+  @NonNull
+  public String getOperatingSystem() {
+    return operatingSystem;
+  }
+
+  @Nullable
+  public DiscoClientType getDiscoClientType() {
+    return discoClientType;
+  }
+
   public void setSoftwareName(@Nullable final String softwareName) {
-    this.softwareName.set(softwareName == null ? "" : softwareName);
+    this.softwareName = softwareName == null ? "" : softwareName;
   }
 
   public void setSoftwareVersion(@Nullable final String softwareVersion) {
-    this.softwareVersion.set(softwareVersion == null ? "" : softwareVersion);
+    this.softwareVersion = softwareVersion == null ? "" : softwareVersion;
   }
 
   public void setOperatingSystem(@Nullable final String operatingSystemName) {
-    this.operatingSystem.set(operatingSystemName == null ? "" : operatingSystemName);
+    this.operatingSystem = operatingSystemName == null ? "" : operatingSystemName;
   }
 
   public void setDiscoClientType(@Nullable final DiscoClientType type) {
     Objects.requireNonNull(type);
-    discoClientType.set(type);
+    discoClientType = type;
   }
 
   /**
@@ -68,7 +83,7 @@ public class LocalClient extends AbstractClient {
    */
   @NonNull
   public Set<String> getDiscoFeatures() {
-    final Set<String> features = new HashSet<>(getSession().getDiscoFeatures());
+    final Set<String> features = new HashSet<>();
     for (Plugin plugin : getSession().getPluginManager().getPlugins()) {
       features.addAll(plugin.getDiscoFeatures());
     }

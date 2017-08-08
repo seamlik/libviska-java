@@ -19,11 +19,11 @@ package chat.viska.xmpp;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Provides the most fundamental features of an XMPP session.. This plugin is
@@ -46,7 +46,7 @@ public class BasePlugin implements Plugin {
   };
 
   private Session session;
-  private final Map<Jid, AbstractEntity> xmppEntityPool = new ConcurrentHashMap<>();
+  private final Map<Jid, AbstractEntity> xmppEntityPool = new HashMap<>();
   private LocalClient localClient;
 
   public BasePlugin(final @NonNull Session session) {
@@ -60,43 +60,29 @@ public class BasePlugin implements Plugin {
       throw new IllegalStateException("Session disposed.");
     }
     Objects.requireNonNull(jid);
-    if (getSession().getState() == Session.State.DISPOSED) {
-      throw new IllegalStateException();
-    }
-    AbstractEntity entity = xmppEntityPool.get(jid);
-    if (entity != null) {
+    synchronized (xmppEntityPool) {
+      AbstractEntity entity = xmppEntityPool.get(jid);
+      if (entity != null) {
+        return entity;
+      } else if (jid.getLocalPart().isEmpty()) {
+        entity = new Server(getSession(), jid);
+      } else if (jid.getResourcePart().isEmpty()) {
+        entity = new Account(session, jid);
+      } else if (jid.equals(this.session.getJid())) {
+        entity = new LocalClient(session);
+      } else {
+        entity = new RemoteClient(session, jid);
+      }
+      xmppEntityPool.put(jid, entity);
       return entity;
-    }
-    if (jid.getLocalPart().isEmpty()) {
-      return xmppEntityPool.put(
-          jid,
-          new Server(getSession(), jid)
-      );
-    } else if (jid.getResourcePart().isEmpty()) {
-      return xmppEntityPool.put(
-          jid,
-          new Account(getSession(), jid)
-      );
-    } else if (jid.equals(this.session.getJid())) {
-      return xmppEntityPool.put(getLocalClient().getJid(), getLocalClient());
-    } else {
-      return xmppEntityPool.put(
-          jid,
-          new RemoteClient(getSession(), jid)
-      );
     }
   }
 
   @Nullable
   public LocalClient getLocalClient() {
-    if (getSession().getState() != Session.State.ONLINE) {
-      throw new IllegalStateException();
-    }
-    if (localClient != null) {
-      return localClient;
-    }
-    localClient = new LocalClient(getSession());
-    return localClient;
+    return session.getJid() == null
+        ? null
+        : (LocalClient) getXmppEntityInstance(session.getJid());
   }
 
   @Override

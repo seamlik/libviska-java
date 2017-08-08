@@ -40,6 +40,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.commons.lang3.Validate;
+import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 
 /**
  * Serial container for a series of data processors (a.k.a {@link Pipe}s). This
@@ -55,18 +56,38 @@ import org.apache.commons.lang3.Validate;
  * non-blocking, and both the Pipes and the Pipeline must be designed as
  * thread-safe.</p>
  *
- * <p>Beware that although a Pipe can manipulate all of the Pipes in a Pipeline,
- * it must not wait for the operation to finish, otherwise a deadlock will
- * occur.</p>
+ * <p>Beware that although a {@link Pipe} is safe to invoke any methods of this
+ * class, it must not wait for the operation to finish, otherwise expect
+ * deadlocks.</p>
  * @param <I> Type of the inbound output.
  * @param <O> Type of the outbound output.
  */
 public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
+  /**
+   * States of a {@link Pipeline}
+   */
   public enum State {
-    INITIALIZED,
+
+    /**
+     * Indicates a {@link Pipeline} is running.
+     */
     RUNNING,
+
+    /**
+     * Indicates a {@link Pipeline} has stopped.
+     */
     STOPPED,
+
+    /**
+     * Indicates a {@link Pipeline} is stopping, which means
+     * {@link #stopGracefully()} is invoked.
+     */
+    STOPPING,
+
+    /**
+     * Indicates a {@link Pipeline} is disposed of and can no longer be reused.
+     */
     DISPOSED
   }
 
@@ -80,14 +101,24 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   private final BlockingQueue<Object> readQueue = new LinkedBlockingQueue<>();
   private final BlockingQueue<Object> writeQueue = new LinkedBlockingQueue<>();
   private final ReadWriteLock pipeLock = new ReentrantReadWriteLock(true);
+  private final Object stateLock = new Object();
   private State state;
   private Future<Void> readTask;
   private Future<Void> writeTask;
+  private boolean readTaskBusy = false;
+  private boolean writeTaskBusy = false;
+  private Object readingObject;
+  private Object writingObject;
 
   private void setState(final State state) {
-    final State oldState = this.state;
-    this.state = state;
-    eventStream.onNext(new PropertyChangeEvent(this, "State", oldState, state));
+    synchronized (stateLock) {
+      final State oldState = this.state;
+      this.state = state;
+      eventStream.onNext(new PropertyChangeEvent(this, "State", oldState, state));
+    }
+    if (state == State.DISPOSED) {
+      eventStream.onComplete();
+    }
   }
 
   private void processObject(@NonNull final Object obj, final boolean isReading)
@@ -204,7 +235,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     outboundStream = unsafeOutboundStream.toSerialized();
     final PublishSubject<Throwable> unsafeOutboundExceptionStream = PublishSubject.create();
     outboundExceptionStream = unsafeOutboundExceptionStream.toSerialized();
-    setState(State.INITIALIZED);
+    setState(State.STOPPED);
   }
 
   @NonNull
@@ -213,69 +244,110 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   public synchronized void start() {
-    switch (state) {
-      case RUNNING:
-        return;
-      case DISPOSED:
-        throw new IllegalStateException();
-      default:
-        break;
+    synchronized (stateLock) {
+      switch (state) {
+        case RUNNING:
+          return;
+        case DISPOSED:
+          throw new IllegalStateException();
+        default:
+          break;
+      }
+      setState(State.RUNNING);
     }
-    setState(State.RUNNING);
-    readTask = threadpool.submit(() -> {
+    this.readTask = this.threadpool.submit(() -> {
       while (true) {
-        switch (state) {
-          case STOPPED:
-            return null;
-          case DISPOSED:
-            return null;
-          default:
-            break;
+        if (this.state != State.RUNNING) {
+          return null;
         }
-        Object obj = readQueue.take();
-        pipeLock.readLock().lock();
+        if (this.readingObject == null) {
+          this.readingObject = readQueue.take();
+        }
+        this.pipeLock.readLock().lockInterruptibly();
         try {
-          processObject(obj, true);
-        } catch (InterruptedException ex) {
-          pipeLock.readLock().unlock();
-          throw ex;
+          processObject(this.readingObject, true);
+        } finally {
+          this.pipeLock.readLock().unlock();
         }
-        pipeLock.readLock().unlock();
+        this.readingObject = null;
+        if (this.state != State.RUNNING) {
+          return null;
+        }
       }
     });
-    writeTask = threadpool.submit(() -> {
+    this.writeTask = this.threadpool.submit(() -> {
       while (true) {
-        switch (state) {
-          case STOPPED:
-            return null;
-          case DISPOSED:
-            return null;
-          default:
-            break;
+        if (this.state != State.RUNNING) {
+          return null;
         }
-        Object obj = writeQueue.take();
-        pipeLock.readLock().lock();
+        if (this.writingObject == null) {
+          this.writingObject = writeQueue.take();
+        }
+        pipeLock.readLock().lockInterruptibly();
         try {
-          processObject(obj, false);
-        } catch (InterruptedException ex) {
-          pipeLock.readLock().unlock();
-          throw ex;
+          processObject(this.writingObject, false);
+        } finally {
+          this.pipeLock.readLock().unlock();
         }
-        pipeLock.readLock().unlock();
+        this.writingObject = null;
+        if (this.state != State.RUNNING) {
+          return null;
+        }
       }
     });
   }
 
-  public synchronized void stop() {
-    switch (state) {
-      case INITIALIZED:
-        return;
-      case STOPPED:
-        return;
-      case DISPOSED:
-        return;
-      default:
-        break;
+  /**
+   * Stops the pipeline after the currently running reading task and writing
+   * task finish.
+   * @return Token to track the completion of this method. Canceling it will
+   *         stop from waiting but the pipeline will still stop after the
+   *         reading and writing threads finish.
+   */
+  public Future<?> stopGracefully() {
+    synchronized (stateLock) {
+      switch (state) {
+        case STOPPING:
+          return ConcurrentUtils.constantFuture(null);
+        case STOPPED:
+          return ConcurrentUtils.constantFuture(null);
+        case DISPOSED:
+          return ConcurrentUtils.constantFuture(null);
+        default:
+          setState(State.STOPPING);
+      }
+    }
+    return threadpool.submit(() -> {
+      if (this.readingObject != null) {
+        readTask.get();
+      } else {
+        readTask.cancel(true);
+      }
+      if (this.writingObject != null) {
+        writeTask.get();
+      } else {
+        writeTask.cancel(true);
+      }
+      setState(State.STOPPED);
+      return null;
+    });
+  }
+
+  /**
+   * Stops the Pipeline immediately by killing the reading and writing threads.
+   * The data being processed at the time will retain and be re-processed after
+   * the pipeline starts again.
+   */
+  public void stopNow() {
+    synchronized (stateLock) {
+      switch (state) {
+        case DISPOSED:
+          return;
+        case STOPPED:
+          return;
+        default:
+          break;
+      }
     }
     if (!readTask.isDone()) {
       readTask.cancel(true);
@@ -286,23 +358,27 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     setState(State.STOPPED);
   }
 
-  public synchronized void dispose() {
-    switch (state) {
-      case RUNNING:
-        stop();
-      case DISPOSED:
-        return;
-      default:
-        break;
+  public void dispose() {
+    synchronized (stateLock) {
+      switch (state) {
+        case RUNNING:
+          stopNow();
+          break;
+        case DISPOSED:
+          return;
+        default:
+          setState(State.DISPOSED);
+          break;
+      }
     }
     cleanQueues();
+    threadpool.shutdownNow();
     inboundStream.onComplete();
     inboundExceptionStream.onComplete();
     outboundStream.onComplete();
     outboundExceptionStream.onComplete();
-    threadpool.shutdownNow();
-    setState(State.DISPOSED);
-    eventStream.onComplete();
+    readingObject = null;
+    writingObject = null;
   }
 
   @NonNull
@@ -420,8 +496,8 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   @NonNull
-  public Future<Void> addAtOutboundEnd(@Nullable final String name,
-                                       @NonNull final Pipe pipe) {
+  public Future<?> addAtOutboundEnd(@Nullable final String name,
+                                    @NonNull final Pipe pipe) {
     Objects.requireNonNull(pipe);
     return threadpool.submit(() -> {
       pipeLock.writeLock().lockInterruptibly();
@@ -442,8 +518,8 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   @NonNull
-  public Future<Void> addAtInboundEnd(@Nullable final String name,
-                                      @NonNull final Pipe pipe) {
+  public Future<?> addAtInboundEnd(@Nullable final String name,
+                                   @NonNull final Pipe pipe) {
     Objects.requireNonNull(pipe);
     return threadpool.submit(() -> {
       pipeLock.writeLock().lockInterruptibly();
@@ -476,7 +552,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    * @return Token to track the completion of this method or cancel it.
    */
   @NonNull
-  public Future<Void> removeAll() {
+  public Future<?> removeAll() {
     return threadpool.submit(() -> {
       pipeLock.writeLock().lockInterruptibly();
       pipes.clear();
@@ -613,11 +689,25 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
+  /**
+   * Feeds a data at the outbound end.
+   * @throws IllegalStateException If the pipeline is disposed of.
+   */
   public void read(@NonNull final Object obj) {
+  if (state == State.DISPOSED) {
+    throw new IllegalStateException("Pipeline disposed.");
+  }
     readQueue.add(obj);
   }
 
+  /**
+   * Feeds a data at the inbound end.
+   * @throws IllegalStateException If the pipeline is disposed of.
+   */
   public void write(@NonNull final Object obj) {
+    if (state == State.DISPOSED) {
+      throw new IllegalStateException("Pipeline disposed.");
+    }
     writeQueue.add(obj);
   }
 

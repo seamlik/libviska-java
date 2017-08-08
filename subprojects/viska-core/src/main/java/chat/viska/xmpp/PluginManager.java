@@ -39,6 +39,7 @@ public class PluginManager implements SessionAware {
   /**
    * Applies a {@link Plugin}. This method does nothing if the plugin
    * has already been applied.
+   * @throws IllegalArgumentException If it fails to apply the {@link Plugin}.
    */
   public void apply(final @NonNull Class<? extends Plugin> type)
       throws IllegalArgumentException {

@@ -21,9 +21,8 @@ import io.reactivex.annotations.Nullable;
 import java.util.Objects;
 
 /**
- * Item in a Service Discovery query result. This class is part of
- * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
- * Discovery</a>.
+ * Item in a <a href="https://xmpp.org/extensions/xep-0030.html">Service
+ * Discovery</a> query result.
  */
 public class DiscoItem {
 

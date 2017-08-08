@@ -21,6 +21,7 @@ import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Objects;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
@@ -221,13 +222,15 @@ public class StanzaErrorException extends Exception {
    */
   @NonNull
   public static StanzaErrorException fromXml(@NonNull final Document document)
-      throws IllegalArgumentException {
+      throws StreamErrorException {
     final String stanzaNs = document.getDocumentElement().getNamespaceURI();
     if (!CommonXmlns.STANZA_CLIENT.equals(stanzaNs)
         && !CommonXmlns.STANZA_SERVER.equals(stanzaNs)) {
-      throw new IllegalArgumentException("Incorrect stanza namespace.");
+      throw new StreamErrorException(
+          StreamErrorException.Condition.INVALID_XML,
+          "Incorrect stanza namespace."
+      );
     }
-
     final Element errorElement = (Element) document
         .getDocumentElement()
         .getElementsByTagName("error")
@@ -276,13 +279,16 @@ public class StanzaErrorException extends Exception {
           Condition.class,
           conditionElement.getTagName()
       );
-      if (!CommonXmlns.STREAM_CONTENT.equals(conditionElement.getNamespaceURI())) {
-        throw new IllegalArgumentException("Incorrect condition namespace.");
-      }
     } catch (Exception ex) {
-      throw new IllegalArgumentException(
-          "No condition element found.",
-          ex
+      throw new StreamErrorException(
+          StreamErrorException.Condition.INVALID_XML,
+          "No condition element found."
+      );
+    }
+    if (!CommonXmlns.STREAM_CONTENT.equals(conditionElement.getNamespaceURI())) {
+      throw new StreamErrorException(
+          StreamErrorException.Condition.INVALID_XML,
+          "Incorrect condition namespace."
       );
     }
     final boolean hasRedirect =
@@ -294,7 +300,10 @@ public class StanzaErrorException extends Exception {
           ? new URI(conditionElement.getTextContent())
           : null;
     } catch (URISyntaxException ex) {
-      throw new IllegalArgumentException("Malformed redirect URI.", ex);
+      throw new StreamErrorException(
+          StreamErrorException.Condition.INVALID_XML,
+          "Malformed redirect URI."
+      );
     }
     final String text = hasText ? textElement.getTextContent() : null;
     final Element appCondition = hasAppCondition
@@ -309,28 +318,44 @@ public class StanzaErrorException extends Exception {
         id,
         originalSender,
         intendedRecipient,
-        errorGenerator,
+        condition, type, text, errorGenerator,
         redirect,
-        type,
-        condition,
-        text,
         appCondition,
         stanza
+    );
+  }
+
+  public StanzaErrorException(@NonNull final Stanza stanza,
+                              @NonNull final Condition condition,
+                              @NonNull final Type type,
+                              @Nullable final String text,
+                              @Nullable final Jid errorGenerator,
+                              @Nullable final URI redirect,
+                              @Nullable final Element appCondition) {
+    this(
+        stanza.getType(),
+        stanza.getId(),
+        stanza.getSender(),
+        stanza.getRecipient(),
+        condition, type, text, errorGenerator,
+        redirect,
+        appCondition,
+        null
     );
   }
 
   /**
    * Default constructor.
    */
-  public StanzaErrorException(@Nullable final Stanza.Type stanzaType,
-                              @Nullable final String id,
-                              @Nullable final Jid originalSender,
-                              @Nullable final Jid intendedRecipient,
+  public StanzaErrorException(@NonNull final Stanza.Type stanzaType,
+                              @NonNull final String id,
+                              @NonNull final Jid originalSender,
+                              @NonNull final Jid intendedRecipient,
+                              @NonNull final Condition condition,
+                              @NonNull final Type errorType,
+                              @Nullable final String text,
                               @Nullable final Jid errorGenerator,
                               @Nullable final URI redirect,
-                              @Nullable final Type type,
-                              @Nullable final Condition condition,
-                              @Nullable final String text,
                               @Nullable final Element appCondition,
                               @Nullable final Element stanza) {
     super("[" + EnumUtils.toXmlValue(condition) + "] " + text);
@@ -340,11 +365,18 @@ public class StanzaErrorException extends Exception {
     this.intendedRecipient = intendedRecipient;
     this.errorGenerator = errorGenerator;
     this.redirect = redirect;
-    this.type = type;
+    this.type = errorType;
     this.condition = condition;
     this.appCondition = appCondition;
     this.stanza = stanza;
     this.text = text == null ? "" : text;
+
+    Objects.requireNonNull(stanzaType, "`stanzaType` is absent.");
+    Objects.requireNonNull(id, "`id` is absent.");
+    Objects.requireNonNull(originalSender, "`originalSender` is absent.");
+    Objects.requireNonNull(intendedRecipient, "`intendedRecipient` is absent.");
+    Objects.requireNonNull(condition, "`condition` is absent.");
+    Objects.requireNonNull(errorType, "`errorType` is absent.");
   }
 
   /**
@@ -434,5 +466,10 @@ public class StanzaErrorException extends Exception {
   @Nullable
   public Stanza.Type getStanzaType() {
     return stanzaType;
+  }
+
+  @NonNull
+  public Document toXml() {
+    throw new UnsupportedOperationException();
   }
 }

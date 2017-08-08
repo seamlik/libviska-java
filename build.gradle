@@ -48,7 +48,7 @@ subprojects {
   }
 
   checkstyle {
-    toolVersion = '8.0'
+    toolVersion = '8.1'
     File styleFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
     if (!styleFile.exists()) {
       mkdir styleFile.parent
