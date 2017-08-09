@@ -32,15 +32,6 @@ public enum StreamFeature {
   private final boolean restartRequired;
   private final boolean mandatory;
 
-  public static StreamFeature[] getRecommendedNeogtiationOrder() {
-    return new StreamFeature[] {
-        StreamFeature.STARTTLS,
-        StreamFeature.SASL,
-        StreamFeature.STREAM_COMPRESSION,
-        StreamFeature.RESOURCE_BINDING
-    };
-  }
-
   StreamFeature(@NonNull final String name,
                 @NonNull final String namespace,
                 final boolean restartRequired,

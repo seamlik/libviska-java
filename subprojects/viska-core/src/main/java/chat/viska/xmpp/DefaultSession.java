@@ -58,7 +58,6 @@ import org.xml.sax.SAXException;
 public abstract class DefaultSession implements Session {
   private static final Compression DEFAULT_STREAM_COMPRESSION = null;
   private static final Set<Compression> SUPPORTED_STREAM_COMPRESSION = new HashSet<>(0);
-  private static final String PIPE_NAME_COMPRESSION = "compression";
   private static final String PIPE_NAME_HANDSHAKER = "handshaker";
 
   private final Subject<EventObject> eventStream;
@@ -66,6 +65,7 @@ public abstract class DefaultSession implements Session {
   private final Connection connection;
   private final boolean streamManagementEnabled;
   private final Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
+  private final Observable<Stanza> inboundStanzaStream;
   private final Compression streamCompression;
   private final DocumentBuilder domBuilder;
   private final Logger logger = Logger.getLogger(this.getClass().getCanonicalName());
@@ -76,7 +76,7 @@ public abstract class DefaultSession implements Session {
   private final Jid jid;
   private final Jid authzId;
   private final List<String> saslMechanisms;
-  private State state;
+  private State state = State.DISCONNECTED;
 
   private void log(@NonNull final EventObject event) {
     logger.log(Level.FINE, event.toString());
@@ -174,7 +174,6 @@ public abstract class DefaultSession implements Session {
     this.xmlPipeline.getOutboundExceptionStream().subscribe(
         cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
     );
-    this.xmlPipeline.addAtOutboundEnd(PIPE_NAME_COMPRESSION, BlankPipe.getInstance());
     this.xmlPipeline.addAtOutboundEnd(PIPE_NAME_HANDSHAKER, BlankPipe.getInstance());
     final Observable<State> stateEvents = this.eventStream
         .ofType(PropertyChangeEvent.class)
@@ -190,9 +189,16 @@ public abstract class DefaultSession implements Session {
         .filter(it -> it == State.DISPOSED)
         .firstOrError()
         .subscribe(it -> this.xmlPipeline.dispose());
+    this.inboundStanzaStream = xmlPipeline
+        .getInboundStream()
+        .filter(it -> {
+          final String rootName = it.getDocumentElement().getLocalName();
+          return "iq".equals(rootName)
+              || "message".equals(rootName)
+              || "presence".equals(rootName);
+        }).map(it -> new Stanza(this, it));
 
     this.pluginManager = new PluginManager(this);
-    setState(State.INITIALIZED);
   }
 
   /**
@@ -287,12 +293,10 @@ public abstract class DefaultSession implements Session {
       switch (this.state) {
         case DISPOSED:
           throw new IllegalStateException("Session disposed.");
-        case INITIALIZED:
-          break;
         case DISCONNECTED:
           break;
         default:
-          throw new IllegalStateException("Must not login while " + state.toString());
+          throw new IllegalStateException("Must not login right now");
       }
       setState(State.CONNECTING);
     }
@@ -404,7 +408,7 @@ public abstract class DefaultSession implements Session {
   }
 
   @Override
-  public synchronized void send(@NonNull final String xml) throws SAXException {
+  public void send(@NonNull final String xml) throws SAXException {
     final Document document;
     synchronized (this.domBuilder) {
       try {
@@ -415,6 +419,25 @@ public abstract class DefaultSession implements Session {
       document.normalizeDocument();
     }
     xmlPipeline.write(document);
+  }
+
+  @Override
+  public void send(StreamErrorException error) {
+    synchronized (this.stateLock) {
+      switch (this.state) {
+        case CONNECTED:
+          break;
+        case ONLINE:
+          break;
+        case HANDSHAKING:
+          break;
+        default:
+          throw new IllegalStateException("Cannot send stream errors right now.");
+      }
+    }
+    final HandshakerPipe handshakerPipe = (HandshakerPipe)
+        this.xmlPipeline.get(PIPE_NAME_HANDSHAKER);
+    handshakerPipe.sendStreamError(error);
   }
 
   @Override
@@ -437,9 +460,7 @@ public abstract class DefaultSession implements Session {
   @Override
   @NonNull
   public Observable<Stanza> getInboundStanzaStream() {
-    return xmlPipeline
-        .getInboundStream()
-        .map(document -> new Stanza(this, document));
+    return inboundStanzaStream;
   }
 
   @Override

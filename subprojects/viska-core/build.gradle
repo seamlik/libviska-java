@@ -17,7 +17,7 @@
 dependencies {
   compile 'com.google.code.gson:gson:2.8.1'
   compile 'dnsjava:dnsjava:2.1.8'
-  compile 'rocks.xmpp:precis:0.1.0'
+  //compile 'rocks.xmpp:precis:0.1.0'
   compile project(':viska-commons')
   compile project(':viska-sasl')
 }

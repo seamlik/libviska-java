@@ -16,14 +16,14 @@
 
 package chat.viska.xmpp;
 
-import com.google.gson.JsonElement;
+import chat.viska.commons.DomUtils;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import io.reactivex.Observable;
+import io.reactivex.Single;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
-import io.reactivex.functions.Function;
-import io.reactivex.functions.Predicate;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -34,15 +34,20 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.Future;
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
+import org.xbill.DNS.Lookup;
+import org.xbill.DNS.Record;
+import org.xbill.DNS.SRVRecord;
+import org.xbill.DNS.TXTRecord;
+import org.xbill.DNS.Type;
+import org.xml.sax.SAXException;
 
 /**
  * Connection method to an XMPP server.
@@ -53,11 +58,6 @@ public class Connection {
    * The transport protocol used for the network connection.
    */
   public enum Protocol {
-    /**
-     * <a href="https://xmpp.org/extensions/xep-0206.html">XEP-0206: XMPP Over
-     * BOSH</a>.
-     */
-    BOSH,
 
     /**
      * Primary connection protocol defined in
@@ -85,6 +85,8 @@ public class Connection {
     }
   }
 
+  private static final String DNS_TXT_QUERY = "_xmppconnect";
+
   private final Protocol protocol;
   private final String scheme;
   private final String domain;
@@ -92,8 +94,6 @@ public class Connection {
   private final int port;
   private final Boolean tlsEnabled;
   private final Boolean startTlsEnabled;
-
-  public static final int DEFAULT_TCP_PORT_XMPP = 5222;
 
   /**
    * Returns a URL to the domain-meta file.
@@ -114,134 +114,99 @@ public class Connection {
     );
   }
 
-  private static @NonNull JsonObject downloadHostMetaJson(@NonNull String host,
-                                                          @Nullable Proxy proxy)
-      throws InvalidHostMetaException, IOException {
-    Validate.notNull(host, "`domain` must not be null.");
-    InputStreamReader reader = null;
-    InputStream stream = null;
-    JsonObject hostMeta;
-    try {
-      final URL hostMetaUrl = getHostMetaUrl(host, true);
-      stream = proxy == null ? hostMetaUrl.openStream()
-                             : hostMetaUrl.openConnection(proxy).getInputStream();
-      reader = new InputStreamReader(stream, StandardCharsets.UTF_8);
-      hostMeta = new JsonParser().parse(reader).getAsJsonObject();
-    } catch (Exception ex) {
-      throw new InvalidHostMetaException(ex);
-    } finally {
-      if (stream != null) {
-        stream.close();
+  private static @NonNull Single<JsonObject>
+  downloadHostMetaJson(@NonNull final String domain, @Nullable final Proxy proxy)
+      throws MalformedURLException {
+    final URL hostMetaUrl = getHostMetaUrl(domain, true);
+    return Single.fromCallable(() -> {
+      try (
+          final InputStream stream = proxy == null
+              ? hostMetaUrl.openStream()
+              : hostMetaUrl.openConnection(proxy).getInputStream();
+          final InputStreamReader reader = new InputStreamReader(
+              stream, StandardCharsets.UTF_8
+          );
+          ) {
+        return new JsonParser().parse(reader).getAsJsonObject();
+      } catch (JsonParseException ex) {
+        throw new InvalidHostMetaException(ex);
       }
-      if (reader != null) {
-        reader.close();
-      }
-    }
-    return hostMeta;
+    });
   }
 
-  private static @NonNull Document downloadHostMetaXml(@NonNull String domain,
-                                                       @Nullable Proxy proxy)
-      throws InvalidHostMetaException, IOException {
-    Validate.notNull(domain, "`domain` must not be null.");
-    InputStreamReader reader = null;
-    InputStream stream = null;
-    Document hostMeta = null;
-    try {
-      final URL hostMetaUrl = getHostMetaUrl(domain, false);
-      stream = proxy == null ? hostMetaUrl.openStream()
-                             : hostMetaUrl.openConnection(proxy).getInputStream();
-      reader = new InputStreamReader(stream, StandardCharsets.UTF_8);
-      hostMeta = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(stream);
-      hostMeta.normalizeDocument();
-    } catch (ParserConfigurationException ex) {
-      throw new RuntimeException(ex);
-    } catch (Exception ex) {
-      throw new InvalidHostMetaException(ex);
-    } finally {
-      if (stream != null) {
-        stream.close();
+  private static @NonNull Single<Document>
+  downloadHostMetaXml(@NonNull final String domain, @Nullable final Proxy proxy)
+      throws MalformedURLException {
+    final URL hostMetaUrl = getHostMetaUrl(domain, false);
+    return Single.fromCallable(() -> {
+      try (
+          final InputStream stream = proxy == null
+              ? hostMetaUrl.openStream()
+              : hostMetaUrl.openConnection(proxy).getInputStream();
+          final InputStreamReader reader = new InputStreamReader(
+              stream, StandardCharsets.UTF_8
+          );
+      ) {
+        return DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(stream);
+      } catch (SAXException ex) {
+        throw new InvalidHostMetaException(ex);
       }
-      if (reader != null) {
-        reader.close();
-      }
-    }
-    return hostMeta;
+    });
   }
 
-  private static List<Connection> queryHostMetaXml(@NonNull Document hostMeta)
-      throws InvalidHostMetaException, IOException {
-    Validate.notNull(hostMeta, "`hostMeta` must not be null.");
-    final NodeList linkNodes = hostMeta.getDocumentElement().getElementsByTagName("Link");
-    return Observable.range(
-        0,
-        linkNodes.getLength()
-    ).map(index -> (Element) linkNodes.item(index)).filter(element -> {
-      final String rel = element.getAttribute("rel");
-      return rel.equals(CommonXmlns.BOSH) || rel.equals(CommonXmlns.WEBSOCKET);
-    }).map(element -> {
+  private static List<Connection> queryHostMetaXml(@NonNull Document hostMeta) {
+    return Observable.fromIterable(
+        DomUtils.toList(hostMeta.getDocumentElement().getElementsByTagName("Link"))
+    ).cast(Element.class).map(element -> {
       Protocol protocol = null;
       switch (element.getAttribute("rel")) {
-        case CommonXmlns.BOSH:
-          protocol = Protocol.BOSH;
-          break;
         case CommonXmlns.WEBSOCKET:
           protocol = Protocol.WEBSOCKET;
           break;
         default:
-          break;
+          return null;
       }
       return new Connection(protocol, new URI(element.getAttribute("href")));
     }).toList().blockingGet();
   }
 
-  public static List<Connection> queryHostMetaXml(@NonNull String domain,
-                                                  @Nullable Proxy proxy)
-      throws InvalidHostMetaException, IOException {
-    Validate.notBlank(domain, "`domain` must not be blank.");
-    return queryHostMetaXml(downloadHostMetaXml(domain, proxy));
+  public static Single<List<Connection>>
+  queryHostMetaXml(@NonNull final String domain, @Nullable final Proxy proxy)
+      throws MalformedURLException {
+    return downloadHostMetaXml(domain, proxy)
+        .map(Connection::queryHostMetaXml);
   }
 
-  public static List<Connection> queryHostMetaXml(@NonNull InputStream hostMeta)
+  public static Single<List<Connection>>
+  queryHostMetaXml(@NonNull final InputStream hostMeta)
       throws IOException, InvalidHostMetaException {
-    Validate.notNull(hostMeta, "`hostMeta` must not be null.");
-    Document hostMetaDocument = null;
-    try {
-      hostMetaDocument = DocumentBuilderFactory.newInstance()
-                                               .newDocumentBuilder()
-                                               .parse(hostMeta);
-      hostMetaDocument.normalizeDocument();
-    } catch (ParserConfigurationException ex) {
-      throw new RuntimeException(ex);
-    } catch (Exception ex) {
-      throw new InvalidHostMetaException(ex);
-    }
-    return queryHostMetaXml(hostMetaDocument);
+    return Single.fromCallable(() -> {
+      try {
+        return DocumentBuilderFactory
+            .newInstance()
+            .newDocumentBuilder()
+            .parse(hostMeta);
+      } catch (SAXException ex) {
+        throw new InvalidHostMetaException(ex);
+      }
+    }).map(Connection::queryHostMetaXml);
   }
 
   private static List<Connection> queryHostMetaJson(@NonNull JsonObject hostMeta) {
-    Validate.notNull(hostMeta, "`hostMeta` must not be null.");
     return Observable.fromIterable(
         hostMeta.getAsJsonObject().getAsJsonArray("links")
-    ).filter(element -> {
-      final String rel = element.getAsJsonObject()
-                                .getAsJsonPrimitive("rel")
-                                .getAsString();
-      return rel.equals(CommonXmlns.BOSH) || rel.equals(CommonXmlns.WEBSOCKET);
-    }).map(element -> {
-      Protocol protocol = null;
-      final String rel = element.getAsJsonObject()
-                                .getAsJsonPrimitive("rel")
-                                .getAsString();
+    ).map(element -> {
+      Protocol protocol;
+      final String rel = element
+          .getAsJsonObject()
+          .getAsJsonPrimitive("rel")
+          .getAsString();
       switch (rel) {
-        case CommonXmlns.BOSH:
-          protocol = Protocol.BOSH;
-          break;
         case CommonXmlns.WEBSOCKET:
           protocol = Protocol.WEBSOCKET;
           break;
         default:
-          break;
+          return null;
       }
       return new Connection(
           protocol,
@@ -254,25 +219,66 @@ public class Connection {
     }).toList().blockingGet();
   }
 
-  public static List<Connection> queryHostMetaJson(@NonNull Reader hostMeta) {
-    return queryHostMetaJson(new JsonParser().parse(hostMeta).getAsJsonObject());
+  public static Single<List<Connection>>
+  queryHostMetaJson(@NonNull final Reader hostMeta) {
+    return Single.fromCallable(
+        () -> new JsonParser().parse(hostMeta).getAsJsonObject()
+    ).map(Connection::queryHostMetaJson);
   }
 
-  public static List<Connection> queryHostMetaJson(@NonNull String domain,
-                                                   @Nullable Proxy proxy)
+  public static Single<List<Connection>>
+  queryHostMetaJson(@NonNull final String domain, @Nullable final Proxy proxy)
       throws InvalidHostMetaException, IOException {
-    Validate.notBlank(domain, "`domain` must not be blank.");
-    return queryHostMetaJson(downloadHostMetaJson(domain, proxy));
+    return downloadHostMetaJson(domain, proxy).map(Connection::queryHostMetaJson);
   }
 
-  public static List<Connection> queryDnsTxt(@NonNull String domain) {
-    Validate.notNull(domain);
-    throw new RuntimeException();
-  }
-
-  public static Future<List<Connection>> queryDnsSrv(@NonNull String domain) {
-    Validate.notNull(domain);
-    throw new RuntimeException();
+  public static Single<List<Connection>> queryDns(@NonNull final String domain) {
+    return Single.fromCallable(() -> {
+      final List<Connection> result = new ArrayList<>();
+      final Record[] tcpRecords = new Lookup(
+          "_xmpp-client._tcp." + domain, Type.SRV
+      ).run();
+      if (tcpRecords != null) {
+        Observable.fromArray(tcpRecords).cast(SRVRecord.class).forEach(it -> {
+          result.add(new Connection(
+              it.getTarget().toString(true),
+              it.getPort(),
+              true,
+              true
+          ));
+        });
+      }
+      final Record[] tcpTlsRecords = new Lookup(
+          "_xmpps-client._tcp." + domain, Type.SRV
+      ).run();
+      if (tcpTlsRecords != null) {
+        Observable.fromArray(tcpTlsRecords).cast(SRVRecord.class).forEach(it -> {
+          result.add(new Connection(
+              it.getTarget().toString(true),
+              it.getPort(),
+              true,
+              false
+          ));
+        });
+      }
+      final Record[] txtRecords = new Lookup(
+          "_xmppconnect." + domain, Type.TXT
+      ).run();
+      if (txtRecords != null) {
+        Observable.fromArray(txtRecords).cast(TXTRecord.class)
+            .map(TXTRecord::getStrings)
+            .forEach(it -> {
+              final String txt = (String) it.get(0);
+              if (txt.startsWith("_xmpp-client-websocket=")) {
+                result.add(new Connection(
+                    Protocol.WEBSOCKET,
+                    new URI(txt.substring(txt.indexOf('=') + 1))
+                ));
+              }
+            });
+      }
+      return result;
+    });
   }
 
   public Connection(final @NonNull Protocol protocol,

@@ -16,6 +16,7 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.DomUtils;
 import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.sasl.AuthenticationException;
@@ -46,6 +47,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import org.apache.commons.codec.binary.Base64;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -138,13 +140,18 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   }
 
   private static final Version SUPPORTED_VERSION = new Version(1, 0);
+  private static final List<StreamFeature> streamFeaturesOrder = new ArrayList<>(
+      Arrays.asList(
+          StreamFeature.STARTTLS,
+          StreamFeature.SASL,
+          StreamFeature.RESOURCE_BINDING
+      )
+  );
 
   private final Subject<EventObject> eventStream = PublishSubject.create();
   private final DocumentBuilder domBuilder;
   private final Session session;
-  private final List<StreamFeature> streamFeaturesOrder = new ArrayList<>(
-      Arrays.asList(StreamFeature.getRecommendedNeogtiationOrder())
-  );
+
   private final Set<StreamFeature> negotiatedFeatures = new HashSet<>();
   private final Jid jid;
   private final Jid authzId;
@@ -163,59 +170,6 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   private Exception handshakeError;
   private Jid negotiatedJid;
   private String resourceBindingIqId = "";
-
-  private List<String> convertToMechanismList(NodeList nodes) {
-    int cursor = 0;
-    final List<String> mechanisms = new ArrayList<>(nodes.getLength());
-    while (cursor < nodes.getLength()) {
-      mechanisms.add(cursor, nodes.item(cursor).getTextContent());
-      ++cursor;
-    }
-    return mechanisms;
-  }
-
-  private StreamErrorException
-  convertToStreamErrorException(@NonNull final Document document) {
-    StreamErrorException.Condition condition = null;
-    Element conditionElement = null;
-    int cursor = 0;
-    final NodeList nodes = document.getDocumentElement().getChildNodes();
-    while (cursor < nodes.getLength()) {
-      conditionElement = (Element) nodes.item(cursor);
-      condition = StreamErrorException.Condition.of(conditionElement.getLocalName());
-      if (condition != null) {
-        break;
-      } else {
-        ++cursor;
-      }
-    }
-    if (condition != null) {
-      NodeList textNodes = conditionElement.getElementsByTagNameNS(
-          CommonXmlns.STREAM_CONTENT, "text"
-      );
-      if (textNodes.getLength() > 0) {
-        return new StreamErrorException(
-            condition,
-            textNodes.item(0).getTextContent()
-        );
-      } else {
-        return new StreamErrorException(condition);
-      }
-    } else if (document.getDocumentElement().hasChildNodes()) {
-      return new StreamErrorException(
-          StreamErrorException.Condition.UNDEFINED_CONDITION,
-          String.format(
-              "[UNRECOGNIZED ERROR: %1s]",
-              document.getDocumentElement().getFirstChild().getLocalName()
-          )
-      );
-    } else {
-      return new StreamErrorException(
-          StreamErrorException.Condition.UNDEFINED_CONDITION,
-          "[NO ERROR CONDITION SPECIFIED]"
-      );
-    }
-  }
 
   private boolean checkIfAllMandatoryFeaturesNegotiated() {
     final List<StreamFeature> notNegotiated = new ArrayList<>(streamFeaturesOrder);
@@ -253,31 +207,6 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     ));
   }
 
-  private void sendStreamError(@NonNull final StreamErrorException error) {
-    final Document document;
-    try {
-      document = domBuilder.parse(new InputSource(new StringReader(String.format(
-          "<error xmlns=\"%1s\"><%2s xmlns=\"%3s\"/></error>",
-          CommonXmlns.STREAM_HEADER,
-          error.getCondition().toString(),
-          CommonXmlns.STREAM_CONTENT
-      ))));
-    } catch (SAXException | IOException ex) {
-      throw new RuntimeException(ex);
-    }
-    if (error.getMessage() != null) {
-      final Element textElement = document.createElementNS(
-          CommonXmlns.STREAM_CONTENT,
-          "text"
-      );
-      textElement.setTextContent(error.getMessage());
-      document.getDocumentElement().appendChild(textElement);
-    }
-    pipeline.write(document);
-    this.clientStreamError = error;
-    closeStream();
-  }
-
   private void consumeStreamOpening(@NonNull final Document document) {
     Objects.requireNonNull(document);
     Version serverVersion = null;
@@ -286,11 +215,10 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     );
     try {
       serverVersion = new Version(serverVersionText);
-    } catch (Exception ex) {
+    } catch (IllegalArgumentException ex) {
       sendStreamError(new StreamErrorException(
           StreamErrorException.Condition.UNSUPPORTED_VERSION,
-          serverVersionText,
-          ex
+          serverVersionText
       ));
     }
     if (!SUPPORTED_VERSION.equals(serverVersion)) {
@@ -325,8 +253,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     if (serverFeatures.getLength() == 0) {
       return null;
     }
-
-    for (StreamFeature it : this.streamFeaturesOrder) {
+    for (StreamFeature it : streamFeaturesOrder) {
       int cursor = 0;
       while (cursor < serverFeatures.getLength()) {
         final Element currentFeature = (Element) serverFeatures.item(cursor);
@@ -342,10 +269,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     return null;
   }
 
-  private void initializeSaslNegotiation(@NonNull final Element featureElement)
-      throws AuthenticationException {
+  private void initializeSaslNegotiation(@NonNull final Element mechanismsElement) {
+    final List<String> mechanisms = Observable.fromIterable(DomUtils.toList(
+        mechanismsElement.getElementsByTagName("mechanism")
+    )).map(Node::getTextContent)
+        .toList()
+        .blockingGet();
     this.saslCient = new ClientFactory(this.saslMechanisms).newClient(
-        convertToMechanismList(featureElement.getChildNodes()),
+        mechanisms,
         this.jid.getLocalPart(),
         this.authzId == null ? null : this.authzId.toString(),
         this.retriever
@@ -355,14 +286,10 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
           "<abort xmlns=\"%1s\"/>",
           CommonXmlns.SASL
       ));
-      AuthenticationException saslException = new AuthenticationException(
-          AuthenticationException.Condition.INVALID_MECHANISM
-      );
       sendStreamError(new StreamErrorException(
           StreamErrorException.Condition.POLICY_VIOLATION,
-          saslException
+          "No supported SASL mechanisms."
       ));
-      throw saslException;
     }
     String msg = "";
     if (this.saslCient.isClientFirst()) {
@@ -407,20 +334,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     throw new UnsupportedOperationException();
   }
 
-  private void consumeSasl(@NonNull final Document document)
-      throws AuthenticationException {
+  private void consumeSasl(@NonNull final Document document) {
     final String rootName = document.getDocumentElement().getLocalName();
     final String text = document.getDocumentElement().getTextContent();
 
     if (this.saslCient.isCompleted() && !text.isEmpty()) {
-      final AuthenticationException saslException = new AuthenticationException(
-          AuthenticationException.Condition.MALFORMED_REQUEST
-      );
       sendStreamError(new StreamErrorException(
-          StreamErrorException.Condition.POLICY_VIOLATION,
-          saslException
+          StreamErrorException.Condition.POLICY_VIOLATION
       ));
-      throw saslException;
     }
 
     if ("failure".equals(rootName)) {
@@ -430,17 +351,12 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
       this.handshakeError = new AuthenticationException(
           AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED
       );
-      throw (AuthenticationException) this.handshakeError;
     } else if ("success".equals(rootName) && text.isEmpty()) {
       if (!this.saslCient.isCompleted()) {
-        final AuthenticationException saslException = new AuthenticationException(
-            AuthenticationException.Condition.MALFORMED_REQUEST
-        );
         sendStreamError(new StreamErrorException(
             StreamErrorException.Condition.POLICY_VIOLATION,
-            saslException
+            "SASL not finished yet."
         ));
-        throw saslException;
       } else {
         this.negotiatedFeatures.add(this.negotiatingFeature);
         this.negotiatingFeature = null;
@@ -449,20 +365,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     } else if ("success".equals(rootName) && !text.isEmpty()) {
       this.saslCient.acceptChallenge(this.base64.decode(text));
       if (!this.saslCient.isCompleted()) {
-        final AuthenticationException saslException = new AuthenticationException(
-            AuthenticationException.Condition.MALFORMED_REQUEST
-        );
         sendStreamError(new StreamErrorException(
             StreamErrorException.Condition.POLICY_VIOLATION,
-            saslException
+            "SASL not finished yet."
         ));
-        throw saslException;
       } else if (this.saslCient.getError() != null) {
         sendStreamError(new StreamErrorException(
-            StreamErrorException.Condition.POLICY_VIOLATION,
-            this.saslCient.getError()
+            StreamErrorException.Condition.NOT_AUTHORIZED
         ));
-        throw this.saslCient.getError();
       } else {
         this.negotiatedFeatures.add(this.negotiatingFeature);
         this.negotiatingFeature = null;
@@ -484,10 +394,9 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
               CommonXmlns.SASL
           ));
           sendStreamError(new StreamErrorException(
-              StreamErrorException.Condition.NOT_AUTHORIZED,
-              this.saslCient.getError()
+              StreamErrorException.Condition.POLICY_VIOLATION,
+              "Malformed SASL message."
           ));
-          throw this.saslCient.getError();
         }
       }
     } else {
@@ -632,14 +541,6 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     if (!this.session.getConnection().isStartTlsRequired()) {
       this.negotiatedFeatures.add(StreamFeature.STARTTLS);
     }
-    if (this.session.getStreamCompression() == null) {
-      this.negotiatedFeatures.add(StreamFeature.STREAM_COMPRESSION);
-    }
-    if (registering) {
-      throw new UnsupportedOperationException(
-          "In-Band Registration not supported."
-      );
-    }
   }
 
   /**
@@ -653,7 +554,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
       case STREAM_CLOSED:
         return Completable.complete();
       case DISPOSED:
-        throw new IllegalStateException("The pipe has been disposed.");
+        throw new IllegalStateException("Pipe disposed.");
       default:
         if (this.state != State.STREAM_CLOSING) {
           sendStreamClosing();
@@ -666,6 +567,31 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
             .firstOrError()
             .toCompletable();
     }
+  }
+
+  public void sendStreamError(@NonNull final StreamErrorException error) {
+    final Document document;
+    try {
+      document = domBuilder.parse(new InputSource(new StringReader(String.format(
+          "<error xmlns=\"%1s\"><%2s xmlns=\"%3s\"/></error>",
+          CommonXmlns.STREAM_HEADER,
+          error.getCondition().toString(),
+          CommonXmlns.STREAM_CONTENT
+      ))));
+    } catch (SAXException | IOException ex) {
+      throw new RuntimeException(ex);
+    }
+    if (error.getMessage() != null) {
+      final Element textElement = document.createElementNS(
+          CommonXmlns.STREAM_CONTENT,
+          "text"
+      );
+      textElement.setTextContent(error.getMessage());
+      document.getDocumentElement().appendChild(textElement);
+    }
+    pipeline.write(document);
+    this.clientStreamError = error;
+    closeStream().subscribe();
   }
 
   /**
@@ -848,8 +774,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         setState(State.COMPLETED);
       }
     } else if ("error".equals(rootName) && CommonXmlns.STREAM_HEADER.equals(rootNs)) {
-      closeStream().onErrorComplete().subscribe();
-      this.serverStreamError = convertToStreamErrorException(document);
+      this.serverStreamError = StreamErrorException.fromXml(document);
+      closeStream().subscribe();
     } else {
       if (state == State.COMPLETED || state == State.STREAM_CLOSING) {
         super.onReading(pipeline, toRead, toForward);
@@ -860,7 +786,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
       }
     }
     if (this.handshakeError != null) {
-      closeStream().onErrorComplete().subscribe();
+      closeStream().subscribe();
     }
   }
 

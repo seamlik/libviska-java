@@ -65,10 +65,6 @@ public class Stanza implements SessionAware {
         "iq".equals(rootName) || "message".equals(rootName) || "presence".equals(rootName),
         "Document is not one of the stanza types."
     );
-    Validate.isTrue(
-        document.getDocumentElement().getChildNodes().getLength() <= 1,
-        "Stanza has more than 1 children."
-    );
   }
 
   /**

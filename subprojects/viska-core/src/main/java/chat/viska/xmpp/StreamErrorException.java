@@ -20,6 +20,9 @@ import chat.viska.commons.EnumUtils;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.Objects;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 /**
  * Indicates a stream error has occurred.
@@ -209,23 +212,50 @@ public class StreamErrorException extends Exception {
 
   private final Condition condition;
 
+  public static StreamErrorException fromXml(@NonNull final Document xml) {
+    StreamErrorException.Condition condition = null;
+    Element conditionElement = null;
+    int cursor = 0;
+    final NodeList nodes = xml.getDocumentElement().getChildNodes();
+    while (cursor < nodes.getLength()) {
+      conditionElement = (Element) nodes.item(cursor);
+      condition = StreamErrorException.Condition.of(conditionElement.getLocalName());
+      if (condition != null) {
+        break;
+      } else {
+        ++cursor;
+      }
+    }
+    if (condition != null) {
+      NodeList textNodes = conditionElement.getElementsByTagNameNS(
+          CommonXmlns.STREAM_CONTENT, "text"
+      );
+      if (textNodes.getLength() > 0) {
+        return new StreamErrorException(
+            condition,
+            textNodes.item(0).getTextContent()
+        );
+      } else {
+        return new StreamErrorException(condition);
+      }
+    } else if (xml.getDocumentElement().hasChildNodes()) {
+      return new StreamErrorException(
+          StreamErrorException.Condition.UNDEFINED_CONDITION,
+          String.format(
+              "[UNRECOGNIZED ERROR: %1s]",
+              xml.getDocumentElement().getFirstChild().getLocalName()
+          )
+      );
+    } else {
+      return new StreamErrorException(
+          StreamErrorException.Condition.UNDEFINED_CONDITION,
+          "[NO ERROR CONDITION SPECIFIED]"
+      );
+    }
+  }
+
   public StreamErrorException(final @NonNull Condition condition) {
     super("[" + EnumUtils.toXmlValue(condition) + "]");
-    Objects.requireNonNull(condition, "`condition` is absent.");
-    this.condition = condition;
-  }
-
-  public StreamErrorException(@NonNull final Condition condition,
-                              @NonNull final String text,
-                              @NonNull final Throwable throwable) {
-    super("[" + EnumUtils.toXmlValue(condition) + "]" + text, throwable);
-    Objects.requireNonNull(condition, "`condition` is absent.");
-    this.condition = condition;
-  }
-
-  public StreamErrorException(@NonNull final Condition condition,
-                              @NonNull final Throwable throwable) {
-    super("[" + EnumUtils.toXmlValue(condition) + "]", throwable);
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }

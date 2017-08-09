@@ -112,7 +112,6 @@ task javadocAll(type: Javadoc) {
   outputs.files "${outputDir}/**/*"
   options.links(
       'http://reactivex.io/RxJava/2.x/javadoc',
-      'http://sco0ter.bitbucket.org/precis',
       'https://docs.oracle.com/javase/8/docs/api'
   )
   source(subprojects.collect { pr ->

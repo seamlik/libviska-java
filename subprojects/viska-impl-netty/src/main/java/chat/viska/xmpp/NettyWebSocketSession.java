@@ -134,7 +134,7 @@ public class NettyWebSocketSession extends DefaultSession {
     final SslContext sslContext;
     try {
       sslContext = getConnection().isTlsEnabled()
-          ? SslContextBuilder.forClient().startTls(false).build()
+          ? SslContextBuilder.forClient().startTls(getConnection().isStartTlsRequired()).build()
           : null;
     } catch (SSLException ex) {
       return Completable.error(ex);
@@ -170,7 +170,13 @@ public class NettyWebSocketSession extends DefaultSession {
           protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame msg)
               throws Exception {
             getLogger().fine("[XML received] " + msg.text());
-            feedXmlPipeline(preprocessInboundXml(msg.text()));
+            try {
+              feedXmlPipeline(preprocessInboundXml(msg.text()));
+            } catch (SAXException ex) {
+              send(new StreamErrorException(
+                  StreamErrorException.Condition.BAD_FORMAT
+              ));
+            }
           }
 
           @Override
@@ -201,8 +207,7 @@ public class NettyWebSocketSession extends DefaultSession {
     return Completable.fromFuture(channelFuture).andThen(Completable.fromAction(() -> {
       this.nettyChannel = (SocketChannel) channelFuture.channel();
       this.nettyChannel.closeFuture().addListener(it -> {
-        if (wsHandshakeCompleted.getThrowable() == null
-            && !wsHandshakeCompleted.hasComplete()) {
+        if (!wsHandshakeCompleted.hasComplete()) {
           wsHandshakeCompleted.onError(new ConnectionException(
               "[Netty] Connection terminated before WebSocket handshake completes."
           ));
@@ -267,6 +272,9 @@ public class NettyWebSocketSession extends DefaultSession {
                                @Nullable Compression connectionCompression,
                                @Nullable Compression streamCompression) {
     super(jid, authzId, connection, streamManagement, saslMechanisms, streamCompression);
+    if (connection.getProtocol() != Connection.Protocol.WEBSOCKET) {
+      throw new IllegalArgumentException("Unsupported connection protocol.");
+    }
     if (connectionCompression == null) {
       this.connectionCompression = null;
     } else if (connectionCompression == Compression.AUTO) {

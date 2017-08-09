@@ -17,10 +17,9 @@
 package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
-import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
-import rocks.xmpp.precis.InvalidCodePointException;
-import rocks.xmpp.precis.PrecisProfiles;
 
 /**
  * Jabber/XMPP ID.
@@ -40,116 +39,46 @@ import rocks.xmpp.precis.PrecisProfiles;
  */
 public class Jid {
 
-  /**
-   * @see <a href="https://tools.ietf.org/html/rfc7622#section-3.3.1">RFC 7622</a>
-   */
-  private static final char[] localpartExcludedChars = {
-    '\"',
-    '&',
-    '\'',
-    '/',
-    ':',
-    '<',
-    '>',
-    '@'
-  };
-
   private final String localPart;
   private final String domainPart;
   private final String resourcePart;
 
-  /**
-   * Validates the local part of a Jid.
-   */
-  public static void validateLocalPart(final @NonNull String localPart)
-      throws InvalidCodePointException,
-             InvalidJidPartException,
-             JidTooLongException {
-    Objects.requireNonNull(localPart);
-    if (localPart.getBytes(StandardCharsets.UTF_8).length > 1023) {
-      throw new JidTooLongException(localPart);
-    }
-    for (char it : localpartExcludedChars) {
-      if (localPart.indexOf(it) >= 0) {
-        throw new InvalidJidPartException();
-      }
-    }
-    PrecisProfiles.USERNAME_CASE_MAPPED.prepare(localPart);
-  }
+  private static List<String> parseJidParts(@NonNull final String rawJid) {
 
-  /**
-   * Validates the domainpart of a JID.
-   */
-  public static void validateDomainPart(final @NonNull String domainPart)
-      throws JidTooLongException {
-    Objects.requireNonNull(domainPart);
-    if (domainPart.getBytes(StandardCharsets.UTF_8).length > 1023) {
-      throw new JidTooLongException(domainPart);
-    }
-    // TODO: Validate if it is a domainPart or an IP address
-  }
+    final int indexOfSlash = rawJid.indexOf("/");
+    final List<String> result = Arrays.asList("", "", "");
 
-  /**
-   * Validates the resourcepart of a JID.
-   */
-  public static void validateResourcePart(final @NonNull String resourcePart)
-      throws InvalidCodePointException, JidTooLongException {
-    Objects.requireNonNull(resourcePart);
-    if (resourcePart.getBytes(StandardCharsets.UTF_8).length > 1023) {
-      throw new JidTooLongException();
-    }
-    PrecisProfiles.OPAQUE_STRING.prepare(resourcePart);
-  }
-
-  /**
-   * Parses a raw JID {@link String} and returns the parts of the JID.
-   * @return An array of {@link String} containing the localPart part, domainPart part
-   *         and the resourcePart part in order.
-   * @throws InvalidJidSyntaxException If the value is not a valid {@link Jid}.
-   */
-  public static String[] parseJidParts(String rawJid) {
-    if (rawJid.startsWith("<") && rawJid.endsWith(">")) {
-      rawJid = rawJid.substring(1, rawJid.length() - 1);
-    }
-    int indexOfAt = rawJid.indexOf("@");
-    int indexOfSlash = rawJid.indexOf("/");
-    String[] result = new String[3];
     if (indexOfSlash > 0) {
-      result[2] = rawJid.substring(indexOfSlash + 1, rawJid.length());
-      rawJid = rawJid.substring(0, indexOfSlash);
-    } else if (indexOfSlash == 0) {
-      throw new InvalidJidSyntaxException();
+      result.set(2, rawJid.substring(indexOfSlash + 1, rawJid.length()));
     } else if (indexOfSlash < 0) {
-      result[2] = "";
-    }
-    if (indexOfAt > 0) {
-      result[0] = rawJid.substring(0, indexOfAt);
-      result[1] = rawJid.substring(indexOfAt + 1);
-    } else if (indexOfAt == 0) {
+      result.set(2, "");
+    } else {
       throw new InvalidJidSyntaxException();
+    }
+
+    final String bareJid = indexOfSlash > 0
+        ? rawJid.substring(0, indexOfSlash)
+        : rawJid;
+    final int indexOfAt = rawJid.indexOf("@");
+    if (indexOfAt > 0) {
+      result.set(0, bareJid.substring(0, indexOfAt));
+      result.set(1, bareJid.substring(indexOfAt + 1));
     } else if (indexOfAt < 0) {
-      result[0] = "";
-      result[1] = rawJid;
+      result.set(0, "");
+      result.set(1, rawJid);
+    } else {
+      throw new InvalidJidSyntaxException();
     }
     return result;
   }
 
-  /**
-   * Constructs a new JID using 3 specified parts of the JID.
-   * @param parts {@link String}s representing the localPart part, domainPart part and
-   *              and the resourcePart part in order. The array must contains at
-   *              at least 3 elements and any redundant elements are ignored.
-   *              In order to omit any part of the {@link Jid}, place a
-   *              {@code null} at the corresponding position.
-   * @throws InvalidJidSyntaxException If {@code parts} has less than 3 elements.
-   */
-  private Jid(String[] parts) {
-    if (parts.length < 3) {
+  private Jid(List<String> parts) {
+    if (parts.size() != 3) {
       throw new InvalidJidSyntaxException();
     }
-    localPart = (parts[0] == null) ? "" : parts[0];
-    domainPart = (parts[1] == null) ? "" : parts[1];
-    resourcePart = (parts[2] == null) ? "" : parts[2];
+    localPart = parts.get(0);
+    domainPart = parts.get(1);
+    resourcePart = parts.get(2);
   }
 
   public Jid(String localPart, String domainPart, String resourcePart) {

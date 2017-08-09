@@ -107,11 +107,6 @@ public interface Session extends AutoCloseable {
   enum State {
 
     /**
-     * Indicates the {@link Session} has just been created.
-     */
-    INITIALIZED,
-
-    /**
      * Indicates a network connection to the server is established and is
      * about to login or perform in-band registration.
      */
@@ -167,18 +162,16 @@ public interface Session extends AutoCloseable {
 
   /**
    * Starts logging in.
-   * @return Token to track the completion status of this method and provide a
-   *         way to cancel it.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#INITIALIZED}.
+   * @return Token to track the completion.
+   * @throws IllegalStateException If this {@link Session} is not disconnected.
    */
   @NonNull
   Completable login(@NonNull String password);
 
   /**
    * Starts logging in.
-   * @return Token to track the completion status of this method and provide a
-   *         way to cancel it.
+   * @return Token to track the completion.
+   * @throws IllegalStateException If this {@link Session} is not disconnected.
    */
   @NonNull
   Completable login(@NonNull CredentialRetriever retriever,
@@ -190,18 +183,12 @@ public interface Session extends AutoCloseable {
 
   /**
    * Starts closing the XMPP stream and the network connection.
-   *
-   * <p>WARNING: This method must not be interrupted, otherwise expect undefined
-   * behavior.</p>
    */
   @NonNull
   Completable disconnect();
 
   /**
    * Starts shutting down the Session and releasing all system resources.
-   *
-   * <p>WARNING: This method must not be interrupted, otherwise expect undefined
-   * behavior.</p>
    */
   @NonNull
   Completable dispose();
@@ -210,8 +197,8 @@ public interface Session extends AutoCloseable {
    * Sends an XML stanza to the server. The stanza will not be validated by any
    * means, so beware that the server may close the connection once any policy
    * is violated.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#INITIALIZED} or {@link State#DISCONNECTING}.
+   * @throws IllegalStateException If this class is disposed of.
+   * @throws SAXException If the XML is malformed.
    */
   void send(@NonNull String xml) throws SAXException;
 
@@ -219,13 +206,19 @@ public interface Session extends AutoCloseable {
    * Sends an XML stanza to the server. The stanza will not be validated by any
    * means, so beware that the server may close the connection once any policy
    * is violated.
-   * @throws IllegalStateException If this class is not in
-   *         {@link State#INITIALIZED} or {@link State#DISCONNECTING}.
+   * @throws IllegalStateException If this class is disposed of.
    */
   void send(@NonNull Document xml);
 
   /**
-   * Gets the pre-configured logger.
+   * Sends a stream error and then disconnects.
+   * @throws IllegalStateException If this {@link Session} is not connected or
+   *         online.
+   */
+  void send(@NonNull StreamErrorException ex);
+
+  /**
+   * Gets the logger.
    */
   @NonNull
   Logger getLogger();

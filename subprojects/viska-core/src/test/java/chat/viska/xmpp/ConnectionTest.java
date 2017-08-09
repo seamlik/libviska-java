@@ -15,7 +15,6 @@
  */
 
 package chat.viska.xmpp;
-
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -30,7 +29,7 @@ public class ConnectionTest {
     Reader hostMetaJson = new InputStreamReader(
         getClass().getResourceAsStream("host-meta.json")
     );
-    List<Connection> jsonResult = Connection.queryHostMetaJson(hostMetaJson);
+    List<Connection> jsonResult = Connection.queryHostMetaJson(hostMetaJson).blockingGet();
     Assertions.assertEquals(
         "wss://im.example.org:443/ws",
         jsonResult.get(0).getUri().toString()
@@ -42,7 +41,7 @@ public class ConnectionTest {
     InputStream hostMetaXml = getClass().getResourceAsStream("host-meta.xml");
     Assertions.assertEquals(
         "wss://im.example.org:443/ws",
-        Connection.queryHostMetaXml(hostMetaXml).get(0).getUri().toString()
+        Connection.queryHostMetaXml(hostMetaXml).blockingGet().get(0).getUri().toString()
     );
   }
 }

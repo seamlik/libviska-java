@@ -28,6 +28,7 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
 import com.beust.jcommander.converters.URIConverter;
+import io.reactivex.Observable;
 import java.net.URI;
 import java.util.List;
 import java.util.logging.ConsoleHandler;
@@ -36,19 +37,14 @@ import java.util.logging.Level;
 
 public class Cmd {
 
-  @Parameters(commandNames = "disco-info")
+  @Parameters(commandNames = "info")
   private class InfoCommand {
 
     @Parameter(converter = JidConverter.class)
     private List<Jid> entities;
 
     private void run() throws Throwable {
-      Session session = null;
-      try {
-        session = new NettyWebSocketSession(
-            jid,
-            new Connection(Connection.Protocol.WEBSOCKET, websocket)
-        );
+      try (final Session session = new NettyWebSocketSession(jid, connection)) {
         if (debug) {
           final Handler handler = new ConsoleHandler();
           handler.setLevel(Level.ALL);
@@ -81,39 +77,47 @@ public class Cmd {
         if (debug) {
           throw ex;
         } else {
-          System.err.println("Login failed.");
           ex.printStackTrace();
-        }
-      } finally {
-        if (session != null) {
-          session.close();
         }
       }
     }
   }
 
-  @Parameter(names = "--jid", converter = JidConverter.class, required = true)
+  @Parameter(names = "--jid", description = "JID", converter = JidConverter.class, required = true)
   private Jid jid;
 
-  @Parameter(names = "--password", password = true, required = true)
+  @Parameter(names = "--password", description = "Password", password = true, required = true)
   private String password;
 
-  @Parameter(names = "--websocket", converter = URIConverter.class)
+  @Parameter(names = "--websocket", description = "WebSocket URI", converter = URIConverter.class)
   private URI websocket;
 
-  @Parameter(names = "--debug")
+  @Parameter(names = "--debug", description = "Display debug infomation")
   private boolean debug;
 
-  @Parameter(names = { "-h", "--help", "help" }, help = true)
+  @Parameter(names = { "-h", "--help", "help" }, description = "Display help", help = true)
   private boolean help;
+
+  private Connection connection;
 
   public static void main(String[] args) throws Throwable {
     new Cmd().run(args);
   }
 
+  private void initialize() {
+    if (websocket != null) {
+      connection = new Connection(Connection.Protocol.WEBSOCKET, websocket);
+    } else {
+      connection = Observable
+          .fromIterable(Connection.queryDns(jid.getDomainPart()).blockingGet())
+          .filter(it -> it.getProtocol() == Connection.Protocol.WEBSOCKET)
+          .filter(Connection::isTlsEnabled)
+          .blockingFirst();
+    }
+  }
+
   private void run(String... args) throws Throwable {
     InfoCommand infoCommand = new InfoCommand();
-
     JCommander jCommander = JCommander
         .newBuilder()
         .programName("viska-cmd-java")
@@ -131,10 +135,12 @@ public class Cmd {
     }
     switch (jCommander.getParsedCommand()) {
       case "info":
+        initialize();
         infoCommand.run();
         break;
       default:
         System.err.println("Wrong command.");
+        System.exit(1);
         break;
     }
   }
