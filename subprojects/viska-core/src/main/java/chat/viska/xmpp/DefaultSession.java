@@ -16,12 +16,14 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.DomUtils;
 import chat.viska.commons.ExceptionCaughtEvent;
 import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipe;
 import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
+import io.reactivex.Maybe;
 import io.reactivex.Observable;
 import io.reactivex.Single;
 import io.reactivex.annotations.NonNull;
@@ -30,24 +32,20 @@ import io.reactivex.functions.Action;
 import io.reactivex.subjects.PublishSubject;
 import io.reactivex.subjects.Subject;
 import java.beans.PropertyChangeEvent;
-import java.io.IOException;
-import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EventObject;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
-import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 /**
@@ -56,18 +54,28 @@ import org.xml.sax.SAXException;
  * <p>This class does not support stream level compression.</p>
  */
 public abstract class DefaultSession implements Session {
+
+  /**
+   * Indicates the connection is terminated.
+   */
+  public static class ConnectionTerminatedEvent extends EventObject {
+
+    public ConnectionTerminatedEvent(@NonNull final Object source) {
+      super(source);
+    }
+  }
+
   private static final Compression DEFAULT_STREAM_COMPRESSION = null;
   private static final Set<Compression> SUPPORTED_STREAM_COMPRESSION = new HashSet<>(0);
   private static final String PIPE_NAME_HANDSHAKER = "handshaker";
+  private static final String PIPE_NAME_VALIDATOR = "validator";
 
   private final Subject<EventObject> eventStream;
   private final PluginManager pluginManager;
   private final Connection connection;
-  private final boolean streamManagementEnabled;
   private final Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
   private final Observable<Stanza> inboundStanzaStream;
   private final Compression streamCompression;
-  private final DocumentBuilder domBuilder;
   private final Logger logger = Logger.getLogger(this.getClass().getCanonicalName());
   private final List<Locale> locales = new CopyOnWriteArrayList<>(
       new Locale[] { Locale.getDefault() }
@@ -131,22 +139,11 @@ public abstract class DefaultSession implements Session {
                            @Nullable final Compression streamCompression) {
     Objects.requireNonNull(connection, "`connection` is absent.");
     this.connection = connection;
-    this.streamManagementEnabled = streamManagement;
     this.jid = jid;
     this.authzId = authzId;
     this.saslMechanisms = saslMechanisms == null
         ? null
         : new ArrayList<>(saslMechanisms);
-
-    // DOM
-    final DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
-    builderFactory.setIgnoringComments(true);
-    builderFactory.setNamespaceAware(true);
-    try {
-      domBuilder = builderFactory.newDocumentBuilder();
-    } catch (ParserConfigurationException ex) {
-      throw new RuntimeException("JVM does not support DOM.", ex);
-    }
 
     // Stream Compression
     this.streamCompression = streamCompression == Compression.AUTO
@@ -174,7 +171,8 @@ public abstract class DefaultSession implements Session {
     this.xmlPipeline.getOutboundExceptionStream().subscribe(
         cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
     );
-    this.xmlPipeline.addAtOutboundEnd(PIPE_NAME_HANDSHAKER, BlankPipe.getInstance());
+    this.xmlPipeline.addAtInboundEnd(PIPE_NAME_VALIDATOR, new XmlValidatorPipe());
+    this.xmlPipeline.addAtInboundEnd(PIPE_NAME_HANDSHAKER, BlankPipe.getInstance());
     final Observable<State> stateEvents = this.eventStream
         .ofType(PropertyChangeEvent.class)
         .map(PropertyChangeEvent::getNewValue)
@@ -183,20 +181,20 @@ public abstract class DefaultSession implements Session {
         .filter(it -> it == State.CONNECTED)
         .subscribe(it -> this.xmlPipeline.start());
     stateEvents
-        .filter(it -> it == State.DISCONNECTED)
-        .subscribe(it -> this.xmlPipeline.stopNow());
-    stateEvents
         .filter(it -> it == State.DISPOSED)
         .firstOrError()
         .subscribe(it -> this.xmlPipeline.dispose());
+    this.eventStream
+        .ofType(ConnectionTerminatedEvent.class)
+        .subscribe(it -> this.xmlPipeline.stopNow());
     this.inboundStanzaStream = xmlPipeline
         .getInboundStream()
-        .filter(it -> {
-          final String rootName = it.getDocumentElement().getLocalName();
-          return "iq".equals(rootName)
-              || "message".equals(rootName)
-              || "presence".equals(rootName);
-        }).map(it -> new Stanza(this, it));
+        .filter(Stanza::isStanza)
+        .map(Stanza::new);
+    this.xmlPipeline
+        .getInboundExceptionStream()
+        .ofType(XmlValidatorPipe.ValidationException.class)
+        .subscribe(it -> send((StreamErrorException) it.getCause()));
 
     this.pluginManager = new PluginManager(this);
   }
@@ -227,9 +225,6 @@ public abstract class DefaultSession implements Session {
    *     from the server.
    *   </li>
    * </ul>
-   *
-   * Upon the occurrence of an {@link Exception}, this class will invoke
-   * {@link #onClosingConnection()} automatically.
    */
   @NonNull
   protected abstract Completable onOpeningConnection();
@@ -244,7 +239,9 @@ public abstract class DefaultSession implements Session {
    * @param event The event to be triggered.
    */
   protected void triggerEvent(@NonNull final EventObject event) {
-    eventStream.onNext(event);
+    if (!eventStream.hasComplete()) {
+      eventStream.onNext(event);
+    }
   }
 
   protected Observable<Document> getXmlPipelineOutboundStream() {
@@ -329,8 +326,8 @@ public abstract class DefaultSession implements Session {
         setState(State.HANDSHAKING);
       }
       this.xmlPipeline.start();
-    }).andThen(handshakeFinalState).doOnSuccess(it -> {
-      if (it == HandshakerPipe.State.COMPLETED) {
+    }).andThen(handshakeFinalState).doOnSuccess(state -> {
+      if (state == HandshakerPipe.State.COMPLETED) {
         setState(State.ONLINE);
       } else if (handshakerPipe.getHandshakeError() != null) {
         throw handshakerPipe.getHandshakeError();
@@ -342,6 +339,12 @@ public abstract class DefaultSession implements Session {
         throw new ConnectionException(
             "Connection unexpectedly terminated."
         );
+      }
+      if (!getStreamFeatures().contains(StreamFeature.STREAM_MANAGEMENT)) {
+        this.getEventStream()
+            .ofType(PropertyChangeEvent.class)
+            .filter(event -> event.getNewValue() == State.DISCONNECTED)
+            .subscribe(event -> this.dispose().subscribe());
       }
     })).doOnError(it -> disconnect());
   }
@@ -362,13 +365,12 @@ public abstract class DefaultSession implements Session {
         case DISPOSED:
           return Completable.complete();
         default:
-          setState(State.DISCONNECTING);
           break;
       }
     }
     final HandshakerPipe handshakerPipe = (HandshakerPipe) xmlPipeline.get("handshaker");
-    return handshakerPipe
-        .closeStream()
+    return Completable.fromAction(() -> setState(State.DISCONNECTING))
+        .andThen(handshakerPipe.closeStream())
         .andThen(onClosingConnection());
   }
 
@@ -409,16 +411,7 @@ public abstract class DefaultSession implements Session {
 
   @Override
   public void send(@NonNull final String xml) throws SAXException {
-    final Document document;
-    synchronized (this.domBuilder) {
-      try {
-        document = domBuilder.parse(new InputSource(new StringReader(xml)));
-      } catch (IOException ex) {
-        throw new RuntimeException(ex);
-      }
-      document.normalizeDocument();
-    }
-    xmlPipeline.write(document);
+    xmlPipeline.write(DomUtils.readDocument(xml));
   }
 
   @Override
@@ -438,6 +431,37 @@ public abstract class DefaultSession implements Session {
     final HandshakerPipe handshakerPipe = (HandshakerPipe)
         this.xmlPipeline.get(PIPE_NAME_HANDSHAKER);
     handshakerPipe.sendStreamError(error);
+  }
+
+  @Override
+  public Maybe<Stanza> query(@NonNull String namespace, @NonNull Jid target)
+      throws SAXException {
+    if (this.state == Session.State.DISPOSED) {
+      return Maybe.never();
+    }
+    final String id = UUID.randomUUID().toString();
+    send(String.format(
+        "<iq type=\"get\" to=\"%1s\" id=\"%2s\"><query xmlns=\"%3s\"/></iq>",
+        target,
+        id,
+        namespace
+    ));
+    return getInboundStanzaStream()
+        .filter(it -> it.getId().equals(id))
+        .map(stanza -> {
+          if (stanza.getIqType() == Stanza.IqType.ERROR) {
+            Exception cause;
+            try {
+              cause = StanzaErrorException.fromXml(stanza.getDocument());
+            } catch (StreamErrorException ex) {
+              send(ex);
+              cause = ex;
+            }
+            throw cause;
+          } else {
+            return stanza;
+          }
+        }).firstElement();
   }
 
   @Override
@@ -504,7 +528,12 @@ public abstract class DefaultSession implements Session {
   }
 
   @Override
-  public boolean isStreamManagementEnabled() {
-    return streamManagementEnabled;
+  public List<StreamFeature> getStreamFeatures() {
+    final Pipe handshaker = this.xmlPipeline.get(PIPE_NAME_HANDSHAKER);
+    if (handshaker instanceof HandshakerPipe) {
+      return ((HandshakerPipe) handshaker).getNegotiatedFeatures();
+    } else {
+      return Collections.emptyList();
+    }
   }
 }

@@ -16,11 +16,13 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.EnumUtils;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.w3c.dom.Element;
@@ -41,7 +43,7 @@ public class DiscoInfo {
     private final String type;
     private final String name;
 
-    public static Identity fromXml(@NonNull final Element xml) {
+    static Identity fromXml(@NonNull final Element xml) {
       final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#info";
       return new Identity(
           xml.getAttribute("category"),
@@ -113,20 +115,20 @@ public class DiscoInfo {
     }
   }
 
-  private final Set<Identity> identities;
-  private final Set<String> features;
+  private final List<Identity> identities;
+  private final List<String> features;
 
   /**
    * Default constructor.
    */
-  public DiscoInfo(@Nullable final Set<Identity> identities,
-                   @Nullable final Set<String> features) {
+  public DiscoInfo(@Nullable final Collection<Identity> identities,
+                   @Nullable final Collection<String> features) {
     this.identities = identities == null
-        ? Collections.emptySet()
-        : new HashSet<>(identities);
+        ? Collections.emptyList()
+        : new ArrayList<>(identities);
     this.features = features == null
-        ? Collections.emptySet()
-        : new HashSet<>(features);
+        ? Collections.emptyList()
+        : new ArrayList<>(features);
   }
 
   /**
@@ -134,8 +136,8 @@ public class DiscoInfo {
    * @return Unmodifiable set.
    */
   @NonNull
-  public Set<Identity> getIdentities() {
-    return Collections.unmodifiableSet(identities);
+  public List<Identity> getIdentities() {
+    return Collections.unmodifiableList(identities);
   }
 
   /**
@@ -143,8 +145,8 @@ public class DiscoInfo {
    * @return Unmodifiable set.
    */
   @NonNull
-  public Set<String> getFeatures() {
-    return Collections.unmodifiableSet(features);
+  public List<String> getFeatures() {
+    return Collections.unmodifiableList(features);
   }
 
   @Override

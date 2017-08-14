@@ -19,7 +19,6 @@ package chat.viska.xmpp;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
 
 public class LocalClient extends AbstractClient {
@@ -31,10 +30,10 @@ public class LocalClient extends AbstractClient {
           System.getProperty("os.name", "Unknown"),
           System.getProperty("os.version", "")
   ).trim();
-  private DiscoClientType discoClientType;
+  private String softwareType;
 
   LocalClient(@NonNull final Session session) {
-    super(session, session.getJid());
+    super(session);
   }
 
   @NonNull
@@ -53,8 +52,8 @@ public class LocalClient extends AbstractClient {
   }
 
   @Nullable
-  public DiscoClientType getDiscoClientType() {
-    return discoClientType;
+  public String getSoftwareType() {
+    return softwareType;
   }
 
   public void setSoftwareName(@Nullable final String softwareName) {
@@ -69,9 +68,14 @@ public class LocalClient extends AbstractClient {
     this.operatingSystem = operatingSystemName == null ? "" : operatingSystemName;
   }
 
-  public void setDiscoClientType(@Nullable final DiscoClientType type) {
-    Objects.requireNonNull(type);
-    discoClientType = type;
+  /**
+   * Sets the software type. Possible values are listed on the
+   * <a href="https://xmpp.org/registrar/disco-categories.html#client">XMPP
+   * registrar</a>.
+   * @param type
+   */
+  public void setSoftwareType(@Nullable final String type) {
+    this.softwareType = type == null ? "" : softwareType;
   }
 
   /**
@@ -88,5 +92,10 @@ public class LocalClient extends AbstractClient {
       features.addAll(plugin.getDiscoFeatures());
     }
     return features;
+  }
+
+  @Override
+  public Jid getJid() {
+    return getSession().getJid();
   }
 }

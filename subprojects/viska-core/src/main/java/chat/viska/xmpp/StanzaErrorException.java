@@ -223,14 +223,6 @@ public class StanzaErrorException extends Exception {
   @NonNull
   public static StanzaErrorException fromXml(@NonNull final Document document)
       throws StreamErrorException {
-    final String stanzaNs = document.getDocumentElement().getNamespaceURI();
-    if (!CommonXmlns.STANZA_CLIENT.equals(stanzaNs)
-        && !CommonXmlns.STANZA_SERVER.equals(stanzaNs)) {
-      throw new StreamErrorException(
-          StreamErrorException.Condition.INVALID_XML,
-          "Incorrect stanza namespace."
-      );
-    }
     final Element errorElement = (Element) document
         .getDocumentElement()
         .getElementsByTagName("error")
@@ -239,12 +231,12 @@ public class StanzaErrorException extends Exception {
         .getChildNodes()
         .item(0);
     final boolean hasText = errorElement
-        .getElementsByTagNameNS(CommonXmlns.STREAM_CONTENT, "text")
+        .getElementsByTagNameNS(CommonXmlns.STREAM_ERROR, "text")
         .getLength() != 0;
     final Element textElement = hasText
         ? (Element) errorElement
               .getElementsByTagNameNS(
-                  CommonXmlns.STREAM_CONTENT,
+                  CommonXmlns.STREAM_ERROR,
                   "text"
               )
               .item(0)
@@ -285,7 +277,7 @@ public class StanzaErrorException extends Exception {
           "No condition element found."
       );
     }
-    if (!CommonXmlns.STREAM_CONTENT.equals(conditionElement.getNamespaceURI())) {
+    if (!CommonXmlns.STANZA_ERROR.equals(conditionElement.getNamespaceURI())) {
       throw new StreamErrorException(
           StreamErrorException.Condition.INVALID_XML,
           "Incorrect condition namespace."
@@ -318,7 +310,10 @@ public class StanzaErrorException extends Exception {
         id,
         originalSender,
         intendedRecipient,
-        condition, type, text, errorGenerator,
+        condition,
+        type,
+        text,
+        errorGenerator,
         redirect,
         appCondition,
         stanza
@@ -358,9 +353,12 @@ public class StanzaErrorException extends Exception {
                               @Nullable final URI redirect,
                               @Nullable final Element appCondition,
                               @Nullable final Element stanza) {
-    super("[" + EnumUtils.toXmlValue(condition) + "] " + text);
+    super(
+        "[" + EnumUtils.toXmlValue(condition) + "]"
+            + (text == null ? "" : " " + text)
+    );
     this.stanzaType = stanzaType;
-    this.id = id == null ? "" : id;
+    this.id = id;
     this.originalSender = originalSender;
     this.intendedRecipient = intendedRecipient;
     this.errorGenerator = errorGenerator;
@@ -369,7 +367,7 @@ public class StanzaErrorException extends Exception {
     this.condition = condition;
     this.appCondition = appCondition;
     this.stanza = stanza;
-    this.text = text == null ? "" : text;
+    this.text = text;
 
     Objects.requireNonNull(stanzaType, "`stanzaType` is absent.");
     Objects.requireNonNull(id, "`id` is absent.");

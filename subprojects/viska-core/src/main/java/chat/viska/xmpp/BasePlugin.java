@@ -37,21 +37,20 @@ import java.util.Set;
  */
 public class BasePlugin implements Plugin {
 
-  static final String XMLNS_NICKNAME = "http://jabber.org/protocol/nick";
   static final String XMLNS_SOFTWARE_VERSION = "jabber:iq:version";
 
   private static final String[] fixedFeatures = new String[] {
-      XMLNS_NICKNAME,
       XMLNS_SOFTWARE_VERSION
   };
 
-  private Session session;
+  private final Session session;
   private final Map<Jid, AbstractEntity> xmppEntityPool = new HashMap<>();
-  private LocalClient localClient;
+  private final LocalClient localClient;
 
   public BasePlugin(final @NonNull Session session) {
     Objects.requireNonNull(session);
     this.session = session;
+    this.localClient = new LocalClient(session);
   }
 
   @Nullable
@@ -69,7 +68,7 @@ public class BasePlugin implements Plugin {
       } else if (jid.getResourcePart().isEmpty()) {
         entity = new Account(session, jid);
       } else if (jid.equals(this.session.getJid())) {
-        entity = new LocalClient(session);
+        entity = this.localClient;
       } else {
         entity = new RemoteClient(session, jid);
       }
@@ -80,9 +79,7 @@ public class BasePlugin implements Plugin {
 
   @Nullable
   public LocalClient getLocalClient() {
-    return session.getJid() == null
-        ? null
-        : (LocalClient) getXmppEntityInstance(session.getJid());
+    return localClient;
   }
 
   @Override

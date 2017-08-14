@@ -21,7 +21,7 @@ import io.reactivex.annotations.Nullable;
 import java.util.Objects;
 
 /**
- * Information of an XMPP client software. This class is part of
+ * Information of an XMPP software. This class is part of
  * <a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software
  * Version</a>.
  */

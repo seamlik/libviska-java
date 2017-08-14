@@ -16,6 +16,7 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.DomUtils;
 import chat.viska.commons.ExceptionCaughtEvent;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
@@ -44,28 +45,14 @@ import io.reactivex.Completable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import io.reactivex.subjects.CompletableSubject;
-import java.io.IOException;
-import java.io.StringReader;
-import java.io.StringWriter;
-import java.io.Writer;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Result;
-import javax.xml.transform.Source;
-import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import org.w3c.dom.Document;
-import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 /**
@@ -86,36 +73,31 @@ public class NettyWebSocketSession extends DefaultSession {
   );
 
   private final Compression connectionCompression;
-  private final DocumentBuilder domBuilder;
-  private final Transformer domTransformer;
   private EventLoopGroup nettyEventLoopGroup;
   private SocketChannel nettyChannel;
   private WebSocketClientProtocolHandler websocketHandler;
   private SslHandler tlsHandler;
 
-  private Document preprocessInboundXml(final String txt)
+  private Document preprocessInboundXml(final String xml)
       throws SAXException {
-    final Document document;
-    synchronized (this.domBuilder) {
-      try {
-        document = domBuilder.parse(new InputSource(new StringReader(txt)));
-      } catch (IOException ex) {
-        throw new RuntimeException(ex);
-      }
-    }
-    document.normalizeDocument();
-    return document;
+    return DomUtils.readDocument(xml);
   }
 
   private String preprocessOutboundXml(final Document document)
       throws TransformerException {
-    final Source source = new DOMSource(document);
-    final Writer writer = new StringWriter();
-    final Result result = new StreamResult(writer);
-    synchronized (this.domTransformer) {
-      domTransformer.transform(source, result);
+    final StringBuilder result = new StringBuilder(DomUtils.writeString(document));
+    final String rootName = document.getDocumentElement().getLocalName();
+    if (document.getDocumentElement().getNamespaceURI() == null) {
+      final String prefix = document.getDocumentElement().getPrefix();
+      result.insert(rootName.length() + 2, String.format(
+          "%1s=\"%2s\" ",
+          prefix == null ? "xmlns" : "xmlns:" + prefix,
+          Stanza.isStanza(document)
+              ? CommonXmlns.STANZA_CLIENT
+              : CommonXmlns.STREAM_HEADER
+      ));
     }
-    return writer.toString();
+    return result.toString();
   }
 
   @Override
@@ -285,25 +267,6 @@ public class NettyWebSocketSession extends DefaultSession {
       throw new IllegalArgumentException(
           "Unsupported connection compression " + connectionCompression.toString()
       );
-    }
-
-    final TransformerFactory transformerFactory = TransformerFactory.newInstance();
-    final DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
-    builderFactory.setIgnoringComments(true);
-    builderFactory.setNamespaceAware(true);
-    try {
-      this.domBuilder = builderFactory.newDocumentBuilder();
-      this.domTransformer = transformerFactory.newTransformer();
-      this.domTransformer.setOutputProperty(
-          OutputKeys.OMIT_XML_DECLARATION,
-          "yes"
-      );
-      this.domTransformer.setOutputProperty(
-          OutputKeys.INDENT,
-          "no"
-      );
-    } catch (Exception ex) {
-      throw new RuntimeException("JVM does not support DOM.", ex);
     }
   }
 

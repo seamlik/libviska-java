@@ -15,6 +15,8 @@
  */
 
 package chat.viska.xmpp;
+
+import io.reactivex.Observable;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -43,5 +45,16 @@ public class ConnectionTest {
         "wss://im.example.org:443/ws",
         Connection.queryHostMetaXml(hostMetaXml).blockingGet().get(0).getUri().toString()
     );
+  }
+
+  @Test
+  public void run() throws Exception {
+    Observable.fromArray(1, 2, 3).map(it -> {
+      if (it == 3) {
+        throw new Exception("Wow");
+      } else {
+        return it;
+      }
+    }).onErrorReturnItem(null).subscribe(System.out::println);
   }
 }

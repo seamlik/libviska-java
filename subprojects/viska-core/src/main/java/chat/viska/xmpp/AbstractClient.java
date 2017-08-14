@@ -17,27 +17,13 @@
 package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
-import java.util.Objects;
-import java.util.concurrent.Future;
 
 /**
  * XMPP client.
  */
 public abstract class AbstractClient extends AbstractEntity {
 
-  protected AbstractClient(@NonNull final Session session,
-                           @NonNull final Jid jid) {
-    super(session, jid);
-    Objects.requireNonNull(jid);
-  }
-
-  /**
-   * Gets the {@link Account} logged in to this {@link AbstractClient}.
-   */
-  @NonNull
-  public Account getAccount() {
-    final BasePlugin plugin = (BasePlugin)
-        getSession().getPluginManager().getPlugin(BasePlugin.class);
-    return (Account) plugin.getXmppEntityInstance(getJid().toBareJid());
+  protected AbstractClient(@NonNull final Session session) {
+    super(session);
   }
 }

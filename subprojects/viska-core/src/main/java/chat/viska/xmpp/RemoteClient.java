@@ -17,11 +17,21 @@
 package chat.viska.xmpp;
 
 import io.reactivex.annotations.NonNull;
+import java.util.Objects;
 
 public class RemoteClient extends AbstractClient {
 
+  private final Jid jid;
+
   RemoteClient(@NonNull final Session session,
                @NonNull final Jid jid) {
-    super(session, jid);
+    super(session);
+    Objects.requireNonNull(jid);
+    this.jid = jid;
+  }
+
+  @Override
+  public Jid getJid() {
+    return jid;
   }
 }

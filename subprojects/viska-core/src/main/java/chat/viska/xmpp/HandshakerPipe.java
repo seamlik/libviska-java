@@ -35,11 +35,10 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EventObject;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -80,7 +79,7 @@ import org.xml.sax.SAXException;
  * fails. However, this class aborts the handshake and close the stream without
  * sending any stream error immediately after the authentication fails.</p>
  */
-public class HandshakerPipe extends BlankPipe implements SessionAware {
+class HandshakerPipe extends BlankPipe implements SessionAware {
 
   /**
    * Indicates the state of a {@link HandshakerPipe}.
@@ -151,8 +150,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   private final Subject<EventObject> eventStream = PublishSubject.create();
   private final DocumentBuilder domBuilder;
   private final Session session;
-
-  private final Set<StreamFeature> negotiatedFeatures = new HashSet<>();
+  private final List<StreamFeature> negotiatedFeatures = new ArrayList<>();
   private final Jid jid;
   private final Jid authzId;
   private final CredentialRetriever retriever;
@@ -163,7 +161,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   private Client saslCient;
   private String streamId = "";
   private StreamFeature negotiatingFeature;
-  private State state = State.STREAM_CLOSED;
+  private State state = State.INITIALIZED;
   private Disposable pipelineStartedSubscription;
   private StreamErrorException serverStreamError;
   private StreamErrorException clientStreamError;
@@ -475,18 +473,13 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   }
 
   private synchronized void start() {
-    switch (state) {
-      case DISPOSED:
-        throw new IllegalStateException("HandshakePipe disposed.");
-      case STREAM_CLOSED:
-        setState(State.STARTED);
-        serverStreamError = null;
-        clientStreamError = null;
-        handshakeError = null;
-        sendStreamOpening();
-        break;
-      default:
+    if (this.state != State.INITIALIZED) {
+      throw new IllegalStateException(
+          "Must not start handshaking if the HandshakerPipe is not just initialized."
+      );
     }
+    setState(State.STARTED);
+    sendStreamOpening();
   }
 
   /**
@@ -551,6 +544,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    */
   public synchronized Completable closeStream() {
     switch (state) {
+      case INITIALIZED:
+        return Completable.complete();
       case STREAM_CLOSED:
         return Completable.complete();
       case DISPOSED:
@@ -576,14 +571,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
           "<error xmlns=\"%1s\"><%2s xmlns=\"%3s\"/></error>",
           CommonXmlns.STREAM_HEADER,
           error.getCondition().toString(),
-          CommonXmlns.STREAM_CONTENT
+          CommonXmlns.STREAM_ERROR
       ))));
     } catch (SAXException | IOException ex) {
       throw new RuntimeException(ex);
     }
     if (error.getMessage() != null) {
       final Element textElement = document.createElementNS(
-          CommonXmlns.STREAM_CONTENT,
+          CommonXmlns.STREAM_ERROR,
           "text"
       );
       textElement.setTextContent(error.getMessage());
@@ -672,6 +667,11 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     return handshakeError;
   }
 
+  @NonNull
+  public List<StreamFeature> getNegotiatedFeatures() {
+    return Collections.unmodifiableList(negotiatedFeatures);
+  }
+
   /**
    * Invoked when the Pipe is reading data.
    * @throws AuthenticationException If a failure occurred during an SASL
@@ -697,7 +697,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
       return;
     }
 
-    if (this.state == State.STREAM_CLOSED) {
+    if (this.state == State.STREAM_CLOSED || this.state == State.INITIALIZED) {
       return;
     }
 
@@ -793,16 +793,15 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   @Override
   public synchronized void onAddedToPipeline(final Pipeline<?, ?> pipeline) {
     // TODO: Support for stream resumption
-    if (state == State.DISPOSED) {
-      throw new IllegalStateException();
+    if (state != State.INITIALIZED) {
+      throw new IllegalStateException("Used HandshakerPipes cannot be re-added.");
     }
     this.session
         .getEventStream()
-        .ofType(Session.ConnectionTerminatedEvent.class)
+        .ofType(DefaultSession.ConnectionTerminatedEvent.class)
         .subscribe(event -> setState(State.STREAM_CLOSED));
     this.pipeline = pipeline;
-    final Pipeline.State pipelineState = pipeline.getState();
-    if (pipelineState == Pipeline.State.STOPPED) {
+    if (pipeline.getState() == Pipeline.State.STOPPED) {
       pipelineStartedSubscription = pipeline.getEventStream()
           .ofType(PropertyChangeEvent.class)
           .filter(event -> event.getNewValue() == Pipeline.State.RUNNING)
@@ -823,16 +822,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   public synchronized void onWriting(Pipeline<?, ?> pipeline,
                                      Object toWrite,
                                      List<Object> toForward) throws Exception {
-    switch (this.state) {
-      case DISPOSED:
-        throw new IllegalStateException("Pipe disposed.");
-      case STREAM_CLOSED:
-        if (!(toWrite instanceof Document)) {
-          super.onWriting(pipeline, toWrite, toForward);
-        }
-        break;
-      default:
-        super.onWriting(pipeline, toWrite, toForward);
+    if (this.state == State.DISPOSED) {
+      throw new IllegalStateException("Pipe disposed.");
+    }
+    if (!(toWrite instanceof Document)) {
+      super.onWriting(pipeline, toWrite, toForward);
+    } else if (this.state == State.INITIALIZED || this.state == State.STREAM_CLOSED) {
+    } else {
+      super.onWriting(pipeline, toWrite, toForward);
     }
   }
 

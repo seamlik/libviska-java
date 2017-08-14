@@ -18,6 +18,7 @@ package chat.viska.xmpp;
 
 import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
+import io.reactivex.Maybe;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
@@ -52,9 +53,8 @@ import org.xml.sax.SAXException;
  *   <li>
  *     Adjust options like:
  *     <ul>
- *       <li>SASL Mechanisms.</li>
  *       <li>Preferred locale list.</li>
- *       <li>Device ID, a.k.a. XMPP resource (not recommended).</li>
+ *       <li>Properties of {@link LocalClient} provided by {@link BasePlugin}</li>
  *     </ul>
  *   </li>
  *   <li>
@@ -62,10 +62,8 @@ import org.xml.sax.SAXException;
  *     Note that {@link BasePlugin} is a built-in one and need not be applied
  *     manually.
  *   </li>
- *   <li>Login or register using {@code login()} and {@code register()}.</li>
- *   <li>
- *     Shutdown the {@link Session} using {@link #disconnect()}.
- *   </li>
+ *   <li>Login or register using {@code login()}.</li>
+ *   <li>Shutdown the {@link Session} using {@link #disconnect()}.</li>
  * </ol>
  */
 public interface Session extends AutoCloseable {
@@ -151,16 +149,6 @@ public interface Session extends AutoCloseable {
   }
 
   /**
-   * Indicates the connection is terminated.
-   */
-  class ConnectionTerminatedEvent extends EventObject {
-
-    public ConnectionTerminatedEvent(@NonNull final Object source) {
-      super(source);
-    }
-  }
-
-  /**
    * Starts logging in.
    * @return Token to track the completion.
    * @throws IllegalStateException If this {@link Session} is not disconnected.
@@ -216,6 +204,9 @@ public interface Session extends AutoCloseable {
    *         online.
    */
   void send(@NonNull StreamErrorException ex);
+
+  @NonNull
+  Maybe<Stanza> query(@NonNull String namespace, @NonNull Jid target) throws SAXException;
 
   /**
    * Gets the logger.
@@ -300,7 +291,7 @@ public interface Session extends AutoCloseable {
    *
    * <ul>
    *   <li>{@link chat.viska.commons.ExceptionCaughtEvent}</li>
-   *   <li>{@link ConnectionTerminatedEvent}</li>
+   *   <li>{@link DefaultSession.ConnectionTerminatedEvent}</li>
    *   <li>
    *     {@link java.beans.PropertyChangeEvent}
    *     <ul>
@@ -331,9 +322,6 @@ public interface Session extends AutoCloseable {
   @NonNull
   List<Locale> getLocales();
 
-  /**
-   * Indicates whether <a href="https://xmpp.org/extensions/xep-0198.html">Stream
-   * Management</a> is enabled.
-   */
-  boolean isStreamManagementEnabled();
+  @NonNull
+  List<StreamFeature> getStreamFeatures();
 }

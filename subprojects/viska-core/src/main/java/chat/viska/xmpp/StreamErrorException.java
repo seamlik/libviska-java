@@ -228,7 +228,7 @@ public class StreamErrorException extends Exception {
     }
     if (condition != null) {
       NodeList textNodes = conditionElement.getElementsByTagNameNS(
-          CommonXmlns.STREAM_CONTENT, "text"
+          CommonXmlns.STREAM_ERROR, "text"
       );
       if (textNodes.getLength() > 0) {
         return new StreamErrorException(
@@ -262,7 +262,7 @@ public class StreamErrorException extends Exception {
 
   public StreamErrorException(@NonNull final Condition condition,
                               @NonNull final String text) {
-    super("[" + EnumUtils.toXmlValue(condition) + "]" + text);
+    super("[" + EnumUtils.toXmlValue(condition) + "] " + text);
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }

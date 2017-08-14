@@ -25,13 +25,14 @@ final class CommonXmlns {
   public static final String RESOURCE_BINDING_2 = "urn:xmpp:bind2:0";
   public static final String SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
   public static final String STANZA_CLIENT = "jabber:client";
+  public static final String STANZA_ERROR = "urn:ietf:params:xml:ns:xmpp-stanzas";
   public static final String STANZA_SERVER = "jabber:server";
   public static final String STARTTLS = "urn:ietf:params:xml:ns:xmpp-tls";
   public static final String STREAM_COMPRESSION = "http://jabber.org/features/compress";
-  public static final String STREAM_CONTENT = "urn:ietf:params:xml:ns:xmpp-streams";
+  public static final String STREAM_ERROR = "urn:ietf:params:xml:ns:xmpp-streams";
   public static final String STREAM_HEADER = "http://etherx.jabber.org/streams";
   public static final String STREAM_MANAGEMENT = "urn:xmpp:sm:3";
   public static final String STREAM_OPENING_WEBSOCKET = "urn:ietf:params:xml:ns:xmpp-framing";
-  public static final String XEP_SERVICE_DISCOVERY = "http://jabber.org/protocol/disco";
   public static final String WEBSOCKET = "urn:xmpp:alt-connections:websocket";
+  public static final String XEP_SERVICE_DISCOVERY = "http://jabber.org/protocol/disco";
 }

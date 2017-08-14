@@ -20,10 +20,9 @@ import chat.viska.commons.EnumUtils;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.Objects;
-import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
 
-public class Stanza implements SessionAware {
+public class Stanza {
 
   /**
    * Stanza type.
@@ -41,30 +40,24 @@ public class Stanza implements SessionAware {
     SET
   }
 
-  private final Session session;
   private final Document document;
+
+  public static boolean isStanza(@Nullable final Document document) {
+    if (document == null) {
+      return false;
+    }
+    final String rootName = document.getDocumentElement().getLocalName();
+    return "iq".equals(rootName)
+        || "message".equals(rootName)
+        || "presence".equals(rootName);
+  }
 
   /**
    * Default constructor.
    */
-  public Stanza(@NonNull final Session session,
-                @NonNull final Document document) {
-    this.session = session;
+  Stanza(@NonNull final Document document) {
     this.document = document;
-
-    Objects.requireNonNull(session, "`session` is absent.");
     Objects.requireNonNull(document, "`document` is absent.");
-    final String rootNs = document.getDocumentElement().getNamespaceURI();
-    Validate.isTrue(
-        CommonXmlns.STANZA_CLIENT.equals(rootNs)
-            || CommonXmlns.STANZA_SERVER.equals(rootNs),
-        "Incorrect root namespace."
-    );
-    final String rootName = document.getDocumentElement().getLocalName();
-    Validate.isTrue(
-        "iq".equals(rootName) || "message".equals(rootName) || "presence".equals(rootName),
-        "Document is not one of the stanza types."
-    );
   }
 
   /**
@@ -104,11 +97,5 @@ public class Stanza implements SessionAware {
         IqType.class,
         document.getDocumentElement().getAttribute("type")
     );
-  }
-
-  @Override
-  @NonNull
-  public Session getSession() {
-    return session;
   }
 }

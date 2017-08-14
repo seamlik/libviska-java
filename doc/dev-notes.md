@@ -30,21 +30,21 @@ convenience, it assumes using a `NettyWebSocketSession`.
 |                |               |                 |                           |
 +----------------+               |                 +---------------------------+
                                  |
-       +                         |
-       |                         |
-       | subscribed              | listened
-       |    by                   |    by
-       |                         |
-       v                         |
+                                 |
+                                 |
+                                 |
+                                 |
+                                 |
+                                 |
                                  |
 +----------------+               |                 +---------------------------+
 |                |               |                 |                           |
-|    Pipeline    |               |                 |   NettyWebSocketSession   |
+|    Pipeline    | <-------------+                 |   NettyWebSocketSession   |
 |                |               |                 |                           |
 +----------------+               |                 +---------------------------+
                                  |
-       +                         |                              +
-       | publishes               |                              | triggers
+       +                         | listened                     +
+       | publishes               |    by                        | triggers
        v                         |                              v
                                  |
 +----------------+               |                 +---------------------------+

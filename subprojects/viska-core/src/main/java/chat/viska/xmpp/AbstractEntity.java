@@ -21,14 +21,11 @@ import io.reactivex.Maybe;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.Future;
 import org.w3c.dom.Element;
-import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
 
 /**
@@ -36,30 +33,85 @@ import org.xml.sax.SAXException;
  */
 public abstract class AbstractEntity implements SessionAware {
 
-  private final Session session;
-  private final Jid jid;
 
-  protected AbstractEntity(@NonNull final Session session,
-                           @NonNull final Jid jid) {
+  /**
+   * Item in associated with an {@link AbstractEntity}.
+   */
+  public static class Item {
+
+    private final Jid jid;
+    private final String name;
+    private final String node;
+
+    @NonNull
+    static Item fromXml(@NonNull final Element element) {
+      return new Item(
+          new Jid(element.getAttribute("jid")),
+          element.getAttribute("name"),
+          element.getAttribute("node")
+      );
+    }
+
+    public Item(@Nullable final Jid jid,
+                @NonNull final String name,
+                @NonNull final String node) {
+      this.jid = jid;
+      this.name = name == null ? "" : name;
+      this.node = node == null ? "" : node;
+    }
+
+    /**
+     * Gets the Jabber/XMPP ID.
+     */
+    @NonNull
+    public Jid getJid() {
+      return jid;
+    }
+
+    /**
+     * Gets the name.
+     */
+    @NonNull
+    public String getName() {
+      return name;
+    }
+
+    @NonNull
+    public String getNode() {
+      return node;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      }
+      if (obj == null || getClass() != obj.getClass()) {
+        return false;
+      }
+      Item item = (Item) obj;
+      return Objects.equals(jid, item.jid)
+          && Objects.equals(name, item.name)
+          && Objects.equals(node, item.node);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(jid, name, node);
+    }
+  }
+
+  private final Session session;
+
+  protected AbstractEntity(@NonNull final Session session) {
     Objects.requireNonNull(session);
-    Objects.requireNonNull(jid);
     this.session = session;
-    this.jid = jid;
   }
 
   @Nullable
-  private DiscoInfo consumeDiscoInfo(@NonNull final Stanza stanza)
+  private DiscoInfo convertToDiscoInfo(@NonNull final Stanza stanza)
       throws StanzaErrorException {
-    if (stanza.getIqType() == Stanza.IqType.ERROR) {
-      throw new StanzaErrorException(
-          stanza,
-          StanzaErrorException.Condition.BAD_REQUEST,
-          StanzaErrorException.Type.MODIFY,
-          "No IQ element found.", null,
-          null,
-          null
-      );
-    }
+    //TODO: Localized identities
     final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#info";
     final Element queryElement = (Element) stanza
         .getDocument()
@@ -72,7 +124,8 @@ public abstract class AbstractEntity implements SessionAware {
               stanza,
               StanzaErrorException.Condition.BAD_REQUEST,
               StanzaErrorException.Type.MODIFY,
-              "No IQ element found.", null,
+              "No IQ element found.",
+              null,
               null,
               null
           ).toXml()
@@ -80,37 +133,47 @@ public abstract class AbstractEntity implements SessionAware {
       return null;
     }
     final List<DiscoInfo.Identity> identities = Observable
-        .fromIterable(
-            DomUtils.toList(
-                queryElement.getElementsByTagNameNS(xmlns, "identity")
-            )
+        .fromIterable(DomUtils.toList(
+            queryElement.getElementsByTagNameNS(xmlns, "identity"))
         )
         .cast(Element.class)
         .map(DiscoInfo.Identity::fromXml)
         .toList()
         .blockingGet();
     final List<String> features = Observable
-        .fromIterable(
-            DomUtils.toList(
-                queryElement.getElementsByTagNameNS(xmlns, "feature")
-            )
-        )
+        .fromIterable(DomUtils.toList(
+            queryElement.getElementsByTagNameNS(xmlns, "feature")
+        ))
         .cast(Element.class)
         .map(it -> it.getAttribute("var"))
         .toList()
         .blockingGet();
-    return new DiscoInfo(
-        new HashSet<>(identities), new HashSet<>(features)
-    );
+    return new DiscoInfo(identities, features);
+  }
+
+  @Nullable
+  private List<Item> convertToItems(@NonNull final Stanza stanza) {
+    final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#items";
+    final Element queryElement = (Element) stanza
+        .getDocument()
+        .getDocumentElement()
+        .getElementsByTagNameNS(xmlns, "query")
+        .item(0);
+    return Observable
+        .fromIterable(DomUtils.toList(
+        queryElement.getElementsByTagNameNS(xmlns, "item")
+        ))
+        .cast(Element.class)
+        .map(Item::fromXml)
+        .toList()
+        .blockingGet();
   }
 
   /**
    * Gets the Jabber/XMPP ID.
    */
   @NonNull
-  public Jid getJid() {
-    return jid;
-  }
+  public abstract Jid getJid();
 
   /**
    * Queries available features and {@link DiscoInfo.Identity}s.
@@ -121,39 +184,30 @@ public abstract class AbstractEntity implements SessionAware {
    */
   @NonNull
   public Maybe<DiscoInfo> queryDiscoInfo() {
-    if (getSession().getState() == Session.State.DISPOSED) {
-      return Maybe.never();
-    }
-    final String id = UUID.randomUUID().toString();
-    final String query = String.format(
-        "<iq type=\"get\" to=\"%1s\" id=\"%2s\"><query xmlns=\"%3s#info\"/></iq>",
-        getJid().toString(),
-        id,
-        CommonXmlns.XEP_SERVICE_DISCOVERY
-    );
     try {
-      getSession().send(query);
+      return getSession().query(
+          CommonXmlns.XEP_SERVICE_DISCOVERY + "#info",
+          getJid()
+      ).map(this::convertToDiscoInfo);
     } catch (SAXException ex) {
       throw new RuntimeException(ex);
     }
-    return this.session
-        .getInboundStanzaStream()
-        .filter(it -> it.getId().equals(id))
-        .firstElement()
-        .map(this::consumeDiscoInfo);
   }
 
   /**
-   * Queries other {@link AbstractEntity}s associated to this
-   * {@link AbstractEntity}.
-   * @return {@link Future} tracking the completion status of this method and
-   *         providing a way to cancel it.
+   * Queries other {@link Item}s associated with this {@link AbstractEntity}.
    */
   @NonNull
-  public Future<DiscoItem> queryItems() {
-    throw new UnsupportedOperationException();
+  public Maybe<List<Item>> queryItems(@Nullable final String node) {
+    try {
+      return getSession().query(
+          CommonXmlns.XEP_SERVICE_DISCOVERY + "#items",
+          getJid()
+      ).map(this::convertToItems);
+    } catch (SAXException ex) {
+      throw new RuntimeException(ex);
+    }
   }
-
 
   /**
    * Queries information of the XMPP client software. This method is part of
@@ -193,6 +247,6 @@ public abstract class AbstractEntity implements SessionAware {
 
   @Override
   public String toString() {
-    return jid.toString();
+    return getJid().toString();
   }
 }

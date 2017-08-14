@@ -58,26 +58,27 @@ public class Cmd {
             .getPlugin(BasePlugin.class);
         for (Jid it : entities) {
           final AbstractEntity entity = basePlugin.getXmppEntityInstance(it);
-          final DiscoInfo result = entity.queryDiscoInfo().blockingGet();
-          System.out.println("[" + it + "]");
+          final DiscoInfo discoInfo = entity.queryDiscoInfo().blockingGet();
+          final List<AbstractEntity.Item> items = entity.queryItems(null).blockingGet();
+          System.out.println("<" + it + ">");
           System.out.println("  Features: ");
-          result.getFeatures()
+          discoInfo
+              .getFeatures()
               .stream()
               .sorted()
               .forEach(item -> System.out.println("    " + item));
-          result.getIdentities()
-              .forEach(identity -> {
-                System.out.println("  Identity:");
-                System.out.println("    Category: " + identity.getCategory());
-                System.out.println("    Type: " + identity.getType());
-                System.out.println("    Name: " + identity.getName());
-              });
-        }
-      } catch (Exception ex) {
-        if (debug) {
-          throw ex;
-        } else {
-          ex.printStackTrace();
+          discoInfo.getIdentities().forEach(identity -> {
+            System.out.println("  Identity:");
+            System.out.println("    Category: " + identity.getCategory());
+            System.out.println("    Type: " + identity.getType());
+            System.out.println("    Name: " + identity.getName());
+          });
+          System.out.println("  Items: ");
+          items.forEach(item -> {
+            System.out.println("    JID: " + item.getJid());
+            System.out.println("    Name: " + item.getName());
+            System.out.println("    Node: " + item.getNode());
+          });
         }
       }
     }
@@ -118,30 +119,37 @@ public class Cmd {
 
   private void run(String... args) throws Throwable {
     InfoCommand infoCommand = new InfoCommand();
-    JCommander jCommander = JCommander
+    JCommander jcommander = JCommander
         .newBuilder()
         .programName("viska-cmd-java")
         .addObject(this)
         .addCommand(infoCommand)
         .build();
     if (args.length == 0) {
-      jCommander.usage();
+      jcommander.usage();
       return;
     }
-    jCommander.parse(args);
+    jcommander.parse(args);
     if (help) {
-      jCommander.usage();
+      jcommander.usage();
       return;
     }
-    switch (jCommander.getParsedCommand()) {
-      case "info":
-        initialize();
-        infoCommand.run();
-        break;
-      default:
-        System.err.println("Wrong command.");
-        System.exit(1);
-        break;
+    try {
+      switch (jcommander.getParsedCommand()) {
+        case "info":
+          initialize();
+          infoCommand.run();
+          break;
+        default:
+          jcommander.usage();
+          break;
+      }
+    } catch (Exception ex) {
+      if (debug) {
+        throw ex;
+      } else {
+        ex.printStackTrace();
+      }
     }
   }
 }
