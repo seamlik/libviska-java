@@ -16,14 +16,14 @@
 
 package chat.viska.cmd;
 
-import chat.viska.cmd.jcommander.JidConverter;
-import chat.viska.xmpp.AbstractEntity;
 import chat.viska.xmpp.BasePlugin;
 import chat.viska.xmpp.Connection;
 import chat.viska.xmpp.DiscoInfo;
+import chat.viska.xmpp.DiscoItem;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.NettyWebSocketSession;
 import chat.viska.xmpp.Session;
+import chat.viska.xmpp.SoftwareInfo;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
@@ -57,27 +57,31 @@ public class Cmd {
             .getPluginManager()
             .getPlugin(BasePlugin.class);
         for (Jid it : entities) {
-          final AbstractEntity entity = basePlugin.getXmppEntityInstance(it);
-          final DiscoInfo discoInfo = entity.queryDiscoInfo().blockingGet();
-          final List<AbstractEntity.Item> items = entity.queryItems(null).blockingGet();
+          final DiscoInfo discoInfo = basePlugin.queryDiscoInfo(it).blockingGet();
+          final List<DiscoItem> items = basePlugin.queryDiscoItems(it, null).blockingGet();
+          final SoftwareInfo softwareInfo = basePlugin.querySoftwareInfo(it).blockingGet();
           System.out.println("<" + it + ">");
+          System.out.println("  Software Information: ");
+          System.out.println("    Name: " + softwareInfo.getName());
+          System.out.println("    Version: " + softwareInfo.getVersion());
+          System.out.println("    Operating system:: " + softwareInfo.getOperatingSystem());
           System.out.println("  Features: ");
           discoInfo
               .getFeatures()
               .stream()
               .sorted()
               .forEach(item -> System.out.println("    " + item));
+          System.out.println("  Identities:");
           discoInfo.getIdentities().forEach(identity -> {
-            System.out.println("  Identity:");
-            System.out.println("    Category: " + identity.getCategory());
-            System.out.println("    Type: " + identity.getType());
             System.out.println("    Name: " + identity.getName());
+            System.out.println("      Category: " + identity.getCategory());
+            System.out.println("      Type: " + identity.getType());
           });
           System.out.println("  Items: ");
           items.forEach(item -> {
             System.out.println("    JID: " + item.getJid());
-            System.out.println("    Name: " + item.getName());
-            System.out.println("    Node: " + item.getNode());
+            System.out.println("      Name: " + item.getName());
+            System.out.println("      Node: " + item.getNode());
           });
         }
       }

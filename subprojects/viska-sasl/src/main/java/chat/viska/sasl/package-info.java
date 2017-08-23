@@ -16,10 +16,10 @@
 
 /**
  * Provides classes for supporting
- * <a href="https://datatracker.ietf.org/doc/rfc4422">RFC 4422: Simple
- * Authentication and Security Layer (SASL)</a>. This package aims to serve as
- * an alternative solution to the one provided by Java SE and be usable in
- * environments like Android where {@link javax.security.sasl} is unavailable.
+ * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a>. This package
+ * aims to serve as an alternative solution to the one provided by Java SE and
+ * be usable in environments like Android where {@link javax.security.sasl} is
+ * unavailable.
  *
  * <p>When using the classes of this package, string normalization like
  * {@code stringprep} or

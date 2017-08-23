@@ -14,25 +14,7 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp;
-
-import io.reactivex.annotations.NonNull;
-import java.util.Objects;
-import org.apache.commons.lang3.Validate;
-
-public class Server extends AbstractEntity {
-
-  private final Jid jid;
-
-  Server(@NonNull final Session session, @NonNull final Jid jid) {
-    super(session);
-    Objects.requireNonNull(jid);
-    this.jid = jid;
-  }
-
-  @Override
-  @NonNull
-  public Jid getJid() {
-    return jid;
-  }
-}
+/**
+ * Provides classes representing a pipeline-style data structure.
+ */
+package chat.viska.commons.pipelines;

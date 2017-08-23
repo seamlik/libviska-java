@@ -16,15 +16,5 @@
 
 /**
  * Provides classes of the {@code viska-cmd-java} utility program.
- *
- * <h1>To {@code null} or Not to {@code null}?</h1>
- *
- * All method parameters and method return types are annotated with a
- * {@literal @}{@link io.reactivex.annotations.Nullable} or
- * {@literal @}{@link io.reactivex.annotations.NonNull}. If a {@code null}
- * passed to a {@link io.reactivex.annotations.NonNull} parameter, a
- * {@link java.lang.NullPointerException} is guaranteed to be thrown. If a
- * method returns a {@link io.reactivex.annotations.Nullable} value, it is
- * guaranteed to explained why in the documentations.
  */
 package chat.viska.cmd;

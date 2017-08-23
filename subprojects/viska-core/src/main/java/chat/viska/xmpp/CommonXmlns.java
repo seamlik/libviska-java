@@ -35,4 +35,5 @@ final class CommonXmlns {
   public static final String STREAM_OPENING_WEBSOCKET = "urn:ietf:params:xml:ns:xmpp-framing";
   public static final String WEBSOCKET = "urn:xmpp:alt-connections:websocket";
   public static final String XEP_SERVICE_DISCOVERY = "http://jabber.org/protocol/disco";
+  public static final String XEP_SOFTWARE_VERSION = "jabber:iq:version";
 }

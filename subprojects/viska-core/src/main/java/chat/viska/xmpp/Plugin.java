@@ -42,7 +42,7 @@ public interface Plugin extends SessionAware {
    * Discovery</a></p>
    */
   @NonNull
-  Set<String> getDiscoFeatures();
+  Set<String> getFeatures();
 
   /**
    * Gets the {@code <iq/>} sub-element types currently supported by the plugin.
@@ -51,5 +51,5 @@ public interface Plugin extends SessionAware {
    * the connection will be forcibly closed.
    */
   @NonNull
-  Set<Map.Entry<String, String>> getSupportedStanzas();
+  Set<Map.Entry<String, String>> getSupportedIqs();
 }

@@ -28,14 +28,14 @@ import java.util.Set;
 import org.w3c.dom.Element;
 
 /**
- * Result of a service discovery query. This class is part of
- * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
+ * Result of an information query defined in
+ * <a href="https://xmpp.org/extensions/xep-0030.html">Service
  * Discovery</a>.
  */
 public class DiscoInfo {
 
   /**
-   * Identity of an {@link AbstractEntity}.
+   * Identity of an XMPP entity.
    */
   public static class Identity {
 

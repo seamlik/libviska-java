@@ -10,49 +10,48 @@ Chain Reaction When a Connection Is Being Closed
 ------------------------------------------------
 
 There are various components inside a `DefaultSession` each of who maintains its 
-own internal state. Here is a diagram illustrating how they work together. For 
-convenience, it assumes using a `NettyWebSocketSession`.
+own internal state. Here is a diagram illustrating how they communicate with
+each other when an XMPP session is being disconnected. For convenience, it
+assumes using a `NettyWebSocketSession`.
 
 ```text
-+----------------+                                 +---------------------------+
-|                |                                 |                           |
-| DefaultSession | <-------------+---------------> |      HandshakerPipe       |
-|                |               |                 |                           |
-+----------------+               |                 +---------------------------+
-                                 |
-       +                         |                              +
-       | publishes               |                              | publishes
-       v                         |                              v
-                                 |
-+----------------+               |                 +---------------------------+
-|                |               |                 |                           |
-| Session.State  |               |                 |   HandshakerPipe.State    |
-|                |               |                 |                           |
-+----------------+               |                 +---------------------------+
-                                 |
-                                 |
-                                 |
-                                 |
-                                 |
-                                 |
-                                 |
-                                 |
-+----------------+               |                 +---------------------------+
-|                |               |                 |                           |
-|    Pipeline    | <-------------+                 |   NettyWebSocketSession   |
-|                |               |                 |                           |
-+----------------+               |                 +---------------------------+
-                                 |
-       +                         | listened                     +
-       | publishes               |    by                        | triggers
-       v                         |                              v
-                                 |
-+----------------+               |                 +---------------------------+
-|                |               |                 |                           |
-| Pipeline.State |               +---------------+ | ConnectionTerminatedEvent |
-|                |                                 |                           |
-+----------------+                                 +---------------------------+
++---------------------------+
+|                           |
+|   NettyWebSocketSession   |
+|                           |
++---------------------------+
 
+             +
+             | triggers
+             v
+
++---------------------------+                    +----------------+
+|                           |    listened by     |                |
+| ConnectionTerminatedEvent | +----------------> | DefaultSession |
+|                           |                    |                |
++---------------------------+                    +----------------+
+
+             +
+             | listened
+             |    by
+             |
+             v
+
++---------------------------+
+|                           |
+|      HandshakerPipe       |
+|                           |
++---------------------------+
+
+             +
+             | publishes
+             v
+
++---------------------------+                    +----------------+
+|                           |    subscribed by   |                |
+|   HandshakerPipe.State    | +----------------> |    Pipeline    |
+|                           |                    |                |
++---------------------------+                    +----------------+
 ```
 
 Whenever the `HandshakerPipe` detects the XML stream has closed while the 

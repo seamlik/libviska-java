@@ -154,17 +154,12 @@ public class Connection {
   private static List<Connection> queryHostMetaXml(@NonNull Document hostMeta) {
     return Observable.fromIterable(
         DomUtils.toList(hostMeta.getDocumentElement().getElementsByTagName("Link"))
-    ).cast(Element.class).map(element -> {
-      Protocol protocol = null;
-      switch (element.getAttribute("rel")) {
-        case CommonXmlns.WEBSOCKET:
-          protocol = Protocol.WEBSOCKET;
-          break;
-        default:
-          return null;
-      }
-      return new Connection(protocol, new URI(element.getAttribute("href")));
-    }).toList().blockingGet();
+    ).cast(Element.class).filter(
+        it -> CommonXmlns.WEBSOCKET.equals(it.getAttribute("rel"))
+    ).map(it -> new Connection(
+        Protocol.WEBSOCKET,
+        new URI(it.getAttribute("href"))
+    )).toList().blockingGet();
   }
 
   public static Single<List<Connection>>
@@ -189,31 +184,23 @@ public class Connection {
     }).map(Connection::queryHostMetaXml);
   }
 
-  private static List<Connection> queryHostMetaJson(@NonNull JsonObject hostMeta) {
+  private static List<Connection>
+  queryHostMetaJson(@NonNull final JsonObject hostMeta) {
     return Observable.fromIterable(
         hostMeta.getAsJsonObject().getAsJsonArray("links")
-    ).map(element -> {
-      Protocol protocol;
-      final String rel = element
-          .getAsJsonObject()
-          .getAsJsonPrimitive("rel")
-          .getAsString();
-      switch (rel) {
-        case CommonXmlns.WEBSOCKET:
-          protocol = Protocol.WEBSOCKET;
-          break;
-        default:
-          return null;
-      }
-      return new Connection(
-          protocol,
-          new URI(
-              element.getAsJsonObject()
-                     .getAsJsonPrimitive("href")
-                     .getAsString()
-          )
-      );
-    }).toList().blockingGet();
+    ).filter(
+        it -> it.getAsJsonObject()
+            .getAsJsonPrimitive("rel")
+            .getAsString()
+            .equals(CommonXmlns.WEBSOCKET)
+    ).map(element -> new Connection(
+        Protocol.WEBSOCKET,
+        new URI(
+            element.getAsJsonObject()
+                   .getAsJsonPrimitive("href")
+                   .getAsString()
+        )
+    )).toList().blockingGet();
   }
 
   public static Single<List<Connection>>

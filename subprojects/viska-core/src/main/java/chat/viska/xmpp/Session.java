@@ -16,15 +16,17 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.reactive.ReactiveObject;
 import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
+import io.reactivex.Flowable;
 import io.reactivex.Maybe;
-import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.EventObject;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLSession;
 import org.w3c.dom.Document;
@@ -51,16 +53,7 @@ import org.xml.sax.SAXException;
  *     Obtain a {@link Connection} based on the domain name of an XMPP server.
  *   </li>
  *   <li>
- *     Adjust options like:
- *     <ul>
- *       <li>Preferred locale list.</li>
- *       <li>Properties of {@link LocalClient} provided by {@link BasePlugin}</li>
- *     </ul>
- *   </li>
- *   <li>
  *     Apply some {@link Plugin}s in order to support more XMPP extensions.
- *     Note that {@link BasePlugin} is a built-in one and need not be applied
- *     manually.
  *   </li>
  *   <li>Login or register using {@code login()}.</li>
  *   <li>Shutdown the {@link Session} using {@link #disconnect()}.</li>
@@ -187,26 +180,40 @@ public interface Session extends AutoCloseable {
    * is violated.
    * @throws IllegalStateException If this class is disposed of.
    * @throws SAXException If the XML is malformed.
+   * @return Token that emits {@literal true} when the server receives the
+   *         stanza but is empty if
+   *         <a href="https://xmpp.org/extensions/xep-0198.html">Stream
+   *         Management</a> is disabled.
    */
-  void send(@NonNull String xml) throws SAXException;
+  @NonNull
+  Maybe<Boolean> send(@NonNull String xml) throws SAXException;
 
   /**
    * Sends an XML stanza to the server. The stanza will not be validated by any
    * means, so beware that the server may close the connection once any policy
    * is violated.
    * @throws IllegalStateException If this class is disposed of.
+   * @return Token that emits {@literal true} when the server receives the
+   *         stanza but is empty if
+   *         <a href="https://xmpp.org/extensions/xep-0198.html">Stream
+   *         Management</a> is disabled.
    */
-  void send(@NonNull Document xml);
+  @NonNull
+  Maybe<Boolean> send(@NonNull Document xml);
 
   /**
    * Sends a stream error and then disconnects.
    * @throws IllegalStateException If this {@link Session} is not connected or
    *         online.
    */
+  @NonNull
   void send(@NonNull StreamErrorException ex);
 
   @NonNull
-  Maybe<Stanza> query(@NonNull String namespace, @NonNull Jid target) throws SAXException;
+  Maybe<Stanza> query(@NonNull Jid target,
+                      @NonNull String namespace,
+                      @Nullable Map<String, String> params)
+      throws SAXException;
 
   /**
    * Gets the logger.
@@ -260,7 +267,7 @@ public interface Session extends AutoCloseable {
    * any errors but will emit a completion after this class is disposed of.
    */
   @NonNull
-  Observable<Stanza> getInboundStanzaStream();
+  Flowable<Stanza> getInboundStanzaStream();
 
   /**
    * Gets the plugin manager.
@@ -269,11 +276,10 @@ public interface Session extends AutoCloseable {
   PluginManager getPluginManager();
 
   /**
-   * Gets the current {@link State}. When an {@link Session} is first
-   * created, the {@link State} is always {@link State#DISCONNECTED}.
+   * Gets the current {@link State}.
    */
   @NonNull
-  State getState();
+  ReactiveObject<State> getState();
 
   /**
    * Gets the negotiated {@link Jid} after handshake.
@@ -284,7 +290,7 @@ public interface Session extends AutoCloseable {
 
   /**
    * Gets a stream of emitted {@link EventObject}s. It never emits any errors
-   * but will emit a completion signal after this class enters
+   * but will emit a completion signal once this class enters
    * {@link State#DISPOSED}.
    *
    * <p>This class emits only the following types of {@link EventObject}:</p>
@@ -292,16 +298,10 @@ public interface Session extends AutoCloseable {
    * <ul>
    *   <li>{@link chat.viska.commons.ExceptionCaughtEvent}</li>
    *   <li>{@link DefaultSession.ConnectionTerminatedEvent}</li>
-   *   <li>
-   *     {@link java.beans.PropertyChangeEvent}
-   *     <ul>
-   *       <li>{@code State} ({@link State})</li>
-   *     </ul>
-   *   </li>
    * </ul>
    */
   @NonNull
-  Observable<EventObject> getEventStream();
+  Flowable<EventObject> getEventStream();
 
   /**
    * Gets the preferred {@link Locale}s. It can be modified at anytime including

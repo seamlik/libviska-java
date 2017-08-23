@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-package chat.viska.cmd.jcommander;
-
-import chat.viska.xmpp.Jid;
-import com.beust.jcommander.IStringConverter;
-
-public class JidConverter implements IStringConverter<Jid> {
-
-  @Override
-  public Jid convert(String value) {
-    return new Jid(value);
-  }
-}
+/**
+ * Provides reactive data holders.
+ */
+package chat.viska.commons.reactive;

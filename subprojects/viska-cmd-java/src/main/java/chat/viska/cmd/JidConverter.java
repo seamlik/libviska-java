@@ -14,24 +14,15 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp;
+package chat.viska.cmd;
 
-import io.reactivex.annotations.NonNull;
-import java.util.Objects;
+import chat.viska.xmpp.Jid;
+import com.beust.jcommander.IStringConverter;
 
-public class RemoteClient extends AbstractClient {
-
-  private final Jid jid;
-
-  RemoteClient(@NonNull final Session session,
-               @NonNull final Jid jid) {
-    super(session);
-    Objects.requireNonNull(jid);
-    this.jid = jid;
-  }
+class JidConverter implements IStringConverter<Jid> {
 
   @Override
-  public Jid getJid() {
-    return jid;
+  public Jid convert(String value) {
+    return new Jid(value);
   }
 }

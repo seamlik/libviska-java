@@ -21,6 +21,7 @@ import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.Objects;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
 public class Stanza {
 
@@ -55,9 +56,9 @@ public class Stanza {
   /**
    * Default constructor.
    */
-  Stanza(@NonNull final Document document) {
-    this.document = document;
+  public Stanza(@NonNull final Document document) {
     Objects.requireNonNull(document, "`document` is absent.");
+    this.document = document;
   }
 
   /**
@@ -97,5 +98,38 @@ public class Stanza {
         IqType.class,
         document.getDocumentElement().getAttribute("type")
     );
+  }
+
+  @NonNull
+  public String getIqName() {
+    final Element iqElement = (Element) this.document
+        .getDocumentElement()
+        .getFirstChild();
+    if (iqElement == null) {
+      return "";
+    } else {
+      return iqElement.getLocalName();
+    }
+  }
+
+  @NonNull
+  public String getIqNamespace() {
+    final Element iqElement = (Element) this.document
+        .getDocumentElement()
+        .getFirstChild();
+    if (iqElement == null) {
+      return "";
+    } else {
+      final String namespace = iqElement.getNamespaceURI();
+      return namespace == null ? "" : namespace;
+    }
+  }
+
+  @Nullable
+  public Document getResultTemplate() {
+    if (getType() != Type.IQ) {
+      return null;
+    }
+    throw new UnsupportedOperationException();
   }
 }

@@ -51,7 +51,7 @@ public class JinglePlugin implements Plugin {
   }
 
   @Override
-  public Set<String> getDiscoFeatures() {
+  public Set<String> getFeatures() {
     Set<String> features = new HashSet<>();
     //features.add(JingleInfoQuery.Jingle.XMLNS);
     return features;
@@ -59,7 +59,7 @@ public class JinglePlugin implements Plugin {
 
   @Override
   @NonNull
-  public Set<Map.Entry<String, String>> getSupportedStanzas() {
+  public Set<Map.Entry<String, String>> getSupportedIqs() {
     return SUPPORTED_STANZAS;
   }
 

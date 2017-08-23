@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp;
+package chat.viska.commons.reactive;
 
+import io.reactivex.Flowable;
 import io.reactivex.annotations.NonNull;
+import io.reactivex.annotations.Nullable;
 
-/**
- * XMPP client.
- */
-public abstract class AbstractClient extends AbstractEntity {
+public interface ReactiveObject<T> {
 
-  protected AbstractClient(@NonNull final Session session) {
-    super(session);
-  }
+  @Nullable
+  T getValue();
+
+  @NonNull
+  Flowable<T> getStream();
 }
