@@ -27,12 +27,14 @@ import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
+import io.reactivex.Observable;
 import io.reactivex.Single;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import io.reactivex.functions.Action;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
+import io.reactivex.subjects.MaybeSubject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EventObject;
@@ -48,6 +50,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
 
 /**
@@ -91,9 +94,6 @@ public abstract class DefaultSession implements Session {
   private final Flowable<Stanza> inboundStanzaStream;
   private final Compression streamCompression;
   private final Logger logger = Logger.getLogger(this.getClass().getCanonicalName());
-  private final List<Locale> locales = new CopyOnWriteArrayList<>(
-      new Locale[] { Locale.getDefault() }
-  );
   private final Jid jid;
   private final Jid authzId;
   private final List<String> saslMechanisms;
@@ -417,12 +417,6 @@ public abstract class DefaultSession implements Session {
   }
 
   @Override
-  public Maybe<Boolean> send(@NonNull final String xml) throws SAXException {
-    xmlPipeline.write(DomUtils.readDocument(xml));
-    return Maybe.empty();
-  }
-
-  @Override
   public void send(StreamErrorException error) {
     synchronized (this.state) {
       switch (this.state.getValue()) {
@@ -442,37 +436,45 @@ public abstract class DefaultSession implements Session {
   }
 
   @Override
-  public Maybe<Stanza> query(final Jid target,
+  public StanzaReceipt query(final Jid target,
                              final String namespace,
                              final Map<String, String> params)
       throws SAXException {
-    //TODO: deal with params
     if (this.state.getValue() == Session.State.DISPOSED) {
-      return Maybe.never();
+      throw new IllegalStateException("Session disposed.");
     }
     final String id = UUID.randomUUID().toString();
-    send(String.format(
-        "<iq type=\"get\" to=\"%1s\" id=\"%2s\"><query xmlns=\"%3s\"/></iq>",
-        target,
+    final Document iq =  Stanza.getIqTemplate(
+        Stanza.IqType.GET,
         id,
-        namespace
-    ));
-    return getInboundStanzaStream()
+        target
+    );
+    final Element element = iq.createElementNS(namespace, "query");
+    iq.getDocumentElement().appendChild(element);
+    if (params != null) {
+      Observable.fromIterable(params.entrySet()).forEach(it -> {
+        element.setAttribute(it.getKey(), it.getValue());
+      });
+    }
+    final MaybeSubject<Stanza> response = MaybeSubject.create();
+    // TODO: Make this simpler
+    getInboundStanzaStream()
         .filter(it -> it.getId().equals(id))
-        .map(stanza -> {
-          if (stanza.getIqType() == Stanza.IqType.ERROR) {
-            Exception cause;
+        .firstElement()
+        .subscribe(it -> {
+          if (it.getIqType() == Stanza.IqType.ERROR) {
+            final StanzaErrorException error;
             try {
-              cause = StanzaErrorException.fromXml(stanza.getDocument());
+              error = StanzaErrorException.fromXml(it.getDocument());
+              response.onError(error);
             } catch (StreamErrorException ex) {
               send(ex);
-              cause = ex;
             }
-            throw cause;
           } else {
-            return stanza;
+            response.onSuccess(it);
           }
-        }).firstElement();
+        }, response::onError, response::onComplete);
+    return new StanzaReceipt(this, send(iq), response);
   }
 
   @Override
@@ -514,12 +516,6 @@ public abstract class DefaultSession implements Session {
   @NonNull
   public Flowable<EventObject> getEventStream() {
     return eventStream;
-  }
-
-  @Override
-  @NonNull
-  public List<Locale> getLocales() {
-    return locales;
   }
 
   @Override

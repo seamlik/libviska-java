@@ -30,15 +30,12 @@ import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.subjects.PublishSubject;
-import io.reactivex.subjects.Subject;
 import java.beans.PropertyChangeEvent;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.EventObject;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -447,6 +444,7 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
                 "Resource Binding result contains incorrect JID."
             ));
           }
+          break;
         default:
           sendStreamError(new StreamErrorException(
               StreamErrorException.Condition.INVALID_XML,

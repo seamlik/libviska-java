@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp;
+package chat.viska.xmpp.plugins;
 
+import chat.viska.xmpp.Jid;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.Objects;
-import org.w3c.dom.Element;
 
 /**
  * Result of an item query defined in
@@ -30,15 +30,6 @@ public class DiscoItem {
   private final Jid jid;
   private final String name;
   private final String node;
-
-  @NonNull
-  static DiscoItem fromXml(@NonNull final Element element) {
-    return new DiscoItem(
-        new Jid(element.getAttribute("jid")),
-        element.getAttribute("name"),
-        element.getAttribute("node")
-    );
-  }
 
   public DiscoItem(@Nullable final Jid jid,
                    @NonNull final String name,

@@ -25,7 +25,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
 /**
- * Indicates a stream error has occurred.
+ * Indicates a stream error has occurred or is received.
  */
 public class StreamErrorException extends Exception {
 

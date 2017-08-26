@@ -16,12 +16,15 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.Objects;
+import java.util.UUID;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.xml.sax.SAXException;
 
 public class Stanza {
 
@@ -51,6 +54,24 @@ public class Stanza {
     return "iq".equals(rootName)
         || "message".equals(rootName)
         || "presence".equals(rootName);
+  }
+
+  public static Document getIqTemplate(@NonNull final IqType type,
+                                       @NonNull final String id,
+                                       @NonNull final Jid recipient) {
+    final String iq = String.format(
+        "<iq type=\"%1s\" id=\"%2s\"></iq>",
+        EnumUtils.toXmlValue(type),
+        id
+    );
+    final Document xml;
+    try {
+      xml = DomUtils.readDocument(iq);
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
+    }
+    xml.getDocumentElement().setAttribute("to", recipient.toString());
+    return xml;
   }
 
   /**
@@ -128,8 +149,20 @@ public class Stanza {
   @Nullable
   public Document getResultTemplate() {
     if (getType() != Type.IQ) {
-      return null;
+      throw new IllegalStateException("This stanza is not an <iq/>.");
     }
-    throw new UnsupportedOperationException();
+    switch (getIqType()) {
+      case GET:
+        break;
+      case SET:
+        break;
+      default:
+        throw new IllegalStateException("This stanza is already an <iq/> result.");
+    }
+    return getIqTemplate(
+        IqType.RESULT,
+        UUID.randomUUID().toString(),
+        getSender()
+    );
   }
 }

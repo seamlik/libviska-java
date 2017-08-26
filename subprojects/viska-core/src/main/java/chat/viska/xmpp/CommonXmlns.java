@@ -19,10 +19,10 @@ package chat.viska.xmpp;
 /**
  * Contains {@link String} constants of common XML namespaces.
  */
-final class CommonXmlns {
-  public static final String BOSH = "urn:xmpp:alt-connections:xbosh";
+public final class CommonXmlns {
   public static final String RESOURCE_BINDING = "urn:ietf:params:xml:ns:xmpp-bind";
   public static final String RESOURCE_BINDING_2 = "urn:xmpp:bind2:0";
+  public static final String ROSTER = "jabber:iq:roster";
   public static final String SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
   public static final String STANZA_CLIENT = "jabber:client";
   public static final String STANZA_ERROR = "urn:ietf:params:xml:ns:xmpp-stanzas";

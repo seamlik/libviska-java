@@ -37,10 +37,6 @@ public class MutableReactiveObject<T> implements ReactiveObject<T> {
     stream.onNext(value);
   }
 
-  public boolean completed() {
-    return stream.hasComplete();
-  }
-
   public void complete() {
     stream.onComplete();
   }

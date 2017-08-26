@@ -63,36 +63,44 @@ public interface Session extends AutoCloseable {
 
   /**
    * State of a {@link Session}.
-   * //TODO: redraw diagram
    *
    * <h1>State diagram</h1>
    * <pre>{@code
-   *                                                      +---------------+
-   *                          disconnect()                |               |
-   *         +------------------------------------------+ | DISCONNECTED  |    <------------+ <----------------------------+ <---------------------+
-   *         |                                            |               |                                                                        |
-   *         |                                            +---------------+                 ^                              ^                       |
-   *         |                                                                              |                              |                       |
-   *         |                                                  +  ^                        |                              |                       |
-   *         |                                      reconnect() |  | Connection loss        | Connection loss              | Connection loss       | Connection loss
-   *         v                                                  v  +                        +                              +                       +
+   *             +--------------+
+   *             |              |
+   *             |   DISPOSED   |
+   *             |              |
+   *             +--------------+
    *
-   * +--------------+    +---------------+                +--------------+           +--------------+               +--------------+        +--------------+
-   * |              |    |               |    login()     |              |           |              |               |              |        |              |
-   * |   DISPOSED   |    |  INITIALIZED  | +----------->  |  CONNECTING  | +-------> |  CONNECTED   | +---------->  | HANDSHAKING  | +----> |   ONLINE     |
-   * |              |    |               |   register()   |              |           |              |               |              |        |              |
-   * +--------------+    +---------------+                +--------------+           +--------------+               +--------------+        +--------------+
+   *                    ^
+   *                    | dispose()
+   *                    +
    *
-   *         ^                                                   +                           +                             +                       +
-   *         |                                                   | disconnect()              | disconnect()                | disconnect()          | disconnect()
-   *         |                                                   | Server disconnects        | Server disconnects          | Server disconnects    | Server disconnects
-   *         |                                                   v                           |                             |                       |
-   *         |                                                                               v                             v                       |
-   *         |                                            +---------------+                                                                        |
-   *         +------------------------------------------+ |               | <----------------+ <---------------------------+ <---------------------+
-   *                                                      | DISCONNECTING |
-   *                                                      |               |
-   *                                                      +---------------+
+   *             +---------------+
+   *             |               |                            Connection loss
+   * +---------> | DISCONNECTED  |    <------------+------------------------------+-----------------------+
+   * |           |               |                 |                              |                       |
+   * |           +---------------+                 |                              |                       |
+   * |                                             |                              |                       |
+   * |                 +  ^                        |                              |                       |
+   * |         login() |  | Connection loss        |                              |                       |
+   * |                 v  +                        +                              +                       +
+   * |
+   * |           +--------------+           +--------------+               +--------------+        +--------------+
+   * |           |              |           |              |               |              |        |              |
+   * |           |  CONNECTING  | +-------> |  CONNECTED   | +---------->  | HANDSHAKING  | +----> |   ONLINE     |
+   * |           |              |           |              |               |              |        |              |
+   * |           +--------------+           +--------------+               +--------------+        +--------------+
+   * |
+   * |                  +                           +                             +                       +
+   * |                  | disconnect()              |                             |                       |
+   * |                  v                           |                             |                       |
+   * |                                              |                             |                       |
+   * |           +---------------+                  |                             |                       |
+   * |           |               |                  |                             |                       |
+   * +---------+ | DISCONNECTING | <----------------+-----------------------------+-----------------------+
+   *             |               |                             disconnect()
+   *             +---------------+
    * }</pre>
    */
   enum State {
@@ -179,24 +187,6 @@ public interface Session extends AutoCloseable {
    * means, so beware that the server may close the connection once any policy
    * is violated.
    * @throws IllegalStateException If this class is disposed of.
-   * @throws SAXException If the XML is malformed.
-   * @return Token that emits {@literal true} when the server receives the
-   *         stanza but is empty if
-   *         <a href="https://xmpp.org/extensions/xep-0198.html">Stream
-   *         Management</a> is disabled.
-   */
-  @NonNull
-  Maybe<Boolean> send(@NonNull String xml) throws SAXException;
-
-  /**
-   * Sends an XML stanza to the server. The stanza will not be validated by any
-   * means, so beware that the server may close the connection once any policy
-   * is violated.
-   * @throws IllegalStateException If this class is disposed of.
-   * @return Token that emits {@literal true} when the server receives the
-   *         stanza but is empty if
-   *         <a href="https://xmpp.org/extensions/xep-0198.html">Stream
-   *         Management</a> is disabled.
    */
   @NonNull
   Maybe<Boolean> send(@NonNull Document xml);
@@ -210,7 +200,7 @@ public interface Session extends AutoCloseable {
   void send(@NonNull StreamErrorException ex);
 
   @NonNull
-  Maybe<Stanza> query(@NonNull Jid target,
+  StanzaReceipt query(@NonNull Jid target,
                       @NonNull String namespace,
                       @Nullable Map<String, String> params)
       throws SAXException;
@@ -302,25 +292,6 @@ public interface Session extends AutoCloseable {
    */
   @NonNull
   Flowable<EventObject> getEventStream();
-
-  /**
-   * Gets the preferred {@link Locale}s. It can be modified at anytime including
-   * even when this class is in {@link State#DISPOSED}.
-   *
-   * <p>Some properties of or results queried from XMPP entities are
-   * human-readable texts and therefore may have multiple localized versions.
-   * For example, the {@code category} and {@code type} of an
-   * {@link chat.viska.xmpp.DiscoInfo.Identity}. In this case, only the results
-   * matched with the preferred {@link Locale}s are returned.</p>
-   *
-   * <p>By default it only contains the JVM's system {@link Locale} which is a
-   * single one. On platforms such as Android where users can set multiple
-   * {@link Locale}s, it is required to set this property manually.</p>
-   *
-   * @return Modifiable {@link List}.
-   */
-  @NonNull
-  List<Locale> getLocales();
 
   @NonNull
   List<StreamFeature> getStreamFeatures();

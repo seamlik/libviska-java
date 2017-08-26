@@ -67,7 +67,7 @@ public class Connection {
     /**
      * <a href="https://datatracker.ietf.org/doc/rfc7395">RFC 7395: An
      * Extensible Messaging and Presence Protocol (XMPP) Subprotocol for
-     * WebSocket</a>
+     * WebSocket</a>.
      */
     WEBSOCKET;
 

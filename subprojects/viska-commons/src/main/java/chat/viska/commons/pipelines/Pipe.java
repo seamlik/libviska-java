@@ -87,7 +87,6 @@ public interface Pipe {
 
   /**
    * Invoked when the Pipe is removed from a {@link Pipeline}.
-   * @param pipeline
    */
   void onRemovedFromPipeline(@NonNull Pipeline<?, ?> pipeline);
 }

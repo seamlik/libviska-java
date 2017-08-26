@@ -16,14 +16,14 @@
 
 package chat.viska.cmd;
 
-import chat.viska.xmpp.BasePlugin;
 import chat.viska.xmpp.Connection;
-import chat.viska.xmpp.DiscoInfo;
-import chat.viska.xmpp.DiscoItem;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.NettyWebSocketSession;
 import chat.viska.xmpp.Session;
-import chat.viska.xmpp.SoftwareInfo;
+import chat.viska.xmpp.plugins.BasePlugin;
+import chat.viska.xmpp.plugins.DiscoInfo;
+import chat.viska.xmpp.plugins.DiscoItem;
+import chat.viska.xmpp.plugins.SoftwareInfo;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
@@ -57,14 +57,8 @@ public class Cmd {
             .getPluginManager()
             .getPlugin(BasePlugin.class);
         for (Jid it : entities) {
-          final DiscoInfo discoInfo = basePlugin.queryDiscoInfo(it).blockingGet();
-          final List<DiscoItem> items = basePlugin.queryDiscoItems(it, null).blockingGet();
-          final SoftwareInfo softwareInfo = basePlugin.querySoftwareInfo(it).blockingGet();
           System.out.println("<" + it + ">");
-          System.out.println("  Software Information: ");
-          System.out.println("    Name: " + softwareInfo.getName());
-          System.out.println("    Version: " + softwareInfo.getVersion());
-          System.out.println("    Operating system:: " + softwareInfo.getOperatingSystem());
+          final DiscoInfo discoInfo = basePlugin.queryDiscoInfo(it).blockingGet();
           System.out.println("  Features: ");
           discoInfo
               .getFeatures()
@@ -77,12 +71,23 @@ public class Cmd {
             System.out.println("      Category: " + identity.getCategory());
             System.out.println("      Type: " + identity.getType());
           });
+
+          final List<DiscoItem> items = basePlugin.queryDiscoItems(it, null).blockingGet();
           System.out.println("  Items: ");
           items.forEach(item -> {
             System.out.println("    JID: " + item.getJid());
             System.out.println("      Name: " + item.getName());
             System.out.println("      Node: " + item.getNode());
           });
+
+          if (it.getResourcePart().isEmpty()) {
+            break;
+          }
+          final SoftwareInfo softwareInfo = basePlugin.querySoftwareInfo(it).blockingGet();
+          System.out.println("  Software Information: ");
+          System.out.println("    Name: " + softwareInfo.getName());
+          System.out.println("    Version: " + softwareInfo.getVersion());
+          System.out.println("    Operating system: " + softwareInfo.getOperatingSystem());
         }
       }
     }

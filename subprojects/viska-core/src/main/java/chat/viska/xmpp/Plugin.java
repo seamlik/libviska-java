@@ -46,9 +46,11 @@ public interface Plugin extends SessionAware {
 
   /**
    * Gets the {@code <iq/>} sub-element types currently supported by the plugin.
-   * Results of this method are used to identify is an inbound stanza is
-   * supported by this XMPP client. If no plugin handles a particular stanza,
-   * the connection will be forcibly closed.
+   * Results of this method are used to identify if an inbound {@code <iq/>} is
+   * supported by this XMPP client. If no plugin handles a particular
+   * {@code <iq/>}, a stream error will be sent.
+   * @return {@link Set} of {@link java.util.Map.Entry}s whose keys are XML
+   *         namespaces and values are {@code <iq/>} sub-element tag names.
    */
   @NonNull
   Set<Map.Entry<String, String>> getSupportedIqs();

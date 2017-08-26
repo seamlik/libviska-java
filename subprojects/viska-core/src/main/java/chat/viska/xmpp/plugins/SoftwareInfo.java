@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp;
+package chat.viska.xmpp.plugins;
 
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;

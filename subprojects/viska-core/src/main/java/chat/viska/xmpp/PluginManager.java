@@ -16,6 +16,8 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.xmpp.plugins.BasePlugin;
+import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.Collections;
@@ -51,9 +53,22 @@ public class PluginManager implements SessionAware {
     try {
       plugin = type.getConstructor(Session.class).newInstance(session);
     } catch (Exception ex) {
-      throw new IllegalArgumentException(ex);
+      throw new IllegalArgumentException(
+          "Unable to apply plugin " + type.getCanonicalName(),
+          ex
+      );
     }
-    plugins.add(plugin);
+    try {
+      Observable
+          .fromIterable(plugin.getDependencies())
+          .blockingForEach(this::apply);
+    } catch (RuntimeException ex) {
+      throw new IllegalArgumentException(
+          "Unable to apply dependencies of plugin " + type.getCanonicalName(),
+          ex
+      );
+    }
+    this.plugins.add(plugin);
   }
 
   /**

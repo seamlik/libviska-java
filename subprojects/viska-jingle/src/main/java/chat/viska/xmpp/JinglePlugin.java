@@ -16,6 +16,7 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.xmpp.plugins.BasePlugin;
 import io.reactivex.annotations.NonNull;
 import java.util.AbstractMap;
 import java.util.HashSet;

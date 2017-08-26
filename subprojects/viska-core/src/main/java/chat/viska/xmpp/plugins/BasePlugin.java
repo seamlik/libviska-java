@@ -1,23 +1,28 @@
 /*
- * Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+ * Copyright 2017 Kai-Chung Yan (殷啟聰)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *       http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License
+ * limitations under the License.
  */
 
-package chat.viska.xmpp;
+package chat.viska.xmpp.plugins;
 
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.reactive.MutableReactiveObject;
+import chat.viska.xmpp.CommonXmlns;
+import chat.viska.xmpp.Jid;
+import chat.viska.xmpp.Plugin;
+import chat.viska.xmpp.Session;
+import chat.viska.xmpp.Stanza;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
@@ -33,6 +38,7 @@ import java.util.Objects;
 import java.util.Set;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
 
 /**
@@ -84,7 +90,11 @@ public class BasePlugin implements Plugin {
             queryElement.getElementsByTagNameNS(xmlns, "item")
         ))
         .cast(Element.class)
-        .map(DiscoItem::fromXml)
+        .map(it -> new DiscoItem(
+            new Jid(it.getAttribute("jid")),
+            it.getAttribute("name"),
+            it.getAttribute("node")
+        ))
         .toList()
         .blockingGet();
   }
@@ -105,7 +115,11 @@ public class BasePlugin implements Plugin {
             queryElement.getElementsByTagNameNS(xmlns, "identity"))
         )
         .cast(Element.class)
-        .map(DiscoInfo.Identity::fromXml)
+        .map(it -> new DiscoInfo.Identity(
+            it.getAttribute("category"),
+            it.getAttribute("name"),
+            it.getAttribute("type")
+        ))
         .toList()
         .blockingGet();
     final List<String> features = Observable
@@ -143,55 +157,57 @@ public class BasePlugin implements Plugin {
   }
 
   @NonNull
-  private String getSoftwareVersionResult(@NonNull final Jid recipient,
-                                          @NonNull final String id) {
-    final StringBuilder builder = new StringBuilder();
-    builder
-        .append("<iq type=\"result\" to=\"")
-        .append(recipient)
-        .append("\" id=\"")
-        .append(id)
-        .append("\">");
-    builder
-        .append("<query xmlns=\"")
-        .append(CommonXmlns.XEP_SOFTWARE_VERSION)
-        .append("\">");
-    builder.append("<name>").append(this.softwareName).append("</name>");
-    builder.append("<version>").append(this.softwareVersion).append("</version>");
-    builder.append("<os>").append(this.operatingSystem).append("</os>");
-    builder.append("</query></iq>");
-    return builder.toString();
+  private Document getSoftwareVersionResult(@NonNull final Jid recipient,
+                                            @NonNull final String id) {
+    final Document result = Stanza.getIqTemplate(
+        Stanza.IqType.RESULT,
+        id,
+        recipient
+    );
+    final Node queryElement = result.appendChild(result.createElementNS(
+        CommonXmlns.XEP_SOFTWARE_VERSION,
+        "query"
+    ));
+    queryElement
+        .appendChild(result.createElement("name"))
+        .setTextContent(this.softwareName.getValue());
+    queryElement
+        .appendChild(result.createElement("version"))
+        .setTextContent(this.softwareVersion.getValue());
+    queryElement
+        .appendChild(result.createElement("os"))
+        .setTextContent(this.operatingSystem.getValue());
+    return result;
   }
 
   @NonNull
-  private String getDiscoInfoResult(@NonNull final Jid recipient,
-                                    @NonNull final String id) {
-    final StringBuilder builder = new StringBuilder();
-    builder
-        .append("<iq type=\"result\" to=\"")
-        .append(recipient)
-        .append("\" id=\"")
-        .append(id)
-        .append("\">");
-    builder
-        .append("<query xmlns=\"")
-        .append(CommonXmlns.XEP_SERVICE_DISCOVERY)
-        .append("#info\">");
-    builder
-        .append("<identity category=\"client\" type=\"")
-        .append(this.softwareType)
-        .append("\" name=\"")
-        .append(this.softwareName)
-        .append("\"/>");
+  private Document getDiscoInfoResult(@NonNull final Jid recipient,
+                                      @NonNull final String id) {
+    final Document result = Stanza.getIqTemplate(
+        Stanza.IqType.RESULT,
+        id,
+        recipient
+    );
+    final Node queryElement = result.appendChild(result.createElementNS(
+        CommonXmlns.XEP_SERVICE_DISCOVERY + "#info",
+        "query"
+    ));
+    final Element identityElement = (Element) queryElement.appendChild(
+        result.createElement("identity")
+    );
+    identityElement.setAttribute("category", "client");
+    identityElement.setAttribute("type", this.softwareType.getValue());
+    identityElement.setAttribute("name", this.softwareName.getValue());
     Observable.fromIterable(
         this.session.getPluginManager().getPlugins()
     ).flatMap(
         it -> Observable.fromIterable(it.getFeatures())
     ).forEach(it -> {
-      builder.append("<feature var=\"").append(it).append("\"/>");
+      final Element featureElement = (Element)
+          queryElement.appendChild(result.createElement("feature"));
+      featureElement.setAttribute("var", it);
     });
-    builder.append("</query></iq>");
-    return builder.toString();
+    return result;
   }
 
   @NonNull
@@ -282,7 +298,7 @@ public class BasePlugin implements Plugin {
           jid,
           CommonXmlns.XEP_SERVICE_DISCOVERY + "#info",
           null
-      ).map(this::convertToDiscoInfo);
+      ).getResponse().map(this::convertToDiscoInfo);
     } catch (SAXException ex) {
       throw new RuntimeException(ex);
     }
@@ -301,16 +317,14 @@ public class BasePlugin implements Plugin {
           jid,
           CommonXmlns.XEP_SERVICE_DISCOVERY + "#items",
           param
-      ).map(this::convertToDiscoItems);
+      ).getResponse().map(this::convertToDiscoItems);
     } catch (SAXException ex) {
       throw new RuntimeException(ex);
     }
   }
 
   /**
-   * Queries information of the XMPP software. This method is part of
-   * <a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software
-   * Version</a>.
+   * Queries information of the XMPP software.
    */
   @NonNull
   public Maybe<SoftwareInfo> querySoftwareInfo(@NonNull final Jid jid) {
@@ -319,7 +333,7 @@ public class BasePlugin implements Plugin {
           jid,
           CommonXmlns.XEP_SOFTWARE_VERSION,
           null
-      ).map(this::convertToSoftwareInfo);
+      ).getResponse().map(this::convertToSoftwareInfo);
     } catch (SAXException ex) {
       throw new RuntimeException(ex);
     }

@@ -26,7 +26,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 /**
- * Indicates a stanza error is received.
+ * Indicates a stanza error has occurred is received.
  */
 public class StanzaErrorException extends Exception {
 
@@ -230,20 +230,12 @@ public class StanzaErrorException extends Exception {
     final Element conditionElement = (Element) errorElement
         .getChildNodes()
         .item(0);
-    final boolean hasText = errorElement
-        .getElementsByTagNameNS(CommonXmlns.STREAM_ERROR, "text")
-        .getLength() != 0;
-    final Element textElement = hasText
-        ? (Element) errorElement
-              .getElementsByTagNameNS(
-                  CommonXmlns.STREAM_ERROR,
-                  "text"
-              )
-              .item(0)
-        : null;
+    final Element textElement = (Element) errorElement.getElementsByTagNameNS(
+        CommonXmlns.STANZA_ERROR, "text"
+    ).item(0);
     final boolean hasAppCondition =
-        (hasText && errorElement.getChildNodes().getLength() == 3)
-        || (!hasText && errorElement.getChildNodes().getLength() == 2);
+        (textElement != null && errorElement.getChildNodes().getLength() == 3)
+        || (textElement == null && errorElement.getChildNodes().getLength() == 2);
     final boolean hasStanza = document
         .getDocumentElement()
         .getChildNodes()
@@ -297,9 +289,9 @@ public class StanzaErrorException extends Exception {
           "Malformed redirect URI."
       );
     }
-    final String text = hasText ? textElement.getTextContent() : null;
+    final String text = textElement == null ? null : textElement.getTextContent();
     final Element appCondition = hasAppCondition
-        ? (Element) errorElement.getChildNodes().item(hasText ? 3 : 2)
+        ? (Element) errorElement.getChildNodes().item(textElement != null ? 3 : 2)
         : null;
     final Element stanza = hasStanza
         ? (Element) document.getDocumentElement().getChildNodes().item(0)

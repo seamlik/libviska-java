@@ -14,18 +14,15 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp;
+package chat.viska.xmpp.plugins;
 
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
-import org.w3c.dom.Element;
 
 /**
  * Result of an information query defined in
@@ -42,15 +39,6 @@ public class DiscoInfo {
     private final String category;
     private final String type;
     private final String name;
-
-    static Identity fromXml(@NonNull final Element xml) {
-      final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#info";
-      return new Identity(
-          xml.getAttribute("category"),
-          xml.getAttribute("type"),
-          xml.getAttribute("name")
-      );
-    }
 
     public Identity(@Nullable final String category,
                     @Nullable final String type,
