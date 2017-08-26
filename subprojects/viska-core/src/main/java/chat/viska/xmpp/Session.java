@@ -200,8 +200,8 @@ public interface Session extends AutoCloseable {
   void send(@NonNull StreamErrorException ex);
 
   @NonNull
-  StanzaReceipt query(@NonNull Jid target,
-                      @NonNull String namespace,
+  StanzaReceipt query(@NonNull String namespace,
+                      @Nullable Jid target,
                       @Nullable Map<String, String> params)
       throws SAXException;
 

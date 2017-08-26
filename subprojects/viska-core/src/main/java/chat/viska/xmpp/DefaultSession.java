@@ -16,7 +16,6 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.DomUtils;
 import chat.viska.commons.ExceptionCaughtEvent;
 import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipe;
@@ -40,12 +39,10 @@ import java.util.Collections;
 import java.util.EventObject;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.commons.lang3.Validate;
@@ -436,8 +433,8 @@ public abstract class DefaultSession implements Session {
   }
 
   @Override
-  public StanzaReceipt query(final Jid target,
-                             final String namespace,
+  public StanzaReceipt query(final String namespace,
+                             final Jid target,
                              final Map<String, String> params)
       throws SAXException {
     if (this.state.getValue() == Session.State.DISPOSED) {

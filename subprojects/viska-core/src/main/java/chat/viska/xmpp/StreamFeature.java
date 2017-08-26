@@ -20,20 +20,20 @@ import io.reactivex.annotations.NonNull;
 
 public enum StreamFeature {
 
-  STARTTLS("starttls", CommonXmlns.STARTTLS, true, false),
-  SASL("mechanisms", CommonXmlns.SASL, true, true),
-  STREAM_COMPRESSION("compression", CommonXmlns.STREAM_COMPRESSION, false, false),
-  STREAM_MANAGEMENT("SM", CommonXmlns.STREAM_MANAGEMENT, false, false),
-  RESOURCE_BINDING("bind", CommonXmlns.RESOURCE_BINDING, false, true),
-  RESOURCE_BINDING_2("bind", CommonXmlns.RESOURCE_BINDING_2, false, true);
+  RESOURCE_BINDING(CommonXmlns.RESOURCE_BINDING, "bind", false, true),
+  RESOURCE_BINDING_2(CommonXmlns.RESOURCE_BINDING_2, "bind", false, true),
+  ROSTER_VERSION(CommonXmlns.ROSTER_VERSION, "ver", false, false),
+  SASL(CommonXmlns.SASL, "mechanisms", true, true),
+  STARTTLS(CommonXmlns.STARTTLS, "starttls", true, false),
+  STREAM_COMPRESSION(CommonXmlns.STREAM_COMPRESSION, "compression", false, false),
+  STREAM_MANAGEMENT(CommonXmlns.STREAM_MANAGEMENT, "SM", false, false);
 
   private final String name;
   private final String namespace;
   private final boolean restartRequired;
   private final boolean mandatory;
 
-  StreamFeature(@NonNull final String name,
-                @NonNull final String namespace,
+  StreamFeature(@NonNull final String namespace, @NonNull final String name,
                 final boolean restartRequired,
                 final boolean mandatory) {
     this.name = name;

@@ -16,6 +16,7 @@
 
 package chat.viska.cmd;
 
+import chat.viska.commons.EnumUtils;
 import chat.viska.xmpp.Connection;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.NettyWebSocketSession;
@@ -23,6 +24,8 @@ import chat.viska.xmpp.Session;
 import chat.viska.xmpp.plugins.BasePlugin;
 import chat.viska.xmpp.plugins.DiscoInfo;
 import chat.viska.xmpp.plugins.DiscoItem;
+import chat.viska.xmpp.plugins.Roster;
+import chat.viska.xmpp.plugins.RosterPlugin;
 import chat.viska.xmpp.plugins.SoftwareInfo;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -44,52 +47,69 @@ public class Cmd {
     private List<Jid> entities;
 
     private void run() throws Throwable {
-      try (final Session session = new NettyWebSocketSession(jid, connection)) {
-        if (debug) {
-          final Handler handler = new ConsoleHandler();
-          handler.setLevel(Level.ALL);
-          session.getLogger().addHandler(handler);
-          session.getLogger().setLevel(Level.ALL);
-          session.getLogger().setUseParentHandlers(false);
-        }
-        session.login(password).blockingAwait();
-        final BasePlugin basePlugin = (BasePlugin) session
-            .getPluginManager()
-            .getPlugin(BasePlugin.class);
-        for (Jid it : entities) {
-          System.out.println("<" + it + ">");
-          final DiscoInfo discoInfo = basePlugin.queryDiscoInfo(it).blockingGet();
-          System.out.println("  Features: ");
-          discoInfo
-              .getFeatures()
-              .stream()
-              .sorted()
-              .forEach(item -> System.out.println("    " + item));
-          System.out.println("  Identities:");
-          discoInfo.getIdentities().forEach(identity -> {
-            System.out.println("    Name: " + identity.getName());
-            System.out.println("      Category: " + identity.getCategory());
-            System.out.println("      Type: " + identity.getType());
-          });
+      final BasePlugin basePlugin = (BasePlugin) session
+          .getPluginManager()
+          .getPlugin(BasePlugin.class);
+      entities.forEach(it -> {
+        System.out.println("<" + it + ">");
+        final DiscoInfo discoInfo = basePlugin.queryDiscoInfo(it).blockingGet();
+        System.out.println("  Features: ");
+        discoInfo.getFeatures().stream().sorted().forEach(
+            item -> System.out.println("    " + item)
+        );
+        System.out.println("  Identities:");
+        discoInfo.getIdentities().forEach(identity -> {
+          System.out.println("    Name: " + identity.getName());
+          System.out.println("      Category: " + identity.getCategory());
+          System.out.println("      Type: " + identity.getType());
+        });
 
-          final List<DiscoItem> items = basePlugin.queryDiscoItems(it, null).blockingGet();
-          System.out.println("  Items: ");
-          items.forEach(item -> {
-            System.out.println("    JID: " + item.getJid());
+        final List<DiscoItem> items = basePlugin.queryDiscoItems(it, null).blockingGet();
+        System.out.println("  Items: ");
+        items.forEach(item -> {
+          System.out.println("    JID: " + item.getJid());
+          if (!item.getName().isEmpty()) {
             System.out.println("      Name: " + item.getName());
-            System.out.println("      Node: " + item.getNode());
-          });
-
-          if (it.getResourcePart().isEmpty()) {
-            break;
           }
-          final SoftwareInfo softwareInfo = basePlugin.querySoftwareInfo(it).blockingGet();
-          System.out.println("  Software Information: ");
-          System.out.println("    Name: " + softwareInfo.getName());
-          System.out.println("    Version: " + softwareInfo.getVersion());
-          System.out.println("    Operating system: " + softwareInfo.getOperatingSystem());
+          if (!item.getNode().isEmpty()) {
+            System.out.println("      Node: " + item.getNode());
+          }
+        });
+
+        if (it.getResourcePart().isEmpty()) {
+          return;
         }
-      }
+        final SoftwareInfo softwareInfo = basePlugin.querySoftwareInfo(it).blockingGet();
+        System.out.println("  Software Information: ");
+        System.out.println("    Name: " + softwareInfo.getName());
+        System.out.println("    Version: " + softwareInfo.getVersion());
+        System.out.println("    Operating system: " + softwareInfo.getOperatingSystem());
+      });
+    }
+  }
+
+  @Parameters(commandNames = "roster-get")
+  private class RosterGetCommand {
+
+    private void run() throws Exception {
+      final RosterPlugin plugin = (RosterPlugin)
+          session.getPluginManager().getPlugin(RosterPlugin.class);
+      List<? extends Roster.Item> roster = plugin.queryRoster().blockingGet();
+      roster.forEach(it -> {
+        System.out.println("Jid: " + it.getJid());
+        if (it.getSubscription() != null) {
+          System.out.println(
+              "  Subscription: " + EnumUtils.toXmlValue(it.getSubscription())
+          );
+        }
+        if (!it.getName().isEmpty()) {
+          System.out.println("  Name: " + it.getName());
+        }
+        if (!it.getGroups().isEmpty()) {
+          System.out.println("  Groups:");
+          it.getGroups().forEach(group -> System.out.println("    " + it));
+        }
+      });
     }
   }
 
@@ -109,30 +129,52 @@ public class Cmd {
   private boolean help;
 
   private Connection connection;
+  private Session session;
 
   public static void main(String[] args) throws Throwable {
     new Cmd().run(args);
   }
 
   private void initialize() {
-    if (websocket != null) {
-      connection = new Connection(Connection.Protocol.WEBSOCKET, websocket);
+    if (this.websocket != null) {
+      this.connection = new Connection(Connection.Protocol.WEBSOCKET, this.websocket);
     } else {
-      connection = Observable
-          .fromIterable(Connection.queryDns(jid.getDomainPart()).blockingGet())
-          .filter(it -> it.getProtocol() == Connection.Protocol.WEBSOCKET)
-          .filter(Connection::isTlsEnabled)
-          .blockingFirst();
+      try {
+        this.connection = Observable
+            .fromIterable(Connection.queryDns(jid.getDomainPart()).blockingGet())
+            .filter(it -> it.getProtocol() == Connection.Protocol.WEBSOCKET)
+            .filter(Connection::isTlsEnabled)
+            .blockingFirst();
+      } catch (Exception ex) {
+        throw new IllegalArgumentException(
+            "No idea how to connect to this server.",
+            ex
+        );
+      }
     }
+    this.session = new NettyWebSocketSession(this.jid, this.connection);
+    if (this.debug) {
+      final Handler handler = new ConsoleHandler();
+      handler.setLevel(Level.ALL);
+      this.session.getLogger().addHandler(handler);
+      this.session.getLogger().setLevel(Level.ALL);
+      this.session.getLogger().setUseParentHandlers(false);
+    } else {
+      this.session.getLogger().setLevel(Level.WARNING);
+    }
+    this.session.getPluginManager().apply(RosterPlugin.class);
+    this.session.login(this.password).blockingAwait();
   }
 
   private void run(String... args) throws Throwable {
     InfoCommand infoCommand = new InfoCommand();
+    RosterGetCommand rosterGetCommand = new RosterGetCommand();
     JCommander jcommander = JCommander
         .newBuilder()
         .programName("viska-cmd-java")
         .addObject(this)
         .addCommand(infoCommand)
+        .addCommand(rosterGetCommand)
         .build();
     if (args.length == 0) {
       jcommander.usage();
@@ -149,6 +191,10 @@ public class Cmd {
           initialize();
           infoCommand.run();
           break;
+        case "roster-get":
+          initialize();
+          rosterGetCommand.run();
+          break;
         default:
           jcommander.usage();
           break;
@@ -158,6 +204,10 @@ public class Cmd {
         throw ex;
       } else {
         ex.printStackTrace();
+      }
+    } finally {
+      if (this.session != null) {
+        this.session.close();
       }
     }
   }

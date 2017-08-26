@@ -75,10 +75,9 @@ public class BasePlugin implements Plugin {
   private final MutableReactiveObject<String> softwareType = new MutableReactiveObject<>("");
 
   @Nullable
-  private List<DiscoItem> convertToDiscoItems(@NonNull final Stanza stanza) {
+  private static List<DiscoItem> convertToDiscoItems(@NonNull final Document xml) {
     final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#items";
-    final Element queryElement = (Element) stanza
-        .getDocument()
+    final Element queryElement = (Element) xml
         .getDocumentElement()
         .getElementsByTagNameNS(xmlns, "query")
         .item(0);
@@ -100,10 +99,9 @@ public class BasePlugin implements Plugin {
   }
 
   @Nullable
-  private DiscoInfo convertToDiscoInfo(@NonNull final Stanza stanza) {
+  private static DiscoInfo convertToDiscoInfo(@NonNull final Document xml) {
     final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#info";
-    final Element queryElement = (Element) stanza
-        .getDocument()
+    final Element queryElement = (Element) xml
         .getDocumentElement()
         .getElementsByTagNameNS(xmlns, "query")
         .item(0);
@@ -134,7 +132,7 @@ public class BasePlugin implements Plugin {
   }
 
   @NonNull
-  private SoftwareInfo convertToSoftwareInfo(@NonNull final Stanza stanza) {
+  private static SoftwareInfo convertToSoftwareInfo(@NonNull final Stanza stanza) {
     final Element queryElement = (Element) stanza
         .getDocument()
         .getDocumentElement()
@@ -295,10 +293,10 @@ public class BasePlugin implements Plugin {
   public Maybe<DiscoInfo> queryDiscoInfo(@NonNull final Jid jid) {
     try {
       return getSession().query(
-          jid,
           CommonXmlns.XEP_SERVICE_DISCOVERY + "#info",
+          jid,
           null
-      ).getResponse().map(this::convertToDiscoInfo);
+      ).getResponse().map(Stanza::getDocument).map(BasePlugin::convertToDiscoInfo);
     } catch (SAXException ex) {
       throw new RuntimeException(ex);
     }
@@ -314,10 +312,10 @@ public class BasePlugin implements Plugin {
     param.put("node", node);
     try {
       return getSession().query(
-          jid,
           CommonXmlns.XEP_SERVICE_DISCOVERY + "#items",
+          jid,
           param
-      ).getResponse().map(this::convertToDiscoItems);
+      ).getResponse().map(Stanza::getDocument).map(BasePlugin::convertToDiscoItems);
     } catch (SAXException ex) {
       throw new RuntimeException(ex);
     }
@@ -330,10 +328,9 @@ public class BasePlugin implements Plugin {
   public Maybe<SoftwareInfo> querySoftwareInfo(@NonNull final Jid jid) {
     try {
       return getSession().query(
-          jid,
-          CommonXmlns.XEP_SOFTWARE_VERSION,
+          CommonXmlns.XEP_SOFTWARE_VERSION, jid,
           null
-      ).getResponse().map(this::convertToSoftwareInfo);
+      ).getResponse().map(BasePlugin::convertToSoftwareInfo);
     } catch (SAXException ex) {
       throw new RuntimeException(ex);
     }

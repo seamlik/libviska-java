@@ -58,7 +58,7 @@ public class Stanza {
 
   public static Document getIqTemplate(@NonNull final IqType type,
                                        @NonNull final String id,
-                                       @NonNull final Jid recipient) {
+                                       @Nullable final Jid recipient) {
     final String iq = String.format(
         "<iq type=\"%1s\" id=\"%2s\"></iq>",
         EnumUtils.toXmlValue(type),
@@ -70,7 +70,9 @@ public class Stanza {
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
-    xml.getDocumentElement().setAttribute("to", recipient.toString());
+    if (recipient != null) {
+      xml.getDocumentElement().setAttribute("to", recipient.toString());
+    }
     return xml;
   }
 

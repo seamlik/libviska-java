@@ -16,14 +16,27 @@
 
 package chat.viska.xmpp.plugins;
 
+import chat.viska.commons.DomUtils;
+import chat.viska.commons.EnumUtils;
 import chat.viska.xmpp.CommonXmlns;
+import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
+import chat.viska.xmpp.Stanza;
+import io.reactivex.Maybe;
+import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import java.util.AbstractMap;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
 public class RosterPlugin implements Plugin {
 
@@ -34,7 +47,28 @@ public class RosterPlugin implements Plugin {
   private final Session session;
   private final Roster roster;
 
-  RosterPlugin(@NonNull final Session session) {
+  private static List<? extends Roster.Item> convertToRosterItems(@NonNull final Document xml) {
+    final Element queryElement = (Element) xml
+        .getDocumentElement()
+        .getElementsByTagNameNS(CommonXmlns.ROSTER, "query")
+        .item(0);
+    return Observable.fromIterable(
+        DomUtils.toList(queryElement.getElementsByTagName("item"))
+    ).cast(Element.class).map(it -> new CachedRosterItem(
+        new Jid(it.getAttribute("jid")),
+        EnumUtils.fromXmlValue(
+            Roster.Item.Subscription.class,
+            it.getAttribute("subscription")
+        ),
+        it.getAttribute("name"),
+        Observable
+            .fromIterable(DomUtils.toList(it.getElementsByTagName("group")))
+            .map(Node::getTextContent)
+            .toList().blockingGet()
+    )).toList().blockingGet();
+  }
+
+  public RosterPlugin(@NonNull final Session session) {
     this.session = session;
     this.roster = new Roster(session);
   }
@@ -42,6 +76,28 @@ public class RosterPlugin implements Plugin {
   @NonNull
   public Roster getRoster() {
     return roster;
+  }
+
+  @NonNull
+  public Maybe<List<? extends Roster.Item>> queryRoster() {
+    try {
+      return this.session
+          .query(CommonXmlns.ROSTER, null, null)
+          .getResponse()
+          .map(Stanza::getDocument)
+          .map(RosterPlugin::convertToRosterItems);
+    } catch (SAXException ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+
+  @NonNull
+  public Maybe<List<? extends Roster.Item>>
+  queryRoster(@NonNull final String version,
+              @NonNull final Collection<Roster.Item> cached) {
+    final Map<String, String> param = new HashMap<>();
+    param.put("ver", version);
+    throw new UnsupportedOperationException();
   }
 
   @Override
