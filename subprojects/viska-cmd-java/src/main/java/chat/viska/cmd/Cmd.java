@@ -19,13 +19,13 @@ package chat.viska.cmd;
 import chat.viska.commons.EnumUtils;
 import chat.viska.xmpp.Connection;
 import chat.viska.xmpp.Jid;
+import chat.viska.xmpp.NettyTcpSession;
 import chat.viska.xmpp.NettyWebSocketSession;
 import chat.viska.xmpp.Session;
 import chat.viska.xmpp.plugins.BasePlugin;
 import chat.viska.xmpp.plugins.DiscoInfo;
 import chat.viska.xmpp.plugins.DiscoItem;
-import chat.viska.xmpp.plugins.Roster;
-import chat.viska.xmpp.plugins.RosterPlugin;
+import chat.viska.xmpp.plugins.RosterItem;
 import chat.viska.xmpp.plugins.SoftwareInfo;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -43,14 +43,14 @@ public class Cmd {
   @Parameters(commandNames = "info")
   private class InfoCommand {
 
-    @Parameter(converter = JidConverter.class)
+    @Parameter(converter = JidConverter.class, required = true)
     private List<Jid> entities;
 
     private void run() throws Throwable {
       final BasePlugin basePlugin = (BasePlugin) session
           .getPluginManager()
           .getPlugin(BasePlugin.class);
-      entities.forEach(it -> {
+      for (Jid it : entities) {
         System.out.println("<" + it + ">");
         final DiscoInfo discoInfo = basePlugin.queryDiscoInfo(it).blockingGet();
         System.out.println("  Features: ");
@@ -84,7 +84,7 @@ public class Cmd {
         System.out.println("    Name: " + softwareInfo.getName());
         System.out.println("    Version: " + softwareInfo.getVersion());
         System.out.println("    Operating system: " + softwareInfo.getOperatingSystem());
-      });
+      }
     }
   }
 
@@ -92,9 +92,9 @@ public class Cmd {
   private class RosterGetCommand {
 
     private void run() throws Exception {
-      final RosterPlugin plugin = (RosterPlugin)
-          session.getPluginManager().getPlugin(RosterPlugin.class);
-      List<? extends Roster.Item> roster = plugin.queryRoster().blockingGet();
+      final BasePlugin plugin = (BasePlugin)
+          session.getPluginManager().getPlugin(BasePlugin.class);
+      List<RosterItem> roster = plugin.queryRoster().blockingGet();
       roster.forEach(it -> {
         System.out.println("Jid: " + it.getJid());
         if (it.getSubscription() != null) {
@@ -128,7 +128,6 @@ public class Cmd {
   @Parameter(names = { "-h", "--help", "help" }, description = "Display help", help = true)
   private boolean help;
 
-  private Connection connection;
   private Session session;
 
   public static void main(String[] args) throws Throwable {
@@ -136,13 +135,13 @@ public class Cmd {
   }
 
   private void initialize() {
+    Connection connection;
     if (this.websocket != null) {
-      this.connection = new Connection(Connection.Protocol.WEBSOCKET, this.websocket);
+      connection = new Connection(Connection.Protocol.WEBSOCKET, this.websocket);
     } else {
       try {
-        this.connection = Observable
+        connection = Observable
             .fromIterable(Connection.queryDns(jid.getDomainPart()).blockingGet())
-            .filter(it -> it.getProtocol() == Connection.Protocol.WEBSOCKET)
             .filter(Connection::isTlsEnabled)
             .blockingFirst();
       } catch (Exception ex) {
@@ -152,17 +151,22 @@ public class Cmd {
         );
       }
     }
-    this.session = new NettyWebSocketSession(this.jid, this.connection);
+    if (connection.getProtocol() == Connection.Protocol.WEBSOCKET) {
+      this.session = new NettyWebSocketSession(this.jid, connection);
+    } else {
+      this.session = new NettyTcpSession(this.jid, null, connection, false);
+    }
+
+    this.session.getLogger().setUseParentHandlers(false);
+    final Handler handler = new ConsoleHandler();
+    handler.setLevel(Level.ALL);
+    this.session.getLogger().addHandler(handler);
     if (this.debug) {
-      final Handler handler = new ConsoleHandler();
-      handler.setLevel(Level.ALL);
-      this.session.getLogger().addHandler(handler);
       this.session.getLogger().setLevel(Level.ALL);
-      this.session.getLogger().setUseParentHandlers(false);
     } else {
       this.session.getLogger().setLevel(Level.WARNING);
     }
-    this.session.getPluginManager().apply(RosterPlugin.class);
+
     this.session.login(this.password).blockingAwait();
   }
 

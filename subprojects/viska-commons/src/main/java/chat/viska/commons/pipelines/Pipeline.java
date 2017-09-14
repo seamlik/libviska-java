@@ -39,6 +39,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
 import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 
@@ -180,7 +181,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   @Nullable
   private ListIterator<Map.Entry<String, Pipe>>
   getIteratorOf(@NonNull final String name) {
-    if (name == null || name.trim().isEmpty()) {
+    if (StringUtils.isBlank(name)) {
       return null;
     }
     final ListIterator<Map.Entry<String, Pipe>> iterator = pipes.listIterator();

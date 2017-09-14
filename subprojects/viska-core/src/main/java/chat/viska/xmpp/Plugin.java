@@ -54,4 +54,12 @@ public interface Plugin extends SessionAware {
    */
   @NonNull
   Set<Map.Entry<String, String>> getSupportedIqs();
+
+  void onApplied(@NonNull final Session session);
+
+  void onSessionOnline();
+
+  void onSessionDisconnected();
+
+  void onSessionDisposed();
 }

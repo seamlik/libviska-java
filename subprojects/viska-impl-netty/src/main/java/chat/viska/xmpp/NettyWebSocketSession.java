@@ -44,10 +44,9 @@ import io.netty.handler.ssl.SslHandler;
 import io.reactivex.Completable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
+import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.CompletableSubject;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
@@ -56,32 +55,43 @@ import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
 /**
- * XMPP session using WebSocket connections implemented using Netty.
+ * XMPP session using
+ * <a href="https://datatracker.ietf.org/doc/rfc7395">WebSocket</a> connections
+ * implemented using Netty.
  *
- * <p>This class does not support TLS level compression. For connection level
- * compression, only Deflate is supported.</p>
+ * <h2>Compression Support</h2>
+ *
+ * <table>
+ *   <tr>
+ *     <th/>
+ *     <th>DEFLATE</th>
+ *   </tr>
+ *   <tr>
+ *     <th>Connection</td>
+ *     <td>✓</td>
+ *   </tr>
+ *   <tr>
+ *     <th>TLS</td>
+ *     <td>✗</td>
+ *   </tr>
+ *   <tr>
+ *     <th>Stream</td>
+ *     <td>✗</td>
+ *   </tr>
+ * </table>
  */
 public class NettyWebSocketSession extends DefaultSession {
 
   private static final int CACHE_SIZE_BYTES = 1024 * 1024;
 
   private static final Compression DEFAULT_CONNECTION_COMPRESSION = Compression.DEFLATE;
-  private static final Set<Compression> SUPPORTED_CONNECTION_COMPRESSION = new HashSet<>(
-      Collections.singleton(
-          Compression.DEFLATE
-      )
-  );
+  private static final Set<Compression> SUPPORTED_CONNECTION_COMPRESSION = Collections.singleton(Compression.DEFLATE);
 
-  private final Compression connectionCompression;
-  private EventLoopGroup nettyEventLoopGroup;
+  private final EventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup();
+  private Compression connectionCompression;
   private SocketChannel nettyChannel;
   private WebSocketClientProtocolHandler websocketHandler;
   private SslHandler tlsHandler;
-
-  private Document preprocessInboundXml(final String xml)
-      throws SAXException {
-    return DomUtils.readDocument(xml);
-  }
 
   private String preprocessOutboundXml(final Document document)
       throws TransformerException {
@@ -101,7 +111,18 @@ public class NettyWebSocketSession extends DefaultSession {
   }
 
   @Override
-  protected Completable onOpeningConnection() {
+  protected Completable onOpeningConnection(Compression connectionCompression,
+                                            Compression tlsCompression) {
+    if (connectionCompression == Compression.AUTO) {
+      this.connectionCompression = DEFAULT_CONNECTION_COMPRESSION;
+    } else if (SUPPORTED_CONNECTION_COMPRESSION.contains(connectionCompression)) {
+      this.connectionCompression = connectionCompression;
+    } else {
+      throw new IllegalArgumentException(
+          "Unsupported connection compression " + connectionCompression.toString()
+      );
+    }
+
     websocketHandler = new WebSocketClientProtocolHandler(
         WebSocketClientHandshakerFactory.newHandshaker(
             getConnection().getUri(),
@@ -116,12 +137,11 @@ public class NettyWebSocketSession extends DefaultSession {
     final SslContext sslContext;
     try {
       sslContext = getConnection().isTlsEnabled()
-          ? SslContextBuilder.forClient().startTls(getConnection().isStartTlsRequired()).build()
+          ? SslContextBuilder.forClient().startTls(false).build()
           : null;
     } catch (SSLException ex) {
       return Completable.error(ex);
     }
-    nettyEventLoopGroup = new NioEventLoopGroup();
     final Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(nettyEventLoopGroup);
     bootstrap.channel(NioSocketChannel.class);
@@ -151,9 +171,8 @@ public class NettyWebSocketSession extends DefaultSession {
           @Override
           protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame msg)
               throws Exception {
-            getLogger().fine("[XML received] " + msg.text());
             try {
-              feedXmlPipeline(preprocessInboundXml(msg.text()));
+              feedXmlPipeline(DomUtils.readDocument(msg.text()));
             } catch (SAXException ex) {
               send(new StreamErrorException(
                   StreamErrorException.Condition.BAD_FORMAT
@@ -194,15 +213,14 @@ public class NettyWebSocketSession extends DefaultSession {
               "[Netty] Connection terminated before WebSocket handshake completes."
           ));
         }
-        this.nettyEventLoopGroup.shutdownGracefully();
         triggerEvent(new ConnectionTerminatedEvent(this));
       });
     }).andThen(wsHandshakeCompleted).andThen(Completable.fromAction(() -> {
       getXmlPipelineOutboundStream()
+          .subscribeOn(Schedulers.io())
           .subscribe(document ->  {
             final String data = preprocessOutboundXml(document);
             nettyChannel.writeAndFlush(new TextWebSocketFrame(data));
-            getLogger().fine("[XML sent] " + data);
           });
     })));
   }
@@ -214,21 +232,32 @@ public class NettyWebSocketSession extends DefaultSession {
         return Completable.fromFuture(websocketHandler.handshaker().close(
             nettyChannel,
             new CloseWebSocketFrame(1000, null)
-        )).andThen(
-            getEventStream()
-                .ofType(ConnectionTerminatedEvent.class)
-                .firstOrError()
-                .toCompletable()
-        );
+        )).andThen(Completable.fromFuture(this.nettyChannel.closeFuture()));
       } else {
-        return Completable.fromFuture(nettyChannel.close());
+        return Completable.fromFuture(this.nettyChannel.close());
       }
     } else {
-      if (this.nettyEventLoopGroup != null) {
-        nettyEventLoopGroup.shutdownGracefully();
-      }
       return Completable.complete();
     }
+  }
+
+  @Override
+  protected Completable onStartTls() {
+    throw new UnsupportedOperationException(
+        "WebSocket session does not allow StartTLS."
+    );
+  }
+
+  @Override
+  protected void onStreamCompression(Compression compression) {
+    throw new UnsupportedOperationException(
+        "This class does not support stream compression."
+    );
+  }
+
+  @Override
+  protected void onDisposing() {
+    nettyEventLoopGroup.shutdownGracefully();
   }
 
   public NettyWebSocketSession(@Nullable final Jid jid,
@@ -237,49 +266,48 @@ public class NettyWebSocketSession extends DefaultSession {
         jid,
         null,
         connection,
-        false,
-        null,
-        null,
-        Compression.AUTO,
-        null
+        false
     );
   }
 
   public NettyWebSocketSession(@Nullable final Jid jid,
                                @Nullable final Jid authzId,
                                @NonNull final Connection connection,
-                               final boolean streamManagement,
-                               @Nullable List<String> saslMechanisms,
-                               @Nullable Compression tlsCompression,
-                               @Nullable Compression connectionCompression,
-                               @Nullable Compression streamCompression) {
-    super(jid, authzId, connection, streamManagement, saslMechanisms, streamCompression);
+                               final boolean streamManagement) {
+    super(jid, authzId, connection, streamManagement);
     if (connection.getProtocol() != Connection.Protocol.WEBSOCKET) {
       throw new IllegalArgumentException("Unsupported connection protocol.");
-    }
-    if (connectionCompression == null) {
-      this.connectionCompression = null;
-    } else if (connectionCompression == Compression.AUTO) {
-      this.connectionCompression = Compression.DEFLATE;
-    } else if (SUPPORTED_CONNECTION_COMPRESSION.contains(connectionCompression)) {
-      this.connectionCompression = connectionCompression;
-    } else {
-      throw new IllegalArgumentException(
-          "Unsupported connection compression " + connectionCompression.toString()
-      );
     }
   }
 
   @Override
-  @Nullable
   public Compression getConnectionCompression() {
     return connectionCompression;
   }
 
   @Override
-  @Nullable
+  public Set<Compression> getSupportedConnectionCompression() {
+    return SUPPORTED_CONNECTION_COMPRESSION;
+  }
+
+  @Override
   public Compression getTlsCompression() {
     return null;
+  }
+
+  @Override
+  public Set<Compression> getSupportedTlsCompression() {
+    return Collections.emptySet();
+  }
+
+  @Override
+  public Compression getStreamCompression() {
+    return null;
+  }
+
+  @Override
+  public Set<Compression> getSupportedStreamCompression() {
+    return Collections.emptySet();
   }
 
   @Override

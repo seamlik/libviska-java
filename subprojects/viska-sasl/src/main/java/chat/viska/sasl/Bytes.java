@@ -28,4 +28,6 @@ class Bytes {
     }
     return result;
   }
+
+  private Bytes() {}
 }

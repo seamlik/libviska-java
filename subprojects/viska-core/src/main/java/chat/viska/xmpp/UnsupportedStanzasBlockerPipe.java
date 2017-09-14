@@ -1,33 +1,26 @@
 /*
- * Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+ * Copyright 2017 Kai-Chung Yan (殷啟聰)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *       http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License
+ * limitations under the License.
  */
 
 package chat.viska.xmpp;
 
-import io.reactivex.annotations.Nullable;
+import chat.viska.commons.pipelines.BlankPipe;
 
 /**
- * Indicates this class is associated to an {@link Session}. Once the
- * {@link Session} has been disposed of, this class must also be considered in
- * the same state and start cleaning up resources.
+ * Blocks any unsupported stanzas and sends an stream error. This class makes
+ * use of {@link Plugin#getSupportedIqs()}
  */
-public interface SessionAware {
-
-  /**
-   * Gets the associated XMPP session.
-   */
-  @Nullable
-  Session getSession();
+public class UnsupportedStanzasBlockerPipe extends BlankPipe {
 }

@@ -17,10 +17,10 @@
 package chat.viska.xmpp.plugins;
 
 import chat.viska.commons.DomUtils;
+import chat.viska.commons.EnumUtils;
 import chat.viska.commons.reactive.MutableReactiveObject;
 import chat.viska.xmpp.CommonXmlns;
 import chat.viska.xmpp.Jid;
-import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
 import chat.viska.xmpp.Stanza;
 import io.reactivex.Maybe;
@@ -29,12 +29,12 @@ import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.AbstractMap;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -51,24 +51,24 @@ import org.xml.sax.SAXException;
  *   <li><a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software Version</a></li>
  * </ul>
  */
-public class BasePlugin implements Plugin {
+public class BasePlugin extends BlankPlugin {
 
   private static final Set<String> features = new HashSet<>(Arrays.asList(
-      CommonXmlns.XEP_SOFTWARE_VERSION
+      CommonXmlns.SOFTWARE_VERSION
   ));
-  private static final Set<Map.Entry<String, String>> supportedIqs = new HashSet<>(Arrays.asList(
+  private static final Set<Map.Entry<String, String>> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
       new AbstractMap.SimpleImmutableEntry<>(
-          CommonXmlns.XEP_SERVICE_DISCOVERY + "#info", "query"
+          CommonXmlns.SERVICE_DISCOVERY + "#info", "query"
       ),
       new AbstractMap.SimpleImmutableEntry<>(
-          CommonXmlns.XEP_SERVICE_DISCOVERY + "#items", "query"
+          CommonXmlns.SERVICE_DISCOVERY + "#items", "query"
       ),
       new AbstractMap.SimpleImmutableEntry<>(
-          CommonXmlns.XEP_SOFTWARE_VERSION, "query"
-      )
+          CommonXmlns.SOFTWARE_VERSION, "query"
+      ),
+      new AbstractMap.SimpleImmutableEntry<>(CommonXmlns.ROSTER, "query")
   ));
 
-  private final Session session;
   private final MutableReactiveObject<String> softwareName = new MutableReactiveObject<>("");
   private final MutableReactiveObject<String> softwareVersion = new MutableReactiveObject<>("");
   private final MutableReactiveObject<String> operatingSystem = new MutableReactiveObject<>("");
@@ -76,7 +76,7 @@ public class BasePlugin implements Plugin {
 
   @Nullable
   private static List<DiscoItem> convertToDiscoItems(@NonNull final Document xml) {
-    final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#items";
+    final String xmlns = CommonXmlns.SERVICE_DISCOVERY + "#items";
     final Element queryElement = (Element) xml
         .getDocumentElement()
         .getElementsByTagNameNS(xmlns, "query")
@@ -85,7 +85,7 @@ public class BasePlugin implements Plugin {
       throw new IllegalArgumentException("No IQ element found.");
     }
     return Observable
-        .fromIterable(DomUtils.toList(
+        .fromIterable(DomUtils.convertToList(
             queryElement.getElementsByTagNameNS(xmlns, "item")
         ))
         .cast(Element.class)
@@ -100,7 +100,7 @@ public class BasePlugin implements Plugin {
 
   @Nullable
   private static DiscoInfo convertToDiscoInfo(@NonNull final Document xml) {
-    final String xmlns = CommonXmlns.XEP_SERVICE_DISCOVERY + "#info";
+    final String xmlns = CommonXmlns.SERVICE_DISCOVERY + "#info";
     final Element queryElement = (Element) xml
         .getDocumentElement()
         .getElementsByTagNameNS(xmlns, "query")
@@ -109,7 +109,7 @@ public class BasePlugin implements Plugin {
       throw new IllegalArgumentException("No IQ element found.");
     }
     final List<DiscoInfo.Identity> identities = Observable
-        .fromIterable(DomUtils.toList(
+        .fromIterable(DomUtils.convertToList(
             queryElement.getElementsByTagNameNS(xmlns, "identity"))
         )
         .cast(Element.class)
@@ -121,7 +121,7 @@ public class BasePlugin implements Plugin {
         .toList()
         .blockingGet();
     final List<String> features = Observable
-        .fromIterable(DomUtils.toList(
+        .fromIterable(DomUtils.convertToList(
             queryElement.getElementsByTagNameNS(xmlns, "feature")
         ))
         .cast(Element.class)
@@ -136,7 +136,7 @@ public class BasePlugin implements Plugin {
     final Element queryElement = (Element) stanza
         .getDocument()
         .getDocumentElement()
-        .getElementsByTagNameNS(CommonXmlns.XEP_SOFTWARE_VERSION, "query")
+        .getElementsByTagNameNS(CommonXmlns.SOFTWARE_VERSION, "query")
         .item(0);
     if (queryElement == null) {
       throw new IllegalArgumentException("No IQ element found.");
@@ -154,6 +154,27 @@ public class BasePlugin implements Plugin {
     );
   }
 
+  private static List<RosterItem> convertToRosterItems(@NonNull final Document xml) {
+    final Element queryElement = (Element) xml
+        .getDocumentElement()
+        .getElementsByTagNameNS(CommonXmlns.ROSTER, "query")
+        .item(0);
+    return Observable.fromIterable(
+        DomUtils.convertToList(queryElement.getElementsByTagName("item"))
+    ).cast(Element.class).map(it -> new RosterItem(
+        new Jid(it.getAttribute("jid")),
+        EnumUtils.fromXmlValue(
+            RosterItem.Subscription.class,
+            it.getAttribute("subscription")
+        ),
+        it.getAttribute("name"),
+        Observable
+            .fromIterable(DomUtils.convertToList(it.getElementsByTagName("group")))
+            .map(Node::getTextContent)
+            .toList().blockingGet()
+    )).toList().blockingGet();
+  }
+
   @NonNull
   private Document getSoftwareVersionResult(@NonNull final Jid recipient,
                                             @NonNull final String id) {
@@ -163,7 +184,7 @@ public class BasePlugin implements Plugin {
         recipient
     );
     final Node queryElement = result.appendChild(result.createElementNS(
-        CommonXmlns.XEP_SOFTWARE_VERSION,
+        CommonXmlns.SOFTWARE_VERSION,
         "query"
     ));
     queryElement
@@ -187,7 +208,7 @@ public class BasePlugin implements Plugin {
         recipient
     );
     final Node queryElement = result.appendChild(result.createElementNS(
-        CommonXmlns.XEP_SERVICE_DISCOVERY + "#info",
+        CommonXmlns.SERVICE_DISCOVERY + "#info",
         "query"
     ));
     final Element identityElement = (Element) queryElement.appendChild(
@@ -197,7 +218,7 @@ public class BasePlugin implements Plugin {
     identityElement.setAttribute("type", this.softwareType.getValue());
     identityElement.setAttribute("name", this.softwareName.getValue());
     Observable.fromIterable(
-        this.session.getPluginManager().getPlugins()
+        getSession().getPluginManager().getPlugins()
     ).flatMap(
         it -> Observable.fromIterable(it.getFeatures())
     ).forEach(it -> {
@@ -212,7 +233,7 @@ public class BasePlugin implements Plugin {
   private Document getDiscoItemsResult(@NonNull final Stanza query) {
     final Document result = query.getResultTemplate();
     final Element queryElement = result.createElementNS(
-        CommonXmlns.XEP_SERVICE_DISCOVERY + "#items",
+        CommonXmlns.SERVICE_DISCOVERY + "#items",
         "query"
     );
     final String node = (
@@ -223,45 +244,6 @@ public class BasePlugin implements Plugin {
     }
     result.getDocumentElement().appendChild(queryElement);
     return result;
-  }
-
-  public BasePlugin(final @NonNull Session session) {
-    Objects.requireNonNull(session);
-    this.session = session;
-
-    // Software Version
-    this.session
-        .getInboundStanzaStream()
-        .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqName().equals("query"))
-        .filter(it -> it.getIqNamespace().equals(CommonXmlns.XEP_SOFTWARE_VERSION))
-        .subscribe(it -> this.session.send(
-            getSoftwareVersionResult(it.getSender(), it.getId())
-        ));
-
-    // disco#info
-    this.session
-        .getInboundStanzaStream()
-        .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqName().equals("query"))
-        .filter(it -> it.getIqNamespace().equals(
-            CommonXmlns.XEP_SERVICE_DISCOVERY + "#info"
-        ))
-        .subscribe(it -> this.session.send(
-            getDiscoInfoResult(it.getSender(), it.getId())
-        ));
-
-    // disco#items
-    this.session
-        .getInboundStanzaStream()
-        .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqName().equals("query"))
-        .filter(it -> it.getIqNamespace().equals(
-            CommonXmlns.XEP_SERVICE_DISCOVERY + "#items"
-        ))
-        .subscribe(it -> this.session.send(
-            getDiscoItemsResult(it)
-        ));
   }
 
   @NonNull
@@ -293,7 +275,7 @@ public class BasePlugin implements Plugin {
   public Maybe<DiscoInfo> queryDiscoInfo(@NonNull final Jid jid) {
     try {
       return getSession().query(
-          CommonXmlns.XEP_SERVICE_DISCOVERY + "#info",
+          CommonXmlns.SERVICE_DISCOVERY + "#info",
           jid,
           null
       ).getResponse().map(Stanza::getDocument).map(BasePlugin::convertToDiscoInfo);
@@ -312,7 +294,7 @@ public class BasePlugin implements Plugin {
     param.put("node", node);
     try {
       return getSession().query(
-          CommonXmlns.XEP_SERVICE_DISCOVERY + "#items",
+          CommonXmlns.SERVICE_DISCOVERY + "#items",
           jid,
           param
       ).getResponse().map(Stanza::getDocument).map(BasePlugin::convertToDiscoItems);
@@ -328,7 +310,7 @@ public class BasePlugin implements Plugin {
   public Maybe<SoftwareInfo> querySoftwareInfo(@NonNull final Jid jid) {
     try {
       return getSession().query(
-          CommonXmlns.XEP_SOFTWARE_VERSION, jid,
+          CommonXmlns.SOFTWARE_VERSION, jid,
           null
       ).getResponse().map(BasePlugin::convertToSoftwareInfo);
     } catch (SAXException ex) {
@@ -336,9 +318,26 @@ public class BasePlugin implements Plugin {
     }
   }
 
-  @Override
-  public Set<Class<? extends Plugin>> getDependencies() {
-    return new HashSet<>(0);
+  @NonNull
+  public Maybe<List<RosterItem>> queryRoster() {
+    try {
+      return getSession()
+          .query(CommonXmlns.ROSTER, null, null)
+          .getResponse()
+          .map(Stanza::getDocument)
+          .map(BasePlugin::convertToRosterItems);
+    } catch (SAXException ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+
+  @NonNull
+  public Maybe<List<RosterItem>>
+  queryRoster(@NonNull final String version,
+              @NonNull final Collection<RosterItem> cached) {
+    final Map<String, String> param = new HashMap<>();
+    param.put("ver", version);
+    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -348,11 +347,45 @@ public class BasePlugin implements Plugin {
 
   @Override
   public Set<Map.Entry<String, String>> getSupportedIqs() {
-    return Collections.unmodifiableSet(supportedIqs);
+    return Collections.unmodifiableSet(SUPPORTED_IQS);
   }
 
   @Override
-  public Session getSession() {
-    return session;
+  public void onApplied(Session session) {
+    super.onApplied(session);
+
+    // Software Version
+    getSession()
+        .getInboundStanzaStream()
+        .filter(it -> it.getIqType() == Stanza.IqType.GET)
+        .filter(it -> it.getIqName().equals("query"))
+        .filter(it -> it.getIqNamespace().equals(CommonXmlns.SOFTWARE_VERSION))
+        .subscribe(it -> getSession().send(
+            getSoftwareVersionResult(it.getSender(), it.getId())
+        ));
+
+    // disco#info
+    getSession()
+        .getInboundStanzaStream()
+        .filter(it -> it.getIqType() == Stanza.IqType.GET)
+        .filter(it -> it.getIqName().equals("query"))
+        .filter(it -> it.getIqNamespace().equals(
+            CommonXmlns.SERVICE_DISCOVERY + "#info"
+        ))
+        .subscribe(it -> getSession().send(
+            getDiscoInfoResult(it.getSender(), it.getId())
+        ));
+
+    // disco#items
+    getSession()
+        .getInboundStanzaStream()
+        .filter(it -> it.getIqType() == Stanza.IqType.GET)
+        .filter(it -> it.getIqName().equals("query"))
+        .filter(it -> it.getIqNamespace().equals(
+            CommonXmlns.SERVICE_DISCOVERY + "#items"
+        ))
+        .subscribe(it -> getSession().send(
+            getDiscoItemsResult(it)
+        ));
   }
 }

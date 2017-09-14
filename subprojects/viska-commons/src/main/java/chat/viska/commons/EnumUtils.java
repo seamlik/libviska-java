@@ -17,13 +17,19 @@
 package chat.viska.commons;
 
 import io.reactivex.annotations.NonNull;
+import io.reactivex.annotations.Nullable;
+import org.apache.commons.lang3.StringUtils;
 
 public class EnumUtils {
 
   public static <T extends Enum<T>> T
   fromXmlValue(@NonNull final Class<T> type,
-               @NonNull final String value) throws IllegalArgumentException {
-    return Enum.valueOf(type, value.replace('-', '_').toUpperCase());
+               @Nullable final String value) throws IllegalArgumentException {
+    if (StringUtils.isBlank(value)) {
+      return null;
+    } else {
+      return Enum.valueOf(type, value.replace('-', '_').toUpperCase());
+    }
   }
 
   public static <T extends Enum<T>> String

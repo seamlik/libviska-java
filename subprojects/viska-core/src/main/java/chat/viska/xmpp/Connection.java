@@ -37,6 +37,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import javax.xml.parsers.DocumentBuilderFactory;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xbill.DNS.Lookup;
@@ -82,15 +84,21 @@ public class Connection {
     }
   }
 
-  private static final String DNS_TXT_QUERY = "_xmppconnect";
+  public enum TlsMethod {
+    DIRECT,
+    STARTTLS
+  }
+
+  private static final String DNS_TXT_QUERY = "_xmppconnect.";
+  private static final String DNR_SRV_QUERY = "_xmpp-client._tcp.";
+  private static final String DNR_SRV_SECURE_QUERY = "_xmpps-client._tcp.";
 
   private final Protocol protocol;
   private final String scheme;
   private final String domain;
   private final String path;
   private final int port;
-  private final Boolean tlsEnabled;
-  private final Boolean startTlsEnabled;
+  private final TlsMethod tlsMethod;
 
   /**
    * Returns a URL to the domain-meta file.
@@ -153,7 +161,7 @@ public class Connection {
 
   private static List<Connection> queryHostMetaXml(@NonNull Document hostMeta) {
     return Observable.fromIterable(
-        DomUtils.toList(hostMeta.getDocumentElement().getElementsByTagName("Link"))
+        DomUtils.convertToList(hostMeta.getDocumentElement().getElementsByTagName("Link"))
     ).cast(Element.class).filter(
         it -> CommonXmlns.WEBSOCKET.equals(it.getAttribute("rel"))
     ).map(it -> new Connection(
@@ -220,33 +228,31 @@ public class Connection {
     return Single.fromCallable(() -> {
       final List<Connection> result = new ArrayList<>();
       final Record[] tcpRecords = new Lookup(
-          "_xmpp-client._tcp." + domain, Type.SRV
+          DNR_SRV_QUERY + domain, Type.SRV
       ).run();
       if (tcpRecords != null) {
         Observable.fromArray(tcpRecords).cast(SRVRecord.class).forEach(it -> {
           result.add(new Connection(
               it.getTarget().toString(true),
               it.getPort(),
-              true,
-              true
+              TlsMethod.STARTTLS
           ));
         });
       }
       final Record[] tcpTlsRecords = new Lookup(
-          "_xmpps-client._tcp." + domain, Type.SRV
+          DNR_SRV_SECURE_QUERY + domain, Type.SRV
       ).run();
       if (tcpTlsRecords != null) {
         Observable.fromArray(tcpTlsRecords).cast(SRVRecord.class).forEach(it -> {
           result.add(new Connection(
               it.getTarget().toString(true),
               it.getPort(),
-              true,
-              false
+              TlsMethod.DIRECT
           ));
         });
       }
       final Record[] txtRecords = new Lookup(
-          "_xmppconnect." + domain, Type.TXT
+          DNS_TXT_QUERY + domain, Type.TXT
       ).run();
       if (txtRecords != null) {
         Observable.fromArray(txtRecords).cast(TXTRecord.class)
@@ -265,57 +271,45 @@ public class Connection {
     });
   }
 
-  public Connection(final @NonNull Protocol protocol,
-                    final @NonNull String scheme,
-                    final @NonNull String domain,
+  public Connection(@NonNull final Protocol protocol,
+                    @NonNull final String scheme,
+                    @NonNull final String domain,
                     final int port,
-                    final @Nullable String path) {
+                    @Nullable final String path) {
     if (protocol == null || protocol == Protocol.TCP) {
       throw new IllegalArgumentException();
     }
     this.protocol = protocol;
-    final String schemeTrimmed = scheme == null ? "" : scheme.trim();
-    if (schemeTrimmed.isEmpty()) {
-      throw new IllegalArgumentException();
-    }
-    this.scheme = scheme;
-    final String domainTrimmed = domain == null ? "" : domain.trim();
-    if (domainTrimmed.isEmpty()) {
-      throw new IllegalArgumentException("`domain` is absent.");
-    }
-    this.domain = domainTrimmed;
+    Validate.notBlank(scheme, "`scheme` is absent.");
+    this.scheme = StringUtils.isAllLowerCase(scheme) ? scheme : scheme.toLowerCase();
+    Validate.notBlank(domain, "`domain` is absent.");
+    this.domain = domain;
     this.port = port;
-    final String pathTrimmed = path.trim();
-    this.path = pathTrimmed.isEmpty() ? "" : pathTrimmed;
-
-    tlsEnabled = null;
-    startTlsEnabled = null;
+    this.path = StringUtils.defaultIfBlank(path, "");
+    this.tlsMethod = null;
   }
 
-  public Connection(final @NonNull String domain,
+  public Connection(@NonNull final String domain,
                     final int port,
-                    final boolean tlsEnabled,
-                    final boolean startTlsEnabled) {
+                    @Nullable final TlsMethod tlsMethod) {
     this.protocol = Protocol.TCP;
-    final String domainTrimmed = domain == null ? "" : domain.trim();
-    if (domainTrimmed.isEmpty()) {
-      throw new IllegalArgumentException();
-    }
-    this.domain = domainTrimmed;
+    Validate.notBlank(domain, "`domain` is absent.");
+    this.domain = domain;
     this.port = port;
-    this.tlsEnabled = tlsEnabled;
-    if (tlsEnabled) {
-      this.startTlsEnabled = startTlsEnabled;
-    } else {
-      this.startTlsEnabled = null;
-    }
-
+    this.tlsMethod = tlsMethod;
     scheme = "";
     path = "";
   }
 
-  public Connection(@NonNull final Protocol protocol, @NonNull final URI uri) {
-    this(protocol, uri.getScheme(), uri.getHost(), uri.getPort(), uri.getPath());
+  public Connection(@NonNull final Protocol protocol,
+                    @NonNull final URI uri) {
+    this(
+        protocol,
+        uri.getScheme(),
+        uri.getHost(),
+        uri.getPort(),
+        uri.getPath()
+    );
   }
 
   public @NonNull Protocol getProtocol() {
@@ -340,13 +334,9 @@ public class Connection {
 
   public boolean isTlsEnabled() {
     if (protocol == Protocol.TCP) {
-      return tlsEnabled;
+      return tlsMethod != null;
     }
-    switch (scheme.toLowerCase()) {
-      case "http":
-        return false;
-      case "https":
-        return true;
+    switch (scheme) {
       case "ws":
         return false;
       case "wss":
@@ -356,11 +346,14 @@ public class Connection {
     }
   }
 
-  public boolean isStartTlsRequired() {
-    if (protocol == Protocol.TCP && isTlsEnabled()) {
-      return startTlsEnabled;
+  @NonNull
+  public TlsMethod getTlsMethod() {
+    if (this.protocol == Protocol.TCP) {
+      return this.tlsMethod;
+    } else if (this.tlsMethod == TlsMethod.STARTTLS) {
+      return this.tlsMethod;
     } else {
-      return false;
+      return isTlsEnabled() ? TlsMethod.DIRECT : null;
     }
   }
 

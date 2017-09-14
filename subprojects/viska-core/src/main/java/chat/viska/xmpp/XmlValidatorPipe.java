@@ -22,7 +22,11 @@ import io.reactivex.annotations.NonNull;
 import java.util.List;
 import org.w3c.dom.Document;
 
-class XmlValidatorPipe extends BlankPipe {
+/**
+ * Validates incoming XML and sends a stream error if anything violations are
+ * found.
+ */
+public class XmlValidatorPipe extends BlankPipe {
 
   public static class ValidationException extends Exception {
 
@@ -56,11 +60,10 @@ class XmlValidatorPipe extends BlankPipe {
       return;
     }
     final Document document = (Document) toRead;
-    final String rootName = document.getDocumentElement().getLocalName();
     if (Stanza.isStanza(document)) {
       validateStanza(document);
     } else {
-      validateStream((Document) toRead);
+      validateStream(document);
     }
     super.onReading(pipeline, toRead, toForward);
   }

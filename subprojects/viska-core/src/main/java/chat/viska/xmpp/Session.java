@@ -24,9 +24,8 @@ import io.reactivex.Maybe;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import java.util.EventObject;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLSession;
 import org.w3c.dom.Document;
@@ -167,8 +166,8 @@ public interface Session extends AutoCloseable {
                     @Nullable String resource,
                     boolean registering,
                     @Nullable Compression connectionCompression,
-                    @Nullable Compression streamCompression,
-                    @Nullable Compression tlsCompression);
+                    @Nullable Compression tlsCompression,
+                    @Nullable Compression streamCompression);
 
   /**
    * Starts closing the XMPP stream and the network connection.
@@ -219,6 +218,9 @@ public interface Session extends AutoCloseable {
   @Nullable
   Compression getConnectionCompression();
 
+  @NonNull
+  Set<Compression> getSupportedConnectionCompression();
+
   /**
    * Gets the
    * <a href="https://datatracker.ietf.org/doc/rfc3749">TLS level
@@ -229,6 +231,9 @@ public interface Session extends AutoCloseable {
   @Nullable
   Compression getTlsCompression();
 
+  @NonNull
+  Set<Compression> getSupportedTlsCompression();
+
   /**
    * Gets the stream level {@link Compression} which is defined in
    * <a href="https://xmpp.org/extensions/xep-0138.html">XEP-0138: Stream
@@ -236,6 +241,9 @@ public interface Session extends AutoCloseable {
    */
   @Nullable
   Compression getStreamCompression();
+
+  @NonNull
+  Set<Compression> getSupportedStreamCompression();
 
   /**
    * Gets the
@@ -294,5 +302,5 @@ public interface Session extends AutoCloseable {
   Flowable<EventObject> getEventStream();
 
   @NonNull
-  List<StreamFeature> getStreamFeatures();
+  Set<StreamFeature> getStreamFeatures();
 }

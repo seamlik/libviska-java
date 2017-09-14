@@ -20,6 +20,7 @@ import chat.viska.xmpp.plugins.BasePlugin;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
+import io.reactivex.exceptions.OnErrorNotImplementedException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
@@ -33,8 +34,23 @@ public class PluginManager implements SessionAware {
   private final Session session;
   private final Set<Plugin> plugins = new HashSet<>();
 
-  PluginManager(final @NonNull DefaultSession session) {
+  PluginManager(@NonNull final Session session) {
     this.session = session;
+    getSession().getState().getStream().filter(
+        it -> it == Session.State.ONLINE
+    ).forEach(
+        it -> Observable.fromIterable(getPlugins()).forEach(Plugin::onSessionOnline)
+    );
+    getSession().getState().getStream().filter(
+        it -> it == Session.State.DISCONNECTED
+    ).forEach(
+        it -> Observable.fromIterable(getPlugins()).forEach(Plugin::onSessionDisconnected)
+    );
+    getSession().getState().getStream().filter(
+        it -> it == Session.State.DISPOSED
+    ).forEach(
+        it -> Observable.fromIterable(getPlugins()).forEach(Plugin::onSessionDisposed)
+    );
     apply(BasePlugin.class);
   }
 
@@ -51,24 +67,26 @@ public class PluginManager implements SessionAware {
     }
     final Plugin plugin;
     try {
-      plugin = type.getConstructor(Session.class).newInstance(session);
+      plugin = type.getConstructor().newInstance();
     } catch (Exception ex) {
       throw new IllegalArgumentException(
-          "Unable to apply plugin " + type.getCanonicalName(),
+          "Unable to instantiate plugin " + type.getCanonicalName(),
           ex
       );
     }
     try {
-      Observable
-          .fromIterable(plugin.getDependencies())
-          .blockingForEach(this::apply);
-    } catch (RuntimeException ex) {
+      Observable.fromIterable(plugin.getDependencies()).forEach(this::apply);
+    } catch (OnErrorNotImplementedException ex) {
       throw new IllegalArgumentException(
           "Unable to apply dependencies of plugin " + type.getCanonicalName(),
-          ex
+          ex.getCause()
       );
     }
     this.plugins.add(plugin);
+    plugin.onApplied(getSession());
+    if (getSession().getState().getValue() == Session.State.ONLINE) {
+      plugin.onSessionOnline();
+    }
   }
 
   /**
@@ -91,7 +109,6 @@ public class PluginManager implements SessionAware {
   }
 
   @Override
-  @NonNull
   public Session getSession() {
     return session;
   }

@@ -16,6 +16,7 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
@@ -23,6 +24,7 @@ import java.util.Objects;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
 
 /**
  * Indicates a stream error has occurred or is received.
@@ -32,185 +34,39 @@ public class StreamErrorException extends Exception {
   /**
    * Cause of a stream error. These conditions are defined in
    * <a href="https://tools.ietf.org/html/rfc6120#section-4.9.3">RFC 6120 -
-   * Extensible Messaging and Presence Protocol (XMPP): Core</a> and most of
-   * their descriptions are copied from this specification.
+   * Extensible Messaging and Presence Protocol (XMPP): Core</a>.
    */
   public enum Condition {
 
-    /**
-     * Indicates invalid XML format.
-     */
     BAD_FORMAT,
-
-    /**
-     * Indicates an entity has sent a namespace prefix that is unsupported, or
-     * has sent no namespace prefix on an element that needs such a prefix.
-     */
     BAD_NAMESPACE_PREFIX,
-
     CONFLICT,
-
-    /**
-     * Indicates a timeout during closing a stream.
-     */
     CONNECTION_TIMEOUT,
-
-    /**
-     * Indicates the value of the {@code to} attribute provided in the initial
-     * stream header corresponds to an FQDN that is no longer serviced by the
-     * receiving entity.
-     */
     HOST_GONE,
-
-    /**
-     * The value of the {@code to} attribute provided in the initial stream
-     * header does not correspond to an FQDN that is serviced by the receiving
-     * entity.
-     */
     HOST_UNKNOWN,
-
-    /**
-     * Indicates a stanza sent between two servers lacks a {@code to} or
-     * {@code from} attribute, the {@code to} or {@code from} attribute has no
-     * value, or the value violates the rules for XMPP addresses.
-     */
     IMPROPER_ADDRESSING,
-
-    /**
-     * Indicates the server has experienced a misconfiguration or other internal
-     * error that prevents it from servicing the stream.
-     */
     INTERNAL_SERVER_ERROR,
-
-    /**
-     * Indicates an invalid {@code from} attribute.
-     */
     INVALID_FROM,
-
-    /**
-     * Indicates the XML namespace of the stream header or the stream itself is
-     * invalid.
-     */
     INVALID_NAMESPACE,
-
-    /**
-     * Indicates the XML data mismatches XMPP standards.
-     */
     INVALID_XML,
-
-    /**
-     * Indicates an entity has attempted to send XML data before the stream is
-     * authenticated, or the
-     * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a>
-     * authentication fails.
-     */
     NOT_AUTHORIZED,
-
-    /**
-     * Indicates an entity has sent XML that is not namespace-well-formed.
-     */
     NOT_WELL_FORMED,
-
-    /**
-     * Indicates an entity has violated some local service policy.
-     */
     POLICY_VIOLATION,
-
-    /**
-     * Indicates the server is unable to properly connect to a remote entity
-     * that is needed for authentication or authorization.
-     */
     REMOTE_CONNECTION_FAILED,
-
-    /**
-     * Indicates the server is closing the stream because it has new (typically
-     * security-critical) features to offer.
-     */
     RESET,
-
-    /**
-     * Indicates the server lacks the system resources necessary to service the
-     * stream.
-     */
     RESOURCE_CONSTRAINT,
-
-    /**
-     * Indicates an entity has attempted to send restricted XML features such as
-     * a comment, processing instruction, DTD subset, or XML entity reference.
-     */
     RESTRICTED_XML,
-
-    /**
-     * Indicates the server will not provide service to the initiating entity
-     * but is redirecting traffic to another host under the administrative
-     * control of the same service provider.
-     */
     SEE_OTHER_HOST,
-
-    /**
-     * Indicates the server is being shut down and all active streams are being
-     * closed.
-     */
     SYSTEM_SHUTDOWN,
-
-    /**
-     * Indicates an error condition which is not defined by the specification.
-     */
     UNDEFINED_CONDITION,
-
-    /**
-     * Indicates an entity has encoded the stream in an unsupported encoding.
-     * UTF-8 is the only supported encoding in the current specifications.
-     */
     UNSUPPORTED_ENCODING,
-
-    /**
-     * Indicates the receiving entity has advertised a mandatory-to-negotiate
-     * stream feature that the initiating entity does not support, and has
-     * offered no other mandatory-to-negotiate feature alongside the unsupported
-     * feature.
-     */
     UNSUPPORTED_FEATURE,
-
-    /**
-     * Indicates an entity has sent a first-level child of the stream that is
-     * not supported.
-     */
     UNSUPPORTED_STANZA_TYPE,
-
-    /**
-     * Indicates the {@code version} attribute provided by the initiating entity
-     * in the stream header specifies a version of XMPP that is not supported by
-     * the receiving entity.
-     */
     UNSUPPORTED_VERSION;
-
-    /**
-     * Returns a constant of {@link Condition} based on the XML tag name of the
-     * stream error.
-     * @param name The XML tag name of the stream error.
-     * @return {@code null} If the specified enum type has no constant with the
-     *         specified name
-     */
-    @Nullable
-    public static Condition of(@NonNull final String name) {
-      try {
-        return Enum.valueOf(
-            Condition.class,
-            name.replace('-', '_').toUpperCase()
-        );
-      } catch (Exception ex) {
-        return null;
-      }
-    }
-
-    @Override
-    public String toString() {
-      return name().replace('_', '-').toLowerCase();
-    }
   }
 
   private final Condition condition;
+  private final String text;
 
   public static StreamErrorException fromXml(@NonNull final Document xml) {
     StreamErrorException.Condition condition = null;
@@ -219,7 +75,10 @@ public class StreamErrorException extends Exception {
     final NodeList nodes = xml.getDocumentElement().getChildNodes();
     while (cursor < nodes.getLength()) {
       conditionElement = (Element) nodes.item(cursor);
-      condition = StreamErrorException.Condition.of(conditionElement.getLocalName());
+      condition = EnumUtils.fromXmlValue(
+          StreamErrorException.Condition.class,
+          conditionElement.getLocalName()
+      );
       if (condition != null) {
         break;
       } else {
@@ -254,8 +113,9 @@ public class StreamErrorException extends Exception {
     }
   }
 
-  public StreamErrorException(final @NonNull Condition condition) {
+  public StreamErrorException(@NonNull final Condition condition) {
     super("[" + EnumUtils.toXmlValue(condition) + "]");
+    this.text = "";
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
@@ -264,11 +124,40 @@ public class StreamErrorException extends Exception {
                               @NonNull final String text) {
     super("[" + EnumUtils.toXmlValue(condition) + "] " + text);
     Objects.requireNonNull(condition, "`condition` is absent.");
+    Objects.requireNonNull(text, "`text` is absent.");
     this.condition = condition;
+    this.text = text;
   }
 
   @NonNull
   public Condition getCondition() {
     return condition;
+  }
+
+  @NonNull
+  public String getText() {
+    return text;
+  }
+
+  @NonNull
+  public Document toXml() {
+    final Document xml;
+    try {
+      xml = DomUtils.readDocument(String.format(
+          "<error xmlns=\"%1s\"><%2s xmlns=\"%3s\"/></error>",
+          CommonXmlns.STREAM_HEADER,
+          EnumUtils.toXmlValue(getCondition()),
+          CommonXmlns.STREAM_ERROR
+      ));
+    } catch (SAXException ex) {
+      throw new RuntimeException(ex);
+    }
+    if (!getText().isEmpty()) {
+      final Element textElement = (Element) xml
+          .getDocumentElement()
+          .appendChild(xml.createElementNS(CommonXmlns.STREAM_ERROR, "text"));
+      textElement.setTextContent(getText());
+    }
+    return xml;
   }
 }

@@ -68,7 +68,7 @@ public class DiscoItem {
     if (obj == null || getClass() != obj.getClass()) {
       return false;
     }
-    DiscoItem item = (DiscoItem) obj;
+    final DiscoItem item = (DiscoItem) obj;
     return Objects.equals(jid, item.jid)
         && Objects.equals(name, item.name)
         && Objects.equals(node, item.node);

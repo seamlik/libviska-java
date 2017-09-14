@@ -138,14 +138,14 @@ public class DiscoInfo {
   }
 
   @Override
-  public boolean equals(Object obj) {
+  public boolean equals(final Object obj) {
     if (this == obj) {
       return true;
     }
     if (obj == null || getClass() != obj.getClass()) {
       return false;
     }
-    DiscoInfo that = (DiscoInfo) obj;
+    final DiscoInfo that = (DiscoInfo) obj;
     return Objects.equals(identities, that.identities)
         && Objects.equals(features, that.features);
   }

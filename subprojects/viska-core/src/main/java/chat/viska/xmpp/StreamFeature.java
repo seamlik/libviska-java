@@ -20,26 +20,30 @@ import io.reactivex.annotations.NonNull;
 
 public enum StreamFeature {
 
-  RESOURCE_BINDING(CommonXmlns.RESOURCE_BINDING, "bind", false, true),
-  RESOURCE_BINDING_2(CommonXmlns.RESOURCE_BINDING_2, "bind", false, true),
-  ROSTER_VERSION(CommonXmlns.ROSTER_VERSION, "ver", false, false),
-  SASL(CommonXmlns.SASL, "mechanisms", true, true),
-  STARTTLS(CommonXmlns.STARTTLS, "starttls", true, false),
-  STREAM_COMPRESSION(CommonXmlns.STREAM_COMPRESSION, "compression", false, false),
-  STREAM_MANAGEMENT(CommonXmlns.STREAM_MANAGEMENT, "SM", false, false);
+  RESOURCE_BINDING(CommonXmlns.RESOURCE_BINDING, "bind", false, true, false),
+  RESOURCE_BINDING_2(CommonXmlns.RESOURCE_BINDING_2, "bind", false, true, false),
+  ROSTER_VERSION(CommonXmlns.ROSTER_VERSION, "ver", false, false, true),
+  SASL(CommonXmlns.SASL, "mechanisms", true, true, false),
+  STARTTLS(CommonXmlns.STARTTLS, "starttls", true, false, false),
+  STREAM_COMPRESSION(CommonXmlns.STREAM_COMPRESSION, "compression", false, false, false),
+  STREAM_MANAGEMENT(CommonXmlns.STREAM_MANAGEMENT, "SM", false, false, false);
 
   private final String name;
   private final String namespace;
   private final boolean restartRequired;
   private final boolean mandatory;
+  private final boolean informational;
 
-  StreamFeature(@NonNull final String namespace, @NonNull final String name,
+  StreamFeature(@NonNull final String namespace,
+                @NonNull final String name,
                 final boolean restartRequired,
-                final boolean mandatory) {
+                final boolean mandatory,
+                boolean informational) {
     this.name = name;
     this.namespace = namespace;
     this.restartRequired = restartRequired;
     this.mandatory = mandatory;
+    this.informational = informational;
   }
 
   public String getName() {
@@ -56,5 +60,9 @@ public enum StreamFeature {
 
   public boolean isMandatory() {
     return mandatory;
+  }
+
+  public boolean isInformational() {
+    return informational;
   }
 }

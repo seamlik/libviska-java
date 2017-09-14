@@ -26,34 +26,35 @@ import chat.viska.sasl.Client;
 import chat.viska.sasl.ClientFactory;
 import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
+import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.annotations.Nullable;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.processors.FlowableProcessor;
+import io.reactivex.processors.PublishProcessor;
+import io.reactivex.schedulers.Schedulers;
 import java.beans.PropertyChangeEvent;
-import java.io.IOException;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EventObject;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 /**
  * For handling handshaking, login and management of an XMPP stream.
  *
- * <h1>Usage</h1>
+ * <h2>Usage</h2>
  *
  * <p>The handshake starts once the {@link Pipeline} starts running or it is
  * already running when this Pipe is added to a Pipeline. In order to get
@@ -63,22 +64,33 @@ import org.xml.sax.SAXException;
  * or an abnormally closed XMPP stream, check {@link #getHandshakeError()},
  * {@link #getClientStreamError()} and {@link #getServerStreamError()}.</p>
  *
- * <h1>Notes on Behavior</h1>
+ * <h2>Notes on Behavior</h2>
  *
  * <p>Some behavior of its handshaking process differs from XMPP standards,
  * either because of security considerations or development convenience. These
  * notes may hopefully help contributors understand the logic more easily.</p>
  *
- * <h2>SASL</h2>
+ * <h3>XML Framing</h3>
+ *
+ * <p>XMPP is not a protocol of streaming multiple XML documents but a single
+ * large XML document, individual top-level elements are not necessarily legally
+ * independent XML documents. Because {@literal libviska-java} uses
+ * {@link Document}s to represent each top-level elements in the XMPP stream,
+ * it assumes the XML framing conforms to
+ * <a href="https://datatracker.ietf.org/doc/rfc7395">RFC 7395</a>.
+ * Implementations of {@link DefaultSession} should take care of the
+ * conversion.</p>
+ *
+ * <h3>SASL</h3>
  *
  * <p>According to <a href="https://datatracker.ietf.org/doc/rfc6120">RFC
  * 6120</a>, the client may retry the
  * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> authentication
  * for a number of times or even try another mechanism if the authentication
- * fails. However, this class aborts the handshake and close the stream without
- * sending any stream error immediately after the authentication fails.</p>
+ * fails. However, this class aborts the handshake immediately after the
+ * authentication fails.</p>
  */
-class HandshakerPipe extends BlankPipe implements SessionAware {
+public class HandshakerPipe extends BlankPipe implements SessionAware {
 
   /**
    * Indicates the state of a {@link HandshakerPipe}.
@@ -137,70 +149,93 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
     DISPOSED
   }
 
+  /**
+   * Indicates a {@link StreamFeature} has just been negotiated.
+   */
+  public static class FeatureNegotiatedEvent extends EventObject {
+
+    private final StreamFeature feature;
+
+    public FeatureNegotiatedEvent(@NonNull final HandshakerPipe source,
+                                  @NonNull final StreamFeature feature) {
+      super(source);
+      Objects.requireNonNull(feature);
+      this.feature = feature;
+    }
+
+    /**
+     * Gets the {@link StreamFeature} that was negotiated.
+     */
+    @NonNull
+    public StreamFeature getFeature() {
+      return feature;
+    }
+  }
+
   private static final Version SUPPORTED_VERSION = new Version(1, 0);
-  private static final List<StreamFeature> streamFeaturesOrder = new ArrayList<>(
-      Arrays.asList(
-          StreamFeature.STARTTLS,
-          StreamFeature.SASL,
-          StreamFeature.RESOURCE_BINDING
-      )
+  private static final List<StreamFeature> FEATURES_ORDER = Arrays.asList(
+      StreamFeature.STARTTLS,
+      StreamFeature.SASL,
+      StreamFeature.RESOURCE_BINDING
+  );
+  private static final Set<StreamFeature> INFORMATIONAL_FEATURES = new HashSet<>(
+      Observable
+          .fromArray(StreamFeature.class.getEnumConstants())
+          .filter(StreamFeature::isInformational)
+          .toList()
+          .blockingGet()
   );
 
   private final MutableReactiveObject<State> state = new MutableReactiveObject<>(State.INITIALIZED);
-  private final DocumentBuilder domBuilder;
   private final Session session;
-  private final List<StreamFeature> negotiatedFeatures = new ArrayList<>();
+  private final Set<StreamFeature> negotiatedFeatures = new HashSet<>();
   private final Jid jid;
   private final Jid authzId;
   private final CredentialRetriever retriever;
   private final Base64 base64 = new Base64(0, new byte[0], false);
   private final String presetResource;
   private final List<String> saslMechanisms = new ArrayList<>();
+  private final FlowableProcessor<EventObject> eventStream;
+  private final MutableReactiveObject<StreamErrorException> serverStreamError = new MutableReactiveObject<>();
+  private final MutableReactiveObject<StreamErrorException> clientStreamError = new MutableReactiveObject<>();
+  private final MutableReactiveObject<Exception> handshakeError = new MutableReactiveObject<>();
   private Pipeline<?, ?> pipeline;
-  private Client saslCient;
-  private String streamId = "";
+  private Client saslClient;
   private StreamFeature negotiatingFeature;
   private Disposable pipelineStartedSubscription;
-  private StreamErrorException serverStreamError;
-  private StreamErrorException clientStreamError;
-  private Exception handshakeError;
   private Jid negotiatedJid;
   private String resourceBindingIqId = "";
 
   private boolean checkIfAllMandatoryFeaturesNegotiated() {
-    final List<StreamFeature> notNegotiated = new ArrayList<>(streamFeaturesOrder);
+    final Set<StreamFeature> notNegotiated = new HashSet<>(FEATURES_ORDER);
     notNegotiated.removeAll(negotiatedFeatures);
-    for (StreamFeature feature : notNegotiated) {
-      if (feature.isMandatory()) {
-        return false;
-      }
-    }
-    return true;
+    return !Observable
+        .fromIterable(notNegotiated)
+        .any(StreamFeature::isMandatory)
+        .blockingGet();
   }
 
-  private void sendXml(@NonNull final String xml) {
+  private void sendStreamOpening() {
     try {
-      pipeline.write(domBuilder.parse(
-          new InputSource(new StringReader(xml))
-      ));
-    } catch (IOException | SAXException ex) {
+      this.pipeline.write(DomUtils.readDocument(String.format(
+          "<open xmlns=\"%1s\" to=\"%2s\" version=\"1.0\"/>",
+          CommonXmlns.STREAM_OPENING_WEBSOCKET,
+          jid.getDomainPart()
+      )));
+    } catch (SAXException ex) {
       throw new RuntimeException(ex);
     }
   }
 
-  private void sendStreamOpening() {
-    sendXml(String.format(
-        "<open xmlns=\"%1s\" to=\"%2s\" version=\"1.0\"/>",
-        CommonXmlns.STREAM_OPENING_WEBSOCKET,
-        jid.getDomainPart()
-    ));
-  }
-
   private void sendStreamClosing() {
-    sendXml(String.format(
-        "<close xmlns=\"%1s\"/>",
-        CommonXmlns.STREAM_OPENING_WEBSOCKET
-    ));
+    try {
+      this.pipeline.write(DomUtils.readDocument(String.format(
+          "<close xmlns=\"%1s\"/>",
+          CommonXmlns.STREAM_OPENING_WEBSOCKET
+      )));
+    } catch (SAXException ex) {
+      throw new RuntimeException(ex);
+    }
   }
 
   private void consumeStreamOpening(@NonNull final Document document) {
@@ -232,188 +267,223 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
           serverDomain
       ));
     }
-    final String streamId = document
-        .getDocumentElement()
-        .getAttribute("id");
-    if (streamId.trim().isEmpty()) {
-      sendStreamError(new StreamErrorException(
-          StreamErrorException.Condition.INVALID_XML,
-          "Empty stream ID"
-      ));
-    }
-    this.streamId = streamId;
   }
 
+  /**
+   * Checks the feature list and see if any feature should negotiate next. Also
+   * flags any informational {@link StreamFeature}s as negotiated. Also sets the
+   * field {@code negotiatingFeature}.
+   * @param document XML sent by the server.
+   * @return {@link StreamFeature} selected to negotiate.
+   */
   private Element consumeStreamFeatures(@NonNull final Document document) {
-    final NodeList serverFeatures = document.getDocumentElement().getChildNodes();
-    if (serverFeatures.getLength() == 0) {
+    final List<Node> announcedFeatures = DomUtils.convertToList(
+        document.getDocumentElement().getChildNodes()
+    );
+    if (announcedFeatures.size() == 0) {
       return null;
     }
-    for (StreamFeature it : streamFeaturesOrder) {
-      int cursor = 0;
-      while (cursor < serverFeatures.getLength()) {
-        final Element currentFeature = (Element) serverFeatures.item(cursor);
-        if (it.getName().equals(currentFeature.getLocalName())
-            && it.getNamespace().equals(currentFeature.getNamespaceURI())) {
-          this.negotiatingFeature = it;
-          return currentFeature;
+
+    for (StreamFeature informational : INFORMATIONAL_FEATURES) {
+      for (Node announced : announcedFeatures) {
+        if (informational.getNamespace().equalsIgnoreCase(announced.getNamespaceURI())
+            && informational.getName().equalsIgnoreCase(announced.getLocalName())) {
+          if (this.negotiatedFeatures.add(informational)) {
+            this.eventStream.onNext(
+                new FeatureNegotiatedEvent(this, informational)
+            );
+          }
         }
-        ++cursor;
+      }
+    }
+
+    for (StreamFeature supported : FEATURES_ORDER) {
+      for (Node announced : announcedFeatures) {
+        if (supported.getNamespace().equalsIgnoreCase(announced.getNamespaceURI())
+            && supported.getName().equalsIgnoreCase(announced.getLocalName())) {
+          this.negotiatingFeature = supported;
+          return (Element) announced;
+        }
       }
     }
 
     return null;
   }
 
-  private void initializeSaslNegotiation(@NonNull final Element mechanismsElement) {
-    final List<String> mechanisms = Observable.fromIterable(DomUtils.toList(
+  private void initiateStartTls() {
+    try {
+      this.pipeline.write(DomUtils.readDocument(String.format(
+          "<starttls xmlns=\"%1s\"/>",
+          CommonXmlns.STARTTLS
+      )));
+    } catch (SAXException ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+
+  private void initiateSasl(@NonNull final Element mechanismsElement) 
+      throws SAXException {
+    final List<String> mechanisms = Observable.fromIterable(DomUtils.convertToList(
         mechanismsElement.getElementsByTagName("mechanism")
     )).map(Node::getTextContent)
         .toList()
         .blockingGet();
-    this.saslCient = new ClientFactory(this.saslMechanisms).newClient(
+    this.saslClient = new ClientFactory(this.saslMechanisms).newClient(
         mechanisms,
         this.jid.getLocalPart(),
         this.authzId == null ? null : this.authzId.toString(),
         this.retriever
     );
-    if (this.saslCient == null) {
-      sendXml(String.format(
+    if (this.saslClient == null) {
+      this.pipeline.write(DomUtils.readDocument(String.format(
           "<abort xmlns=\"%1s\"/>",
           CommonXmlns.SASL
-      ));
+      )));
       sendStreamError(new StreamErrorException(
           StreamErrorException.Condition.POLICY_VIOLATION,
           "No supported SASL mechanisms."
       ));
     }
     String msg = "";
-    if (this.saslCient.isClientFirst()) {
-      msg = this.base64.encodeToString(this.saslCient.respond());
+    if (this.saslClient.isClientFirst()) {
+      msg = this.base64.encodeToString(this.saslClient.respond());
       if (msg.isEmpty()) {
         msg = "=";
       }
     }
-    sendXml(String.format(
+    this.pipeline.write(DomUtils.readDocument(String.format(
         "<auth xmlns=\"%1s\" mechanism=\"%2s\">%3s</auth>",
         CommonXmlns.SASL,
-        this.saslCient.getMechanism(),
+        this.saslClient.getMechanism(),
         msg
-    ));
+    )));
   }
 
-  private void initializeResourceBinding() {
-    if (this.resourceBindingIqId.isEmpty()) {
-      this.resourceBindingIqId = UUID.randomUUID().toString();
-    }
-    StringBuilder xml = new StringBuilder();
-    xml.append(String.format(
-        "<iq id=\"%1s\" type=\"set\"><bind xmlns=\"%2s\"",
-        this.resourceBindingIqId,
-        CommonXmlns.RESOURCE_BINDING
+  private void initiateResourceBinding() {
+    this.resourceBindingIqId = UUID.randomUUID().toString();
+    final Document iq = Stanza.getIqTemplate(
+        Stanza.IqType.SET,
+        resourceBindingIqId,
+        null
+    );
+    final Element bind = (Element) iq.getDocumentElement().appendChild(iq.createElementNS(
+        CommonXmlns.RESOURCE_BINDING,
+        "bind"
     ));
     if (!this.presetResource.isEmpty()) {
-      xml.append(">");
-      xml.append(String.format(
-          "<resource>%1s</resource>",
-          this.presetResource
-      ));
-      xml.append("</bind>");
-    } else {
-      xml.append("/>");
-    }
-    xml.append("</iq>");
-    sendXml(xml.toString());
-  }
-
-  private void consumeStartTls(@NonNull final Document document) {
-    throw new UnsupportedOperationException();
-  }
-
-  private void consumeSasl(@NonNull final Document document) {
-    final String rootName = document.getDocumentElement().getLocalName();
-    final String text = document.getDocumentElement().getTextContent();
-
-    if (this.saslCient.isCompleted() && !text.isEmpty()) {
-      sendStreamError(new StreamErrorException(
-          StreamErrorException.Condition.POLICY_VIOLATION
-      ));
-    }
-
-    if ("failure".equals(rootName)) {
-      this.negotiatedFeatures.remove(this.negotiatingFeature);
-      this.negotiatingFeature = null;
-      closeStream();
-      this.handshakeError = new AuthenticationException(
-          AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED
+      final Element resource = (Element) bind.appendChild(
+          iq.createElement("resource")
       );
-    } else if ("success".equals(rootName) && text.isEmpty()) {
-      if (!this.saslCient.isCompleted()) {
-        sendStreamError(new StreamErrorException(
-            StreamErrorException.Condition.POLICY_VIOLATION,
-            "SASL not finished yet."
-        ));
-      } else {
-        this.negotiatedFeatures.add(this.negotiatingFeature);
+      resource.setTextContent(this.presetResource);
+    }
+    this.pipeline.write(iq);
+  }
+
+  private void consumeStartTls(@NonNull final Document xml) {
+    switch (xml.getDocumentElement().getLocalName()) {
+      case "proceed":
+        this.negotiatedFeatures.add(StreamFeature.STARTTLS);
+        this.eventStream.onNext(
+            new FeatureNegotiatedEvent(this, StreamFeature.STARTTLS)
+        );
         this.negotiatingFeature = null;
-        sendStreamOpening();
-      }
-    } else if ("success".equals(rootName) && !text.isEmpty()) {
-      this.saslCient.acceptChallenge(this.base64.decode(text));
-      if (!this.saslCient.isCompleted()) {
-        sendStreamError(new StreamErrorException(
-            StreamErrorException.Condition.POLICY_VIOLATION,
-            "SASL not finished yet."
+        break;
+      case "failure":
+        this.handshakeError.setValue(new Exception(
+            "Server failed to proceed StartTLS."
         ));
-      } else if (this.saslCient.getError() != null) {
+        break;
+      default:
         sendStreamError(new StreamErrorException(
-            StreamErrorException.Condition.NOT_AUTHORIZED
+            StreamErrorException.Condition.UNSUPPORTED_STANZA_TYPE
         ));
-      } else {
-        this.negotiatedFeatures.add(this.negotiatingFeature);
+    }
+  }
+
+  private void consumeSasl(@NonNull final Document document) throws SAXException {
+    final String msg = document.getDocumentElement().getTextContent();
+
+    if (this.saslClient.isCompleted() && StringUtils.isNotBlank(msg)) {
+      sendStreamError(new StreamErrorException(
+          StreamErrorException.Condition.POLICY_VIOLATION,
+          "Not receiving SASL messages at the time."
+      ));
+    }
+
+    switch (document.getDocumentElement().getLocalName()) {
+      case "failure":
+        this.negotiatedFeatures.remove(this.negotiatingFeature);
         this.negotiatingFeature = null;
-        sendStreamOpening();
-      }
-    } else if ("challenge".equals(rootName)) {
-      this.saslCient.acceptChallenge(this.base64.decode(text));
-      if (!this.saslCient.isCompleted()) {
-        final byte[] response = this.saslCient.respond();
-        if (response != null) {
-          sendXml(String.format(
-              "<response xmlns=\"%1s\">%2s</response>",
-              CommonXmlns.SASL,
-              this.base64.encodeToString(response)
-          ));
-        } else {
-          sendXml(String.format(
-              "<abort xmlns=\"%1s\"/>",
-              CommonXmlns.SASL
-          ));
+        closeStream();
+        this.handshakeError.setValue(new AuthenticationException(
+            AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED
+        ));
+        break;
+      case "success":
+        if (StringUtils.isNotBlank(msg)) {
+          this.saslClient.acceptChallenge(this.base64.decode(msg));
+        }
+        if (!this.saslClient.isCompleted()) {
           sendStreamError(new StreamErrorException(
               StreamErrorException.Condition.POLICY_VIOLATION,
-              "Malformed SASL message."
+              "SASL not finished yet."
           ));
+        } else if (this.saslClient.getError() != null) {
+          sendStreamError(new StreamErrorException(
+              StreamErrorException.Condition.NOT_AUTHORIZED,
+              "Incorrect server proof."
+          ));
+        } else {
+          this.negotiatedFeatures.add(this.negotiatingFeature);
+          this.eventStream.onNext(
+              new FeatureNegotiatedEvent(this, this.negotiatingFeature)
+          );
+          this.negotiatingFeature = null;
+          sendStreamOpening();
         }
-      }
-    } else {
-      sendStreamError(new StreamErrorException(
-          StreamErrorException.Condition.UNSUPPORTED_STANZA_TYPE
-      ));
+        break;
+      case "challenge":
+        this.saslClient.acceptChallenge(this.base64.decode(msg));
+        if (!this.saslClient.isCompleted()) {
+          final byte[] response = this.saslClient.respond();
+          if (response != null) {
+            this.pipeline.write(DomUtils.readDocument(String.format(
+                "<response xmlns=\"%1s\">%2s</response>",
+                CommonXmlns.SASL,
+                this.base64.encodeToString(response)
+            )));
+          } else {
+            this.pipeline.write(DomUtils.readDocument(String.format(
+                "<abort xmlns=\"%1s\"/>",
+                CommonXmlns.SASL
+            )));
+            sendStreamError(new StreamErrorException(
+                StreamErrorException.Condition.POLICY_VIOLATION,
+                "Malformed SASL message."
+            ));
+          }
+        }
+        break;
+      default:
+        sendStreamError(new StreamErrorException(
+            StreamErrorException.Condition.UNSUPPORTED_STANZA_TYPE
+        ));
     }
   }
 
-  private void consumeStreamCompression(@NonNull final Document document) {
+  private void consumeStreamCompression(@NonNull Document document) {
     throw new UnsupportedOperationException();
   }
 
-  private void consumeResourceBinding(@NonNull final Document document) {
+  private void consumeResourceBinding(@NonNull final Document document)
+      throws SAXException {
     if (!this.resourceBindingIqId.equals(document.getDocumentElement().getAttribute("id"))) {
       sendStreamError(new StreamErrorException(
           StreamErrorException.Condition.NOT_AUTHORIZED
       ));
     } else if ("error".equals(document.getDocumentElement().getAttribute("type"))) {
       try {
-        this.handshakeError = StanzaErrorException.fromXml(document);
+        this.handshakeError.setValue(StanzaErrorException.fromXml(document));
       } catch (StreamErrorException ex) {
         sendStreamError(ex);
       }
@@ -454,19 +524,25 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
       }
     }
     if (this.negotiatedJid != null) {
-      this.negotiatedFeatures.add(this.negotiatingFeature);
+      if (this.negotiatedFeatures.add(this.negotiatingFeature)) {
+        this.eventStream.onNext(
+            new FeatureNegotiatedEvent(this, StreamFeature.RESOURCE_BINDING)
+        );
+      }
       this.negotiatingFeature = null;
     }
   }
 
-  private synchronized void start() {
-    if (this.state.getValue() != State.INITIALIZED) {
-      throw new IllegalStateException(
-          "Must not start handshaking if the HandshakerPipe is not just initialized."
-      );
+  private void start() {
+    synchronized (this.state) {
+      if (this.state.getValue() != State.INITIALIZED) {
+        throw new IllegalStateException(
+            "Must not start handshaking if the HandshakerPipe is not just initialized."
+        );
+      }
+      this.state.setValue(State.STARTED);
+      sendStreamOpening();
     }
-    this.state.setValue(State.STARTED);
-    sendStreamOpening();
   }
 
   /**
@@ -507,71 +583,68 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
     }
     this.presetResource = resource == null ? "" : resource;
 
-    // Initializing DOM builder
-    DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
-    builderFactory.setIgnoringComments(true);
-    builderFactory.setNamespaceAware(true);
-    try {
-      domBuilder = builderFactory.newDocumentBuilder();
-    } catch (ParserConfigurationException ex) {
-      throw new RuntimeException(ex);
-    }
+    final FlowableProcessor<EventObject> unsafeEventStream = PublishProcessor.create();
+    this.eventStream = unsafeEventStream.toSerialized();
 
-    // Preprocessing stream features list
-    if (!this.session.getConnection().isStartTlsRequired()) {
-      this.negotiatedFeatures.add(StreamFeature.STARTTLS);
+    /* Resource Binding implicitly means completion of negotiation. See
+     * <https://mail.jabber.org/pipermail/jdev/2017-August/090324.html> */
+    getEventStream().ofType(FeatureNegotiatedEvent.class).filter(it ->
+        it.getFeature() == StreamFeature.RESOURCE_BINDING
+        || it.getFeature() == StreamFeature.RESOURCE_BINDING_2
+    ).filter(it -> checkIfAllMandatoryFeaturesNegotiated()).subscribe(it ->
+        this.state.setValue(State.COMPLETED)
+    );
+
+    if (getSession().getConnection().getTlsMethod() == Connection.TlsMethod.STARTTLS) {
+      getSession()
+          .getEventStream()
+          .ofType(DefaultSession.StartTlsHandshakeCompletedEvent.class)
+          .subscribe(it -> sendStreamOpening());
     }
+    getSession()
+        .getEventStream()
+        .ofType(DefaultSession.ConnectionTerminatedEvent.class)
+        .filter(it -> getState().getValue() != State.STREAM_CLOSED)
+        .observeOn(Schedulers.io())
+        .subscribe(it -> {
+          synchronized (this.state) {
+            this.state.setValue(State.STREAM_CLOSED);
+          }
+        });
   }
 
   /**
    * Closes the XMPP stream.
    * @throws IllegalStateException If this class is in {@link State#DISPOSED}.
    */
-  public synchronized Completable closeStream() {
-    switch (state.getValue()) {
-      case INITIALIZED:
-        state.setValue(State.STREAM_CLOSED);
-        return Completable.complete();
-      case STREAM_CLOSED:
-        return Completable.complete();
-      case DISPOSED:
-        throw new IllegalStateException("Pipe disposed.");
-      default:
-        if (this.state.getValue() != State.STREAM_CLOSING) {
-          this.state.setValue(State.STREAM_CLOSING);
-          sendStreamClosing();
-        }
-        return this.state
-            .getStream()
-            .filter(it -> it == State.STREAM_CLOSED)
-            .firstOrError()
-            .toCompletable();
+  public Completable closeStream() {
+    synchronized (this.state) {
+      switch (state.getValue()) {
+        case INITIALIZED:
+          state.setValue(State.STREAM_CLOSED);
+          return Completable.complete();
+        case STREAM_CLOSED:
+          return Completable.complete();
+        case DISPOSED:
+          throw new IllegalStateException("Pipe disposed.");
+        default:
+          if (this.state.getValue() != State.STREAM_CLOSING) {
+            this.state.setValue(State.STREAM_CLOSING);
+            sendStreamClosing();
+          }
+          return this.state
+              .getStream()
+              .filter(it -> it == State.STREAM_CLOSED)
+              .firstOrError()
+              .toCompletable();
+      }
     }
   }
 
   public void sendStreamError(@NonNull final StreamErrorException error) {
-    final Document document;
-    try {
-      document = domBuilder.parse(new InputSource(new StringReader(String.format(
-          "<error xmlns=\"%1s\"><%2s xmlns=\"%3s\"/></error>",
-          CommonXmlns.STREAM_HEADER,
-          error.getCondition().toString(),
-          CommonXmlns.STREAM_ERROR
-      ))));
-    } catch (SAXException | IOException ex) {
-      throw new RuntimeException(ex);
-    }
-    if (error.getMessage() != null) {
-      final Element textElement = document.createElementNS(
-          CommonXmlns.STREAM_ERROR,
-          "text"
-      );
-      textElement.setTextContent(error.getMessage());
-      document.getDocumentElement().appendChild(textElement);
-    }
-    pipeline.write(document);
-    this.clientStreamError = error;
-    closeStream().subscribe();
+    pipeline.write(error.toXml());
+    this.clientStreamError.setValue(error);
+    closeStream().observeOn(Schedulers.io()).subscribe();
   }
 
   /**
@@ -581,15 +654,6 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
   @Nullable
   public Jid getJid() {
     return negotiatedJid;
-  }
-
-  /**
-   * Gets the stream ID. It corresponds to the {@code id} attribute of the
-   * stream opening.
-   */
-  @NonNull
-  public String getStreamId() {
-    return streamId;
   }
 
   /**
@@ -606,7 +670,7 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
    *         did not send any stream error during the last stream.
    */
   @Nullable
-  public StreamErrorException getServerStreamError() {
+  public ReactiveObject<StreamErrorException> getServerStreamError() {
     return serverStreamError;
   }
 
@@ -616,7 +680,7 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
    *         did not send any stream error during the last stream.
    */
   @Nullable
-  public StreamErrorException getClientStreamError() {
+  public ReactiveObject<StreamErrorException> getClientStreamError() {
     return clientStreamError;
   }
 
@@ -626,13 +690,18 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
    *         successful.
    */
   @Nullable
-  public Exception getHandshakeError() {
+  public ReactiveObject<Exception> getHandshakeError() {
     return handshakeError;
   }
 
   @NonNull
-  public List<StreamFeature> getNegotiatedFeatures() {
-    return Collections.unmodifiableList(negotiatedFeatures);
+  public Set<StreamFeature> getNegotiatedFeatures() {
+    return Collections.unmodifiableSet(negotiatedFeatures);
+  }
+
+  @NonNull
+  public Flowable<EventObject> getEventStream() {
+    return eventStream;
   }
 
   /**
@@ -699,62 +768,88 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
         }
         this.state.setValue(State.STREAM_CLOSED);
       } else if ("features".equals(rootName)
-          && CommonXmlns.STREAM_HEADER.equals(rootNs)
-          && this.state.getValue() == State.NEGOTIATING) {
-        final Element selectedFeature = consumeStreamFeatures(document);
-        if (selectedFeature == null) {
-          if (checkIfAllMandatoryFeaturesNegotiated()) {
-            this.state.setValue(State.COMPLETED);
-          } else {
-            sendStreamError(new StreamErrorException(
-                StreamErrorException.Condition.UNSUPPORTED_FEATURE
-            ));
-          }
-        } else {
-          switch (negotiatingFeature) {
-            case SASL:
-              this.session.getLogger().fine("Negotiating SASL.");
-              initializeSaslNegotiation(selectedFeature);
-              break;
-            case RESOURCE_BINDING:
-              this.session.getLogger().fine("Negotiating Resource Binding.");
-              initializeResourceBinding();
-              break;
-            default:
+          && CommonXmlns.STREAM_HEADER.equals(rootNs)) {
+        if (this.state.getValue() == State.NEGOTIATING) {
+          final Element selectedFeature = consumeStreamFeatures(document);
+          if (selectedFeature == null) {
+            if (checkIfAllMandatoryFeaturesNegotiated()) {
+              this.state.setValue(State.COMPLETED);
+            } else {
               sendStreamError(new StreamErrorException(
                   StreamErrorException.Condition.UNSUPPORTED_FEATURE
               ));
-              break;
+            }
+          } else {
+            switch (negotiatingFeature) {
+              case STARTTLS:
+                this.session.getLogger().fine("Negotiating StartTLS.");
+                initiateStartTls();
+                break;
+              case SASL:
+                this.session.getLogger().fine("Negotiating SASL.");
+                initiateSasl(selectedFeature);
+                break;
+              case RESOURCE_BINDING:
+                this.session.getLogger().fine("Negotiating Resource Binding.");
+                initiateResourceBinding();
+                break;
+              default:
+                sendStreamError(new StreamErrorException(
+                    StreamErrorException.Condition.UNSUPPORTED_FEATURE
+                ));
+                break;
+            }
           }
+        } else {
+          sendStreamError(new StreamErrorException(
+              StreamErrorException.Condition.POLICY_VIOLATION,
+              "Re-negotiating features not allowed."
+          ));
         }
-      } else if (CommonXmlns.SASL.equals(rootNs)
-          && this.state.getValue() == State.NEGOTIATING
-          && negotiatingFeature == StreamFeature.SASL) {
-        consumeSasl(document);
-      } else if (this.negotiatingFeature == StreamFeature.RESOURCE_BINDING
-          && state.getValue() == State.NEGOTIATING
-          && "iq".equals(rootName)) {
-        consumeResourceBinding(document);
-        if (negotiatedFeatures.contains(StreamFeature.RESOURCE_BINDING)
-            && checkIfAllMandatoryFeaturesNegotiated()) {
-          this.state.setValue(State.COMPLETED);
+      } else if (CommonXmlns.STARTTLS.equals(rootNs)) {
+        if (this.state.getValue() == State.NEGOTIATING
+            && this.negotiatingFeature == StreamFeature.STARTTLS) {
+          consumeStartTls(document);
+        } else {
+          sendStreamError(new StreamErrorException(
+              StreamErrorException.Condition.POLICY_VIOLATION,
+              "Not negotiating StartTLS at the time."
+          ));
         }
-      } else if ("error".equals(rootName) && CommonXmlns.STREAM_HEADER.equals(rootNs)) {
-        this.serverStreamError = StreamErrorException.fromXml(document);
-        closeStream().subscribe();
-      } else {
-        if (this.state.getValue() == State.COMPLETED
-            || this.state.getValue() == State.STREAM_CLOSING) {
+      } else if (CommonXmlns.SASL.equals(rootNs)) {
+        if (this.state.getValue() == State.NEGOTIATING
+            && negotiatingFeature == StreamFeature.SASL) {
+          consumeSasl(document);
+        } else {
+          sendStreamError(new StreamErrorException(
+              StreamErrorException.Condition.POLICY_VIOLATION,
+              "Not negotiating SASL at the time."
+          ));
+        }
+      } else if ("iq".equals(rootName)) {
+        if (this.state.getValue() == State.NEGOTIATING
+            && this.negotiatingFeature == StreamFeature.RESOURCE_BINDING) {
+          consumeResourceBinding(document);
+        } else if (this.state.getValue() == State.COMPLETED) {
           super.onReading(pipeline, toRead, toForward);
         } else {
           sendStreamError(new StreamErrorException(
-              StreamErrorException.Condition.UNSUPPORTED_STANZA_TYPE
+              StreamErrorException.Condition.NOT_AUTHORIZED,
+              "Stanzas not allowed before stream negotiation completes."
           ));
         }
+      } else if ("error".equals(rootName)
+          && CommonXmlns.STREAM_HEADER.equals(rootNs)) {
+        this.serverStreamError.setValue(StreamErrorException.fromXml(document));
+        closeStream().observeOn(Schedulers.io()).subscribe();
+      } else {
+        sendStreamError(new StreamErrorException(
+            StreamErrorException.Condition.UNSUPPORTED_STANZA_TYPE
+        ));
       }
     }
-    if (this.handshakeError != null) {
-      closeStream().subscribe();
+    if (this.handshakeError.getValue() != null) {
+      closeStream().observeOn(Schedulers.io()).subscribe();
     }
   }
 
@@ -764,15 +859,13 @@ class HandshakerPipe extends BlankPipe implements SessionAware {
     if (this.state.getValue() != State.INITIALIZED) {
       throw new IllegalStateException("Used HandshakerPipes cannot be re-added.");
     }
-    this.session
-        .getEventStream()
-        .ofType(DefaultSession.ConnectionTerminatedEvent.class)
-        .subscribe(event -> this.state.setValue(State.STREAM_CLOSED));
+
     this.pipeline = pipeline;
     if (pipeline.getState().getValue() == Pipeline.State.STOPPED) {
       pipelineStartedSubscription = pipeline.getState().getStream()
           .filter(it -> it == Pipeline.State.RUNNING)
           .firstElement()
+          .observeOn(Schedulers.io())
           .subscribe(event -> start());
     } else {
       start();

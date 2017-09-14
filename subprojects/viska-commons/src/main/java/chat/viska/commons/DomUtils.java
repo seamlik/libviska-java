@@ -63,7 +63,7 @@ public class DomUtils {
     );
   }
 
-  public static List<Node> toList(NodeList nodeList) {
+  public static List<Node> convertToList(NodeList nodeList) {
     final List<Node> list = new ArrayList<>(nodeList.getLength());
     for (int i = 0; i < nodeList.getLength(); ++i) {
       list.add(nodeList.item(i));
