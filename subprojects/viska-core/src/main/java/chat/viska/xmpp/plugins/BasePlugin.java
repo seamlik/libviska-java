@@ -25,8 +25,8 @@ import chat.viska.xmpp.Session;
 import chat.viska.xmpp.Stanza;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Collection;
@@ -39,7 +39,6 @@ import java.util.Set;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
-import org.xml.sax.SAXException;
 
 /**
  * Provides the most fundamental features of an XMPP session.. This plugin is
@@ -75,14 +74,14 @@ public class BasePlugin extends BlankPlugin {
   private final MutableReactiveObject<String> softwareType = new MutableReactiveObject<>("");
 
   @Nullable
-  private static List<DiscoItem> convertToDiscoItems(@NonNull final Document xml) {
+  private static List<DiscoItem> convertToDiscoItems(@Nonnull final Document xml) {
     final String xmlns = CommonXmlns.SERVICE_DISCOVERY + "#items";
     final Element queryElement = (Element) xml
         .getDocumentElement()
         .getElementsByTagNameNS(xmlns, "query")
         .item(0);
     if (queryElement == null) {
-      throw new IllegalArgumentException("No IQ element found.");
+      throw new IllegalArgumentException("Not an <iq/>.");
     }
     return Observable
         .fromIterable(DomUtils.convertToList(
@@ -98,15 +97,15 @@ public class BasePlugin extends BlankPlugin {
         .blockingGet();
   }
 
-  @Nullable
-  private static DiscoInfo convertToDiscoInfo(@NonNull final Document xml) {
+  @Nonnull
+  private static DiscoInfo convertToDiscoInfo(@Nonnull final Document xml) {
     final String xmlns = CommonXmlns.SERVICE_DISCOVERY + "#info";
     final Element queryElement = (Element) xml
         .getDocumentElement()
         .getElementsByTagNameNS(xmlns, "query")
         .item(0);
     if (queryElement == null) {
-      throw new IllegalArgumentException("No IQ element found.");
+      throw new IllegalArgumentException("Not an <iq/>.");
     }
     final List<DiscoInfo.Identity> identities = Observable
         .fromIterable(DomUtils.convertToList(
@@ -131,15 +130,15 @@ public class BasePlugin extends BlankPlugin {
     return new DiscoInfo(identities, features);
   }
 
-  @NonNull
-  private static SoftwareInfo convertToSoftwareInfo(@NonNull final Stanza stanza) {
+  @Nonnull
+  private static SoftwareInfo convertToSoftwareInfo(@Nonnull final Stanza stanza) {
     final Element queryElement = (Element) stanza
-        .getDocument()
+        .getXml()
         .getDocumentElement()
         .getElementsByTagNameNS(CommonXmlns.SOFTWARE_VERSION, "query")
         .item(0);
     if (queryElement == null) {
-      throw new IllegalArgumentException("No IQ element found.");
+      throw new IllegalArgumentException("Not an <iq/>.");
     }
     final Element nameElement = (Element)
         queryElement.getElementsByTagName("name").item(0);
@@ -154,7 +153,7 @@ public class BasePlugin extends BlankPlugin {
     );
   }
 
-  private static List<RosterItem> convertToRosterItems(@NonNull final Document xml) {
+  private static List<RosterItem> convertToRosterItems(@Nonnull final Document xml) {
     final Element queryElement = (Element) xml
         .getDocumentElement()
         .getElementsByTagNameNS(CommonXmlns.ROSTER, "query")
@@ -175,9 +174,9 @@ public class BasePlugin extends BlankPlugin {
     )).toList().blockingGet();
   }
 
-  @NonNull
-  private Document getSoftwareVersionResult(@NonNull final Jid recipient,
-                                            @NonNull final String id) {
+  @Nonnull
+  private Document getSoftwareVersionResult(@Nonnull final Jid recipient,
+                                            @Nonnull final String id) {
     final Document result = Stanza.getIqTemplate(
         Stanza.IqType.RESULT,
         id,
@@ -199,9 +198,9 @@ public class BasePlugin extends BlankPlugin {
     return result;
   }
 
-  @NonNull
-  private Document getDiscoInfoResult(@NonNull final Jid recipient,
-                                      @NonNull final String id) {
+  @Nonnull
+  private Document getDiscoInfoResult(@Nonnull final Jid recipient,
+                                      @Nonnull final String id) {
     final Document result = Stanza.getIqTemplate(
         Stanza.IqType.RESULT,
         id,
@@ -229,15 +228,15 @@ public class BasePlugin extends BlankPlugin {
     return result;
   }
 
-  @NonNull
-  private Document getDiscoItemsResult(@NonNull final Stanza query) {
+  @Nonnull
+  private Document getDiscoItemsResult(@Nonnull final Stanza query) {
     final Document result = query.getResultTemplate();
     final Element queryElement = result.createElementNS(
         CommonXmlns.SERVICE_DISCOVERY + "#items",
         "query"
     );
     final String node = (
-        (Element) query.getDocument().getDocumentElement().getFirstChild()
+        (Element) query.getXml().getDocumentElement().getFirstChild()
     ).getAttribute("node");
     if (!node.isEmpty()) {
       queryElement.setAttribute("node", node);
@@ -246,17 +245,17 @@ public class BasePlugin extends BlankPlugin {
     return result;
   }
 
-  @NonNull
+  @Nonnull
   public MutableReactiveObject<String> getSoftwareName() {
     return softwareName;
   }
 
-  @NonNull
+  @Nonnull
   public MutableReactiveObject<String> getSoftwareVersion() {
     return softwareVersion;
   }
 
-  @NonNull
+  @Nonnull
   public MutableReactiveObject<String> getOperatingSystem() {
     return operatingSystem;
   }
@@ -266,86 +265,72 @@ public class BasePlugin extends BlankPlugin {
    * <a href="https://xmpp.org/registrar/disco-categories.html#client">XMPP
    * registrar</a>.
    */
-  @NonNull
+  @Nonnull
   public MutableReactiveObject<String> getSoftwareType() {
     return softwareType;
   }
 
-  @NonNull
-  public Maybe<DiscoInfo> queryDiscoInfo(@NonNull final Jid jid) {
-    try {
-      return getSession().query(
-          CommonXmlns.SERVICE_DISCOVERY + "#info",
-          jid,
-          null
-      ).getResponse().map(Stanza::getDocument).map(BasePlugin::convertToDiscoInfo);
-    } catch (SAXException ex) {
-      throw new RuntimeException(ex);
-    }
+  @Nonnull
+  public Maybe<DiscoInfo> queryDiscoInfo(@Nonnull final Jid jid) {
+    return getSession().sendIqQuery(
+        CommonXmlns.SERVICE_DISCOVERY + "#info",
+        jid,
+        null
+    ).getResponse().map(Stanza::getXml).map(BasePlugin::convertToDiscoInfo);
   }
 
   /**
    * Queries {@link DiscoItem}s associated with a {@link Jid}.
    */
-  @NonNull
-  public Maybe<List<DiscoItem>> queryDiscoItems(@NonNull final Jid jid,
+  @Nonnull
+  public Maybe<List<DiscoItem>> queryDiscoItems(@Nonnull final Jid jid,
                                                 @Nullable final String node) {
     final Map<String, String> param = new HashMap<>(1);
     param.put("node", node);
-    try {
-      return getSession().query(
-          CommonXmlns.SERVICE_DISCOVERY + "#items",
-          jid,
-          param
-      ).getResponse().map(Stanza::getDocument).map(BasePlugin::convertToDiscoItems);
-    } catch (SAXException ex) {
-      throw new RuntimeException(ex);
-    }
+    return getSession().sendIqQuery(
+        CommonXmlns.SERVICE_DISCOVERY + "#items",
+        jid,
+        param
+    ).getResponse().map(Stanza::getXml).map(BasePlugin::convertToDiscoItems);
   }
 
   /**
    * Queries information of the XMPP software.
    */
-  @NonNull
-  public Maybe<SoftwareInfo> querySoftwareInfo(@NonNull final Jid jid) {
-    try {
-      return getSession().query(
-          CommonXmlns.SOFTWARE_VERSION, jid,
-          null
-      ).getResponse().map(BasePlugin::convertToSoftwareInfo);
-    } catch (SAXException ex) {
-      throw new RuntimeException(ex);
-    }
+  @Nonnull
+  public Maybe<SoftwareInfo> querySoftwareInfo(@Nonnull final Jid jid) {
+    return getSession().sendIqQuery(
+        CommonXmlns.SOFTWARE_VERSION, jid,
+        null
+    ).getResponse().map(BasePlugin::convertToSoftwareInfo);
   }
 
-  @NonNull
+  @Nonnull
   public Maybe<List<RosterItem>> queryRoster() {
-    try {
-      return getSession()
-          .query(CommonXmlns.ROSTER, null, null)
-          .getResponse()
-          .map(Stanza::getDocument)
-          .map(BasePlugin::convertToRosterItems);
-    } catch (SAXException ex) {
-      throw new RuntimeException(ex);
-    }
+    return getSession()
+        .sendIqQuery(CommonXmlns.ROSTER, null, null)
+        .getResponse()
+        .map(Stanza::getXml)
+        .map(BasePlugin::convertToRosterItems);
   }
 
-  @NonNull
+  @Nonnull
   public Maybe<List<RosterItem>>
-  queryRoster(@NonNull final String version,
-              @NonNull final Collection<RosterItem> cached) {
+  queryRoster(@Nonnull final String version,
+              @Nonnull final Collection<RosterItem> cached) {
     final Map<String, String> param = new HashMap<>();
     param.put("ver", version);
     throw new UnsupportedOperationException();
   }
 
   @Override
+  @Nonnull
   public Set<String> getFeatures() {
     return Collections.unmodifiableSet(features);
   }
 
   @Override
+  @Nonnull
   public Set<Map.Entry<String, String>> getSupportedIqs() {
     return Collections.unmodifiableSet(SUPPORTED_IQS);
   }

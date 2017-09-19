@@ -17,31 +17,29 @@
 package chat.viska.xmpp;
 
 import io.reactivex.Maybe;
-import io.reactivex.annotations.NonNull;
+import java.util.Objects;
+import javax.annotation.Nonnull;
 
-public class StanzaReceipt implements SessionAware{
+public class StanzaReceipt implements SessionAware {
 
   private final Session session;
   private final Maybe<Boolean> serverAck;
-  private final Maybe<Stanza> response;
 
-  public StanzaReceipt(@NonNull final Session session,
-                       @NonNull final Maybe<Boolean> serverAck,
-                       @NonNull final Maybe<Stanza> response) {
+  public StanzaReceipt(final Session session,
+                       final Maybe<Boolean> serverAck) {
+    Objects.requireNonNull(session, "`session` is absent.");
+    Objects.requireNonNull(serverAck, "`serverAck` is absent.");
     this.session = session;
     this.serverAck = serverAck;
-    this.response = response;
   }
 
+  @Nonnull
   public Maybe<Boolean> getServerAcknowledment() {
     return serverAck;
   }
 
-  public Maybe<Stanza> getResponse() {
-    return response;
-  }
-
   @Override
+  @Nonnull
   public Session getSession() {
     return session;
   }

@@ -16,8 +16,8 @@
 
 package chat.viska.xmpp.plugins;
 
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Result of an information query defined in
+ * Result of an information sendIqQuery defined in
  * <a href="https://xmpp.org/extensions/xep-0030.html">Service
  * Discovery</a>.
  */
@@ -51,7 +51,7 @@ public class DiscoInfo {
     /**
      * Gets the category.
      */
-    @NonNull
+    @Nonnull
     public String getCategory() {
       return category;
     }
@@ -59,7 +59,7 @@ public class DiscoInfo {
     /**
      * Gets the type.
      */
-    @NonNull
+    @Nonnull
     public String getType() {
       return type;
     }
@@ -67,7 +67,7 @@ public class DiscoInfo {
     /**
      * Gets the name.
      */
-    @NonNull
+    @Nonnull
     public String getName() {
       return name;
     }
@@ -92,7 +92,7 @@ public class DiscoInfo {
     }
 
     @Override
-    @NonNull
+    @Nonnull
     public String toString() {
       return String.format(
           "Category: %1s, Type: %2s, Name: %3s",
@@ -123,7 +123,7 @@ public class DiscoInfo {
    * Gets the identities.
    * @return Unmodifiable set.
    */
-  @NonNull
+  @Nonnull
   public List<Identity> getIdentities() {
     return Collections.unmodifiableList(identities);
   }
@@ -132,7 +132,7 @@ public class DiscoInfo {
    * Gets the features.
    * @return Unmodifiable set.
    */
-  @NonNull
+  @Nonnull
   public List<String> getFeatures() {
     return Collections.unmodifiableList(features);
   }

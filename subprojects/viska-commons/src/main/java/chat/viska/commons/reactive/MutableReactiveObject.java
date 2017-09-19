@@ -17,9 +17,11 @@
 package chat.viska.commons.reactive;
 
 import io.reactivex.Flowable;
-import io.reactivex.annotations.NonNull;
+import javax.annotation.Nonnull;
 import io.reactivex.processors.PublishProcessor;
+import javax.annotation.concurrent.NotThreadSafe;
 
+@NotThreadSafe
 public class MutableReactiveObject<T> implements ReactiveObject<T> {
 
   private final PublishProcessor<T> stream = PublishProcessor.create();
@@ -27,12 +29,12 @@ public class MutableReactiveObject<T> implements ReactiveObject<T> {
 
   public MutableReactiveObject() {}
 
-  public MutableReactiveObject(@NonNull final T initial) {
+  public MutableReactiveObject(@Nonnull final T initial) {
     this.value = initial;
     this.stream.onNext(initial);
   }
 
-  public void setValue(@NonNull final T value) {
+  public void setValue(@Nonnull final T value) {
     this.value = value;
     stream.onNext(value);
   }

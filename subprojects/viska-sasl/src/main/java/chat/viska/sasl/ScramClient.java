@@ -20,15 +20,26 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import org.apache.commons.codec.binary.Base64;
 
 /**
  * SASL client of <a href="https://datatracker.ietf.org/doc/rfc5802">SCRAM
  * Mechanism</a>. Note that this implementation does not support Channel
  * Binding.
+ *
+ * <p>The keys contained by the negotiated properties include:</p>
+ *
+ * <ul>
+ *   <li>{@link ScramMechanism#KEY_ITERATION}</li>
+ *   <li>{@link ScramMechanism#KEY_SALTED_PASSWORD}</li>
+ *   <li>{@link ScramMechanism#KEY_SALT}</li>
+ * </ul>
  */
 public class ScramClient implements Client {
 
@@ -46,6 +57,7 @@ public class ScramClient implements Client {
   private final String initialNounce;
   private final String authzId;
   private final CredentialRetriever retriever;
+  private final Map<String, Object> properties = new HashMap<>();
   private State state = State.INITIALIZED;
   private String fullNounce = "";
   private byte[] saltedPassword = new byte[0];
@@ -164,10 +176,10 @@ public class ScramClient implements Client {
       );
       if (saltedPassword != null) {
         final byte[] salt = (byte[]) retriever.retrieve(
-            username, getMechanism(), "salt"
+            username, getMechanism(), ScramMechanism.KEY_SALT
         );
         final int iteration = (Integer) retriever.retrieve(
-            username, getMechanism(), "iteration"
+            username, getMechanism(), ScramMechanism.KEY_ITERATION
         );
         if (Arrays.equals(salt, this.salt) && Objects.equals(iteration, this.iteration)) {
           this.saltedPassword = saltedPassword;
@@ -225,7 +237,7 @@ public class ScramClient implements Client {
               getGs2Header()
           )
       );
-      clientProof = Bytes.xor(clientKey,clientSig);
+      clientProof = ByteUtils.xor(clientKey,clientSig);
     } catch (InvalidKeyException ex) {
       throw new RuntimeException(ex);
     }
@@ -286,13 +298,18 @@ public class ScramClient implements Client {
     }
   }
 
+  private void prepareNegotiatedProperties() {
+    this.properties.put(ScramMechanism.KEY_SALT, this.salt);
+    this.properties.put(ScramMechanism.KEY_SALTED_PASSWORD, this.saltedPassword);
+    this.properties.put(ScramMechanism.KEY_ITERATION, this.iteration);
+  }
+
   /**
    * Default constructor.
    * @param scram Required.
    * @param authnId Authentication ID, required.
    * @param authzId Authorization ID, optional.
    * @param retriever Required.
-   * @throws NullPointerException If any required parameters are {@code null}.
    * @throws IllegalArgumentException If {@code authnId} is empty.
    */
   public ScramClient(final ScramMechanism scram,
@@ -315,11 +332,13 @@ public class ScramClient implements Client {
     this.initialNounce = base64.encodeToString(randomBytes).trim();
   }
 
+  @Nonnull
   @Override
   public String getMechanism() {
     return "SCRAM-" + scram.getAlgorithm();
   }
 
+  @Nullable
   @Override
   public byte[] respond() {
     switch (state) {
@@ -344,6 +363,7 @@ public class ScramClient implements Client {
       case FINAL_RESPONSE_SENT:
         consumeResult(new String(challenge, StandardCharsets.UTF_8));
         state = State.COMPLETED;
+        prepareNegotiatedProperties();
         break;
       default:
         throw new IllegalStateException("Not waiting for a challenge.");
@@ -360,6 +380,7 @@ public class ScramClient implements Client {
     return state == State.COMPLETED;
   }
 
+  @Nullable
   @Override
   public AuthenticationException getError() {
     if (!isCompleted()) {
@@ -368,26 +389,12 @@ public class ScramClient implements Client {
     return error;
   }
 
-  /**
-   * Gets a {@link Map} containing properties negotiated during the
-   * authentication. It will contain the following key-value pairs:
-   * <ul>
-   *   <li>{@code salted-password} ({@link Byte})</li>
-   *   <li>{@code salt} ({@link Byte})</li>
-   *   <li>{@code iteration} ({@link Integer})</li>
-   * </ul>
-   * @return {@code null} if authentication not completed, otherwise a
-   *         {@link Map} which is either empty or containing properties.
-   */
+  @Nonnull
   @Override
   public Map<String, ?> getNegotiatedProperties() {
-    if (this.state != State.COMPLETED) {
-      return null;
+    if (!isCompleted()) {
+      throw new IllegalStateException("Authentication not completed.");
     }
-    final Map<String, Object> result = new HashMap<>();
-    result.put("salt", this.salt);
-    result.put("salted-password", this.saltedPassword);
-    result.put("iteration", this.iteration);
-    return result;
+    return Collections.unmodifiableMap(properties);
   }
 }

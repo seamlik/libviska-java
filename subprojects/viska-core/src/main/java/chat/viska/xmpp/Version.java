@@ -16,7 +16,7 @@
 
 package chat.viska.xmpp;
 
-import io.reactivex.annotations.NonNull;
+import javax.annotation.Nonnull;
 import java.util.Objects;
 import org.apache.commons.lang3.Validate;
 
@@ -78,7 +78,7 @@ public class Version implements Comparable<Version> {
   }
 
   @Override
-  @NonNull
+  @Nonnull
   public String toString() {
     return major + "." + minor;
   }

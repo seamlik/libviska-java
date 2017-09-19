@@ -27,4 +27,7 @@
  * by the user manually, and strings like username and password are always
  * assumed already normalized.</p>
  */
+@ParametersAreNonnullByDefault
 package chat.viska.sasl;
+
+import javax.annotation.ParametersAreNonnullByDefault;

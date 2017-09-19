@@ -31,9 +31,26 @@ import javax.crypto.spec.SecretKeySpec;
 import org.apache.commons.codec.binary.Base64;
 
 /**
- * Represents the hash algorithm used by a {@code SCRAM-*} mechanism.
+ * Represents the hash algorithm used by a {@literal SCRAM-*} mechanism.
  */
 public class ScramMechanism {
+
+  /**
+   * Key to a {@link Integer} representing the iteration count.
+   */
+  public static final String KEY_ITERATION = "iteration";
+  /**
+   * Key to a {@link String} representing a raw password.
+   */
+  public static final String KEY_PASSWORD = "password";
+  /**
+   * Key to a {@code byte[]} representing a salt.
+   */
+  public static final String KEY_SALT = "salt";
+  /**
+   * Key to a {@code byte[]} representing a salted password.
+   */
+  public static final String KEY_SALTED_PASSWORD = "salted-password";
 
   private final MessageDigest hash;
   private final Mac hmac;

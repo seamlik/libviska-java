@@ -16,7 +16,7 @@
 
 package chat.viska.sasl;
 
-class Bytes {
+class ByteUtils {
 
   public static byte[] xor(final byte[] bytesA, final byte[] bytesB) {
     if (bytesA.length != bytesB.length) {
@@ -29,5 +29,5 @@ class Bytes {
     return result;
   }
 
-  private Bytes() {}
+  private ByteUtils() {}
 }

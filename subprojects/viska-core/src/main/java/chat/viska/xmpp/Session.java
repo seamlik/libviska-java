@@ -21,12 +21,14 @@ import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
 import java.util.EventObject;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
+import javax.annotation.CheckReturnValue;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.WillCloseWhenClosed;
 import javax.net.ssl.SSLSession;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
@@ -153,16 +155,18 @@ public interface Session extends AutoCloseable {
    * @return Token to track the completion.
    * @throws IllegalStateException If this {@link Session} is not disconnected.
    */
-  @NonNull
-  Completable login(@NonNull String password);
+  @Nonnull
+  @CheckReturnValue
+  Completable login(String password);
 
   /**
    * Starts logging in.
    * @return Token to track the completion.
    * @throws IllegalStateException If this {@link Session} is not disconnected.
    */
-  @NonNull
-  Completable login(@NonNull CredentialRetriever retriever,
+  @Nonnull
+  @CheckReturnValue
+  Completable login(CredentialRetriever retriever,
                     @Nullable String resource,
                     boolean registering,
                     @Nullable Compression connectionCompression,
@@ -172,13 +176,16 @@ public interface Session extends AutoCloseable {
   /**
    * Starts closing the XMPP stream and the network connection.
    */
-  @NonNull
+  @Nonnull
+  @CheckReturnValue
   Completable disconnect();
 
   /**
    * Starts shutting down the Session and releasing all system resources.
    */
-  @NonNull
+  @Nonnull
+  @CheckReturnValue
+  @WillCloseWhenClosed
   Completable dispose();
 
   /**
@@ -187,27 +194,25 @@ public interface Session extends AutoCloseable {
    * is violated.
    * @throws IllegalStateException If this class is disposed of.
    */
-  @NonNull
-  Maybe<Boolean> send(@NonNull Document xml);
+  @Nonnull
+ StanzaReceipt send(Document xml);
 
   /**
    * Sends a stream error and then disconnects.
    * @throws IllegalStateException If this {@link Session} is not connected or
    *         online.
    */
-  @NonNull
-  void send(@NonNull StreamErrorException ex);
+  void send(StreamErrorException ex);
 
-  @NonNull
-  StanzaReceipt query(@NonNull String namespace,
-                      @Nullable Jid target,
-                      @Nullable Map<String, String> params)
-      throws SAXException;
+  @Nonnull
+  IqReceipt sendIqQuery(String namespace,
+                        @Nullable Jid target,
+                        @Nullable Map<String, String> params);
 
   /**
    * Gets the logger.
    */
-  @NonNull
+  @Nonnull
   Logger getLogger();
 
   /**
@@ -218,7 +223,7 @@ public interface Session extends AutoCloseable {
   @Nullable
   Compression getConnectionCompression();
 
-  @NonNull
+  @Nonnull
   Set<Compression> getSupportedConnectionCompression();
 
   /**
@@ -231,7 +236,7 @@ public interface Session extends AutoCloseable {
   @Nullable
   Compression getTlsCompression();
 
-  @NonNull
+  @Nonnull
   Set<Compression> getSupportedTlsCompression();
 
   /**
@@ -242,7 +247,7 @@ public interface Session extends AutoCloseable {
   @Nullable
   Compression getStreamCompression();
 
-  @NonNull
+  @Nonnull
   Set<Compression> getSupportedStreamCompression();
 
   /**
@@ -264,19 +269,19 @@ public interface Session extends AutoCloseable {
    * Gets a stream of inbound XMPP stanzas. The stream will not emits
    * any errors but will emit a completion after this class is disposed of.
    */
-  @NonNull
+  @Nonnull
   Flowable<Stanza> getInboundStanzaStream();
 
   /**
    * Gets the plugin manager.
    */
-  @NonNull
+  @Nonnull
   PluginManager getPluginManager();
 
   /**
    * Gets the current {@link State}.
    */
-  @NonNull
+  @Nonnull
   ReactiveObject<State> getState();
 
   /**
@@ -298,9 +303,9 @@ public interface Session extends AutoCloseable {
    *   <li>{@link DefaultSession.ConnectionTerminatedEvent}</li>
    * </ul>
    */
-  @NonNull
+  @Nonnull
   Flowable<EventObject> getEventStream();
 
-  @NonNull
+  @Nonnull
   Set<StreamFeature> getStreamFeatures();
 }

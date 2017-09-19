@@ -16,7 +16,7 @@
 
 package chat.viska.xmpp;
 
-import io.reactivex.annotations.NonNull;
+import javax.annotation.Nonnull;
 
 public enum StreamFeature {
 
@@ -34,8 +34,8 @@ public enum StreamFeature {
   private final boolean mandatory;
   private final boolean informational;
 
-  StreamFeature(@NonNull final String namespace,
-                @NonNull final String name,
+  StreamFeature(@Nonnull final String namespace,
+                @Nonnull final String name,
                 final boolean restartRequired,
                 final boolean mandatory,
                 boolean informational) {

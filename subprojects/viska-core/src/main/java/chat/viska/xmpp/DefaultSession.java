@@ -28,13 +28,10 @@ import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import io.reactivex.Single;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
 import io.reactivex.functions.Action;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
-import io.reactivex.subjects.MaybeSubject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EventObject;
@@ -45,17 +42,21 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.CheckReturnValue;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 import javax.xml.transform.TransformerException;
 import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.xml.sax.SAXException;
 
 /**
  * Default parent of all implementations of {@link Session}.
  *
  * <p>This class does not support stream level compression.</p>
  */
+@ThreadSafe
 public abstract class DefaultSession implements Session {
 
   /**
@@ -63,7 +64,7 @@ public abstract class DefaultSession implements Session {
    */
   public static class ConnectionTerminatedEvent extends EventObject {
 
-    public ConnectionTerminatedEvent(@NonNull final DefaultSession source) {
+    public ConnectionTerminatedEvent(@Nonnull final DefaultSession source) {
       super(source);
     }
   }
@@ -96,11 +97,11 @@ public abstract class DefaultSession implements Session {
   private final Jid authzId;
   private final List<String> saslMechanisms = new ArrayList<>();
 
-  private void log(@NonNull final EventObject event) {
+  private void log(final EventObject event) {
     logger.log(Level.FINE, event.toString());
   }
 
-  private void log(@NonNull final ExceptionCaughtEvent event) {
+  private void log(final ExceptionCaughtEvent event) {
     logger.log(Level.WARNING, event.toString(), event.getCause());
   }
 
@@ -113,7 +114,7 @@ public abstract class DefaultSession implements Session {
    */
   protected DefaultSession(@Nullable final Jid jid,
                            @Nullable final Jid authzId,
-                           @NonNull final Connection connection,
+                           final Connection connection,
                            final boolean streamManagement) {
     Objects.requireNonNull(connection, "`connection` is absent.");
     this.connection = connection;
@@ -142,7 +143,7 @@ public abstract class DefaultSession implements Session {
     this.xmlPipeline
         .getOutboundStream()
         .filter(it -> getLogger().getLevel().intValue() <= Level.FINE.intValue())
-        .doOnNext(it -> getLogger().fine("[XML sent] " + DomUtils.writeString(it)));
+        .subscribe(it -> getLogger().fine("[XML sent] " + DomUtils.writeString(it)));
     this.xmlPipeline.addAtInboundEnd(
         PIPE_UNSUPPORTED_STANZAS_BLOCKER,
         new UnsupportedStanzasBlockerPipe()
@@ -207,7 +208,8 @@ public abstract class DefaultSession implements Session {
    *   </li>
    * </ul>
    */
-  @NonNull
+  @Nonnull
+  @CheckReturnValue
   protected abstract Completable
   onOpeningConnection(@Nullable Compression connectionCompression,
                       @Nullable Compression tlsCompression);
@@ -215,6 +217,8 @@ public abstract class DefaultSession implements Session {
   /**
    * Invoked when the user is actively closing the connection.
    */
+  @Nonnull
+  @CheckReturnValue
   protected abstract Completable onClosingConnection();
 
   /**
@@ -222,6 +226,8 @@ public abstract class DefaultSession implements Session {
    * and the client is supposed to start a TLS handshake.
    * @return Token that notifies when the TLS handshake completes.
    */
+  @Nonnull
+  @CheckReturnValue
   protected abstract Completable onStartTls();
 
   /**
@@ -229,7 +235,7 @@ public abstract class DefaultSession implements Session {
    * Always invoked right after a stream negotiation and before a stream
    * restart.
    */
-  protected abstract void onStreamCompression(@NonNull Compression compression);
+  protected abstract void onStreamCompression(@Nonnull Compression compression);
 
   /**
    * Invoked when this class is being disposed of. This method should clean
@@ -241,7 +247,7 @@ public abstract class DefaultSession implements Session {
    * Triggers an {@link EventObject}.
    * @param event The event to be triggered.
    */
-  protected void triggerEvent(@NonNull final EventObject event) {
+  protected void triggerEvent(@Nonnull final EventObject event) {
     if (!eventStream.hasComplete()) {
       eventStream.onNext(event);
     }
@@ -251,10 +257,10 @@ public abstract class DefaultSession implements Session {
     return xmlPipeline.getOutboundStream();
   }
 
-  protected void feedXmlPipeline(@NonNull final Document xml) {
+  protected void feedXmlPipeline(@Nonnull final Document xml) {
     if (getLogger().getLevel().intValue() <= Level.FINE.intValue()) {
       try {
-        getLogger().fine("[XML recerved] " + DomUtils.writeString(xml));
+        getLogger().fine("[XML received] " + DomUtils.writeString(xml));
       } catch (TransformerException ex) {
         throw new RuntimeException(ex);
       }
@@ -263,9 +269,9 @@ public abstract class DefaultSession implements Session {
   }
 
   @Override
-  @NonNull
-  public Completable login(@NonNull final String password) {
-    Validate.notEmpty(password, "`password` is absent.");
+  @Nonnull
+  public Completable login(@Nonnull final String password) {
+    Validate.notBlank(password, "`password` is absent.");
     final CredentialRetriever retriever = (authnId, mechanism, key) -> {
       if (this.jid.getLocalPart().equals(authnId) && "password".equals(key)) {
         return password;
@@ -285,14 +291,16 @@ public abstract class DefaultSession implements Session {
     );
   }
 
+  @Nonnull
   @Override
   public Completable login(final CredentialRetriever retriever,
-                           final String resource,
+                           @Nullable final String resource,
                            final boolean registering,
-                           Compression connectionCompression,
-                           Compression tlsCompression,
-                           Compression streamCompression) {
+                           @Nullable Compression connectionCompression,
+                           @Nullable Compression tlsCompression,
+                           @Nullable Compression streamCompression) {
     Objects.requireNonNull(retriever, "`retriever` is absent.");
+    Objects.requireNonNull(this.jid, "JID is not provided.");
 
     synchronized (this.state) {
       switch (this.state.getValue()) {
@@ -378,9 +386,12 @@ public abstract class DefaultSession implements Session {
         );
       }
     });
-    return Completable.fromSingle(result).doOnError(it -> disconnect());
+    return Completable
+        .fromSingle(result)
+        .doOnError(it -> disconnect().observeOn(Schedulers.io()).subscribe());
   }
 
+  @Nonnull
   @Override
   public Completable disconnect() {
     synchronized (this.state) {
@@ -407,6 +418,7 @@ public abstract class DefaultSession implements Session {
     }).andThen(handshakerPipe.closeStream()).andThen(onClosingConnection());
   }
 
+  @Nonnull
   @Override
   public Completable dispose() {
     final Action action = () -> {
@@ -442,9 +454,10 @@ public abstract class DefaultSession implements Session {
   }
 
   @Override
-  public Maybe<Boolean> send(@NonNull final Document xml) {
+  @Nonnull
+  public StanzaReceipt send(final Document xml) {
     xmlPipeline.write(xml);
-    return Maybe.empty();
+    return new StanzaReceipt(this, Maybe.empty());
   }
 
   @Override
@@ -467,83 +480,88 @@ public abstract class DefaultSession implements Session {
     }
   }
 
+  @Nonnull
   @Override
-  public StanzaReceipt query(final String namespace,
-                             final Jid target,
-                             final Map<String, String> params)
-      throws SAXException {
-    if (this.state.getValue() == Session.State.DISPOSED) {
-      throw new IllegalStateException("Session disposed.");
-    }
-    final String id = UUID.randomUUID().toString();
-    final Document iq =  Stanza.getIqTemplate(
-        Stanza.IqType.GET,
-        id,
-        target
-    );
-    final Element element = iq.createElementNS(namespace, "query");
-    iq.getDocumentElement().appendChild(element);
-    if (params != null) {
-      for (Map.Entry<String, String> it : params.entrySet()) {
-        element.setAttribute(it.getKey(), it.getValue());
+  public IqReceipt sendIqQuery(final String namespace,
+                               @Nullable final Jid target,
+                               @Nullable final Map<String, String> params) {
+    synchronized (this.state) {
+      if (this.state.getValue() == Session.State.DISPOSED) {
+        throw new IllegalStateException("Session disposed.");
       }
-    }
-    final MaybeSubject<Stanza> response = MaybeSubject.create();
-    // TODO: Make this simpler
-    getInboundStanzaStream()
-        .filter(it -> it.getId().equals(id))
-        .firstElement()
-        .subscribe(it -> {
-          if (it.getIqType() == Stanza.IqType.ERROR) {
-            final StanzaErrorException error;
-            try {
-              error = StanzaErrorException.fromXml(it.getDocument());
-              response.onError(error);
-            } catch (StreamErrorException ex) {
-              send(ex);
+      final String id = UUID.randomUUID().toString();
+      final Document iq =  Stanza.getIqTemplate(
+          Stanza.IqType.GET,
+          id,
+          target
+      );
+      final Element element = (Element) iq.getDocumentElement().appendChild(
+          iq.createElementNS(namespace, "query")
+      );
+      if (params != null) {
+        for (Map.Entry<String, String> it : params.entrySet()) {
+          element.setAttribute(it.getKey(), it.getValue());
+        }
+      }
+      final Maybe<Stanza> response = getInboundStanzaStream()
+          .filter(stanza -> id.equals(stanza.getId()))
+          .firstElement()
+          .doOnSuccess(stanza -> {
+            if (stanza.getIqType() == Stanza.IqType.ERROR) {
+              StanzaErrorException error = null;
+              try {
+                error = StanzaErrorException.fromXml(stanza.getXml());
+              } catch (StreamErrorException ex) {
+                send(ex);
+              }
+              if (error != null) {
+                throw error;
+              }
             }
-          } else {
-            response.onSuccess(it);
-          }
-        }, response::onError, response::onComplete);
-    return new StanzaReceipt(this, send(iq), response);
+          });
+      return new IqReceipt(this, send(iq).getServerAcknowledment(), response);
+    }
+
   }
 
+  @Nonnull
   @Override
   public Logger getLogger() {
     return logger;
   }
 
+  @Nullable
   @Override
   public Connection getConnection() {
     return connection;
   }
 
+  @Nonnull
   @Override
   public Flowable<Stanza> getInboundStanzaStream() {
     return inboundStanzaStream;
   }
 
   @Override
-  @NonNull
+  @Nonnull
   public PluginManager getPluginManager() {
     return pluginManager;
   }
 
   @Override
-  @NonNull
+  @Nonnull
   public ReactiveObject<State> getState() {
     return state;
   }
 
   @Override
-  @NonNull
+  @Nonnull
   public Flowable<EventObject> getEventStream() {
     return eventStream;
   }
 
+  @Nullable
   @Override
-  @NonNull
   public Jid getJid() {
     final Pipe handshaker = this.xmlPipeline.get(PIPE_HANDSHAKER);
     if (handshaker instanceof HandshakerPipe) {
@@ -553,11 +571,12 @@ public abstract class DefaultSession implements Session {
     }
   }
 
+  @Nonnull
   @Override
   public Set<StreamFeature> getStreamFeatures() {
     final Pipe handshaker = this.xmlPipeline.get(PIPE_HANDSHAKER);
     if (handshaker instanceof HandshakerPipe) {
-      return ((HandshakerPipe) handshaker).getNegotiatedFeatures();
+      return ((HandshakerPipe) handshaker).getStreamFeatures();
     } else {
       return Collections.emptySet();
     }

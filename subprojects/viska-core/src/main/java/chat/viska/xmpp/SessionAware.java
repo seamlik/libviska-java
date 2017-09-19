@@ -16,7 +16,7 @@
 
 package chat.viska.xmpp;
 
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nullable;
 
 /**
  * Indicates this class is associated to an {@link Session}. Once the

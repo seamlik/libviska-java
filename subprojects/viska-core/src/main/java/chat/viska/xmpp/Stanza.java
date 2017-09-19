@@ -18,14 +18,16 @@ package chat.viska.xmpp;
 
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
 import java.util.Objects;
 import java.util.UUID;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.xml.sax.SAXException;
 
+/**
+ * Wraps a stanza and provides utility methods.
+ */
 public class Stanza {
 
   /**
@@ -44,7 +46,7 @@ public class Stanza {
     SET
   }
 
-  private final Document document;
+  private final Document xml;
 
   public static boolean isStanza(@Nullable final Document document) {
     if (document == null) {
@@ -56,8 +58,8 @@ public class Stanza {
         || "presence".equals(rootName);
   }
 
-  public static Document getIqTemplate(@NonNull final IqType type,
-                                       @NonNull final String id,
+  public static Document getIqTemplate(final IqType type,
+                                       final String id,
                                        @Nullable final Jid recipient) {
     final String iq = String.format(
         "<iq type=\"%1s\" id=\"%2s\"></iq>",
@@ -79,39 +81,39 @@ public class Stanza {
   /**
    * Default constructor.
    */
-  public Stanza(@NonNull final Document document) {
-    Objects.requireNonNull(document, "`document` is absent.");
-    this.document = document;
+  public Stanza(@Nonnull final Document xml) {
+    Objects.requireNonNull(xml, "`xml` is absent.");
+    this.xml = xml;
   }
 
   /**
    * Gets the XML data.
    */
-  @NonNull
-  public Document getDocument() {
-    return document;
+  @Nonnull
+  public Document getXml() {
+    return xml;
   }
 
-  @NonNull
+  @Nonnull
   public String getId() {
-    return document.getDocumentElement().getAttribute("id");
+    return xml.getDocumentElement().getAttribute("id");
   }
 
   @Nullable
   public Jid getRecipient() {
-    return new Jid(document.getDocumentElement().getAttribute("to"));
+    return new Jid(xml.getDocumentElement().getAttribute("to"));
   }
 
   @Nullable
   public Jid getSender() {
-    return new Jid(document.getDocumentElement().getAttribute("from"));
+    return new Jid(xml.getDocumentElement().getAttribute("from"));
   }
 
-  @NonNull
+  @Nonnull
   public Type getType() {
     return EnumUtils.fromXmlValue(
         Type.class,
-        document.getDocumentElement().getLocalName()
+        xml.getDocumentElement().getLocalName()
     );
   }
 
@@ -119,13 +121,13 @@ public class Stanza {
   public IqType getIqType() {
     return EnumUtils.fromXmlValue(
         IqType.class,
-        document.getDocumentElement().getAttribute("type")
+        xml.getDocumentElement().getAttribute("type")
     );
   }
 
-  @NonNull
+  @Nonnull
   public String getIqName() {
-    final Element iqElement = (Element) this.document
+    final Element iqElement = (Element) this.xml
         .getDocumentElement()
         .getFirstChild();
     if (iqElement == null) {
@@ -135,9 +137,9 @@ public class Stanza {
     }
   }
 
-  @NonNull
+  @Nonnull
   public String getIqNamespace() {
-    final Element iqElement = (Element) this.document
+    final Element iqElement = (Element) this.xml
         .getDocumentElement()
         .getFirstChild();
     if (iqElement == null) {
@@ -153,13 +155,8 @@ public class Stanza {
     if (getType() != Type.IQ) {
       throw new IllegalStateException("This stanza is not an <iq/>.");
     }
-    switch (getIqType()) {
-      case GET:
-        break;
-      case SET:
-        break;
-      default:
-        throw new IllegalStateException("This stanza is already an <iq/> result.");
+    if (getIqType() == IqType.RESULT || getIqType() == null) {
+      throw new IllegalStateException("This stanza is already an <iq/> result.");
     }
     return getIqTemplate(
         IqType.RESULT,

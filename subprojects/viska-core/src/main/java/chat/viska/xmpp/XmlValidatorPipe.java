@@ -18,7 +18,7 @@ package chat.viska.xmpp;
 
 import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipeline;
-import io.reactivex.annotations.NonNull;
+import javax.annotation.Nonnull;
 import java.util.List;
 import org.w3c.dom.Document;
 
@@ -30,16 +30,16 @@ public class XmlValidatorPipe extends BlankPipe {
 
   public static class ValidationException extends Exception {
 
-    public ValidationException(@NonNull final StreamErrorException cause) {
+    public ValidationException(@Nonnull final StreamErrorException cause) {
       super(cause);
     }
   }
 
-  private void validateStream(@NonNull final Document document)
+  private void validateStream(@Nonnull final Document document)
       throws ValidationException {
   }
 
-  private void validateStanza(@NonNull final Document document)
+  private void validateStanza(@Nonnull final Document document)
       throws ValidationException {
     final String rootNs = document.getDocumentElement().getNamespaceURI();
     if (!CommonXmlns.STANZA_CLIENT.equals(rootNs)

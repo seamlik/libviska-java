@@ -19,8 +19,8 @@ package chat.viska.commons.pipelines;
 import chat.viska.commons.reactive.MutableReactiveObject;
 import chat.viska.commons.reactive.ReactiveObject;
 import io.reactivex.Flowable;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
 import java.util.AbstractMap;
@@ -39,6 +39,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
 import org.apache.commons.lang3.concurrent.ConcurrentUtils;
@@ -63,10 +64,11 @@ import org.apache.commons.lang3.concurrent.ConcurrentUtils;
  * @param <I> Type of the inbound output.
  * @param <O> Type of the outbound output.
  */
+@ThreadSafe
 public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   /**
-   * States of a {@link Pipeline}
+   * States of a {@link Pipeline}.
    */
   public enum State {
 
@@ -107,7 +109,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   private Object readingObject;
   private Object writingObject;
 
-  private void processObject(@NonNull final Object obj, final boolean isReading)
+  private void processObject(@Nonnull final Object obj, final boolean isReading)
       throws InterruptedException {
     final ListIterator<Map.Entry<String, Pipe>> iterator = isReading
         ? pipes.listIterator()
@@ -153,8 +155,8 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     }
   }
 
-  private void processException(@NonNull ListIterator<Map.Entry<String, Pipe>> iterator,
-                                @NonNull Throwable cause,
+  private void processException(@Nonnull ListIterator<Map.Entry<String, Pipe>> iterator,
+                                @Nonnull Throwable cause,
                                 boolean isReading) {
     while (isReading ? iterator.hasNext() : iterator.hasPrevious()) {
       final Pipe pipe = isReading ? iterator.next().getValue() : iterator.previous().getValue();
@@ -180,7 +182,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   @Nullable
   private ListIterator<Map.Entry<String, Pipe>>
-  getIteratorOf(@NonNull final String name) {
+  getIteratorOf(@Nonnull final String name) {
     if (StringUtils.isBlank(name)) {
       return null;
     }
@@ -197,7 +199,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   @Nullable
   private ListIterator<Map.Entry<String, Pipe>>
-  getIteratorOf(@NonNull final Pipe pipe) {
+  getIteratorOf(@Nonnull final Pipe pipe) {
     if (pipe == null) {
       return null;
     }
@@ -223,11 +225,17 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     outboundExceptionStream = unsafeOutboundExceptionStream.toSerialized();
   }
 
-  @NonNull
+  /**
+   * Gets the state.
+   */
+  @Nonnull
   public ReactiveObject<State> getState() {
     return state;
   }
 
+  /**
+   * Starts the pipeline.
+   */
   public synchronized void start() {
     synchronized (state) {
       switch (state.getValue()) {
@@ -343,6 +351,9 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     state.setValue(State.STOPPED);
   }
 
+  /**
+   * Disposes of the pipeline.
+   */
   public void dispose() {
     synchronized (state) {
       switch (state.getValue()) {
@@ -356,7 +367,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
           break;
       }
     }
-    cleanQueues();
+    clearQueues();
     threadpool.shutdownNow();
     inboundStream.onComplete();
     inboundExceptionStream.onComplete();
@@ -366,10 +377,10 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     writingObject = null;
   }
 
-  @NonNull
-  public Future<Void> addTowardsInboundEnd(@NonNull final String previous,
+  @Nonnull
+  public Future<Void> addTowardsInboundEnd(@Nonnull final String previous,
                                            @Nullable final String name,
-                                           @NonNull final Pipe pipe) {
+                                           @Nonnull final Pipe pipe) {
     Validate.notBlank(previous);
     Objects.requireNonNull(pipe);
     return threadpool.submit(() -> {
@@ -395,10 +406,10 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
-  public Future<Void> addTowardsInboundEnd(@NonNull final Pipe previous,
+  @Nonnull
+  public Future<Void> addTowardsInboundEnd(@Nonnull final Pipe previous,
                                            @Nullable final String name,
-                                           @NonNull final Pipe pipe) {
+                                           @Nonnull final Pipe pipe) {
     Objects.requireNonNull(previous);
     Objects.requireNonNull(pipe);
     return threadpool.submit(() -> {
@@ -424,10 +435,10 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
-  public Future<Void> addTowardsOutboundEnd(@NonNull final String next,
+  @Nonnull
+  public Future<Void> addTowardsOutboundEnd(@Nonnull final String next,
                                             @Nullable final String name,
-                                            @NonNull final Pipe pipe) {
+                                            @Nonnull final Pipe pipe) {
     Validate.notBlank(next);
     Objects.requireNonNull(pipe);
     return threadpool.submit(() -> {
@@ -452,10 +463,10 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
-  public Future<Void> addTowardsOutboundEnd(@NonNull final Pipe next,
+  @Nonnull
+  public Future<Void> addTowardsOutboundEnd(@Nonnull final Pipe next,
                                             @Nullable final String name,
-                                            @NonNull final Pipe pipe) {
+                                            @Nonnull final Pipe pipe) {
     Objects.requireNonNull(next);
     Objects.requireNonNull(pipe);
     return threadpool.submit(() -> {
@@ -480,9 +491,12 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
+  /**
+   * Adds a {@link Pipe} at the outbound end.
+   */
+  @Nonnull
   public Future<?> addAtOutboundEnd(@Nullable final String name,
-                                    @NonNull final Pipe pipe) {
+                                    @Nonnull final Pipe pipe) {
     Objects.requireNonNull(pipe);
     return threadpool.submit(() -> {
       pipeLock.writeLock().lockInterruptibly();
@@ -502,9 +516,12 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
+  /**
+   * Adds a {@link Pipe} at the inbound end.
+   */
+  @Nonnull
   public Future<?> addAtInboundEnd(@Nullable final String name,
-                                   @NonNull final Pipe pipe) {
+                                   @Nonnull final Pipe pipe) {
     Objects.requireNonNull(pipe);
     return threadpool.submit(() -> {
       pipeLock.writeLock().lockInterruptibly();
@@ -527,7 +544,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   /**
    * Clears the read queue and write queue.
    */
-  public void cleanQueues() {
+  public void clearQueues() {
     readQueue.clear();
     writeQueue.clear();
   }
@@ -536,7 +553,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    * Removes all {@link Pipe}s.
    * @return Token to track the completion of this method or cancel it.
    */
-  @NonNull
+  @Nonnull
   public Future<?> removeAll() {
     return threadpool.submit(() -> {
       pipeLock.writeLock().lockInterruptibly();
@@ -546,8 +563,11 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
-  public Future<Pipe> remove(@NonNull final String name) {
+  /**
+   * Removes a {@link Pipe}.
+   */
+  @Nonnull
+  public Future<Pipe> remove(@Nonnull final String name) {
     Validate.notBlank(name);
     return threadpool.submit(() -> {
       final Pipe pipe;
@@ -567,8 +587,12 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
-  public Future<Pipe> remove(@NonNull final Pipe pipe) {
+  /**
+   * Removes a {@link Pipe}. Fails silently if the specified {@link Pipe} does
+   * not exist in the pipeline.
+   */
+  @Nonnull
+  public Future<Pipe> remove(@Nonnull final Pipe pipe) {
     Objects.requireNonNull(pipe);
     return threadpool.submit(() -> {
       pipeLock.writeLock().lockInterruptibly();
@@ -587,8 +611,8 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
-  public Future<Pipe> removeFromOutboundEnd() {
+  @Nonnull
+  public Future<Pipe> removeAtOutboundEnd() {
     return threadpool.submit(() -> {
       final Pipe pipe;
       pipeLock.writeLock().lockInterruptibly();
@@ -604,8 +628,8 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
-  public Future<Pipe> removeFromInboundEnd() {
+  @Nonnull
+  public Future<Pipe> removeAtInboundEnd() {
     return threadpool.submit(() -> {
       pipeLock.writeLock().lockInterruptibly();
       final Pipe pipe;
@@ -621,9 +645,9 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
-  public Future<Pipe> replace(@NonNull final String name,
-                              @NonNull final Pipe newPipe) {
+  @Nonnull
+  public Future<Pipe> replace(@Nonnull final String name,
+                              @Nonnull final Pipe newPipe) {
     Validate.notBlank(name);
     Objects.requireNonNull(newPipe);
     return threadpool.submit(() -> {
@@ -648,9 +672,9 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     });
   }
 
-  @NonNull
-  public Future<Pipe> replace(@NonNull final Pipe oldPipe,
-                              @NonNull final Pipe newPipe) {
+  @Nonnull
+  public Future<Pipe> replace(@Nonnull final Pipe oldPipe,
+                              @Nonnull final Pipe newPipe) {
     Objects.requireNonNull(oldPipe);
     Objects.requireNonNull(newPipe);
     return threadpool.submit(() -> {
@@ -678,10 +702,10 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    * Feeds a data at the outbound end.
    * @throws IllegalStateException If the pipeline is disposed of.
    */
-  public void read(@NonNull final Object obj) {
-  if (state.getValue() == State.DISPOSED) {
-    throw new IllegalStateException("Pipeline disposed.");
-  }
+  public void read(@Nonnull final Object obj) {
+    if (state.getValue() == State.DISPOSED) {
+      throw new IllegalStateException("Pipeline disposed.");
+    }
     readQueue.add(obj);
   }
 
@@ -689,16 +713,16 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    * Feeds a data at the inbound end.
    * @throws IllegalStateException If the pipeline is disposed of.
    */
-  public void write(@NonNull final Object obj) {
+  public void write(@Nonnull final Object obj) {
     if (state.getValue() == State.DISPOSED) {
       throw new IllegalStateException("Pipeline disposed.");
     }
     writeQueue.add(obj);
   }
 
-  @NonNull
+  @Nonnull
   public Pipe get(@Nullable final String name) {
-    for(Map.Entry<String, Pipe> it : pipes) {
+    for (Map.Entry<String, Pipe> it : pipes) {
       if (it.getKey().equals(name)) {
         return it.getValue();
       }
@@ -716,22 +740,22 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     return pipes.peekLast().getValue();
   }
 
-  @NonNull
+  @Nonnull
   public Flowable<I> getInboundStream() {
     return inboundStream;
   }
 
-  @NonNull
+  @Nonnull
   public Flowable<Throwable> getInboundExceptionStream() {
     return inboundExceptionStream;
   }
 
-  @NonNull
+  @Nonnull
   public Flowable<O> getOutboundStream() {
     return outboundStream;
   }
 
-  @NonNull
+  @Nonnull
   public Flowable<Throwable> getOutboundExceptionStream() {
     return outboundExceptionStream;
   }

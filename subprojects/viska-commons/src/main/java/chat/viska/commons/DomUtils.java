@@ -16,7 +16,8 @@
 
 package chat.viska.commons;
 
-import io.reactivex.annotations.NonNull;
+import java.io.InputStream;
+import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
@@ -37,6 +38,9 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
+/**
+ * Provides utility functions for working with DOM.
+ */
 public class DomUtils {
 
   private static final DocumentBuilder DOM_BUILDER;
@@ -63,7 +67,11 @@ public class DomUtils {
     );
   }
 
-  public static List<Node> convertToList(NodeList nodeList) {
+  /**
+   * Converts a {@link NodeList} to a {@link List}.
+   */
+  @Nonnull
+  public static List<Node> convertToList(@Nonnull final NodeList nodeList) {
     final List<Node> list = new ArrayList<>(nodeList.getLength());
     for (int i = 0; i < nodeList.getLength(); ++i) {
       list.add(nodeList.item(i));
@@ -71,8 +79,11 @@ public class DomUtils {
     return list;
   }
 
-  @NonNull
-  public static String writeString(@NonNull final Document document)
+  /**
+   * Converts a {@link Document} to a {@link String}.
+   */
+  @Nonnull
+  public static String writeString(@Nonnull final Document document)
       throws TransformerException {
     final Writer writer = new StringWriter();
     synchronized (DOM_TRANSFORMER) {
@@ -81,8 +92,11 @@ public class DomUtils {
     return writer.toString();
   }
 
-  @NonNull
-  public static Document readDocument(@NonNull final String xml)
+  /**
+   * Reads a {@link Document} from a {@link String}.
+   */
+  @Nonnull
+  public static Document readDocument(final String xml)
       throws SAXException {
     final Document document;
     synchronized (DOM_BUILDER) {
@@ -91,6 +105,17 @@ public class DomUtils {
       } catch (IOException ex) {
         throw new RuntimeException(ex);
       }
+    }
+    document.normalizeDocument();
+    return document;
+  }
+
+  @Nonnull
+  public static Document readDocument(final InputStream xml)
+      throws SAXException, IOException {
+    final Document document;
+    synchronized (DOM_BUILDER) {
+      document = DOM_BUILDER.parse(xml);
     }
     document.normalizeDocument();
     return document;

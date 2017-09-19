@@ -17,8 +17,8 @@
 package chat.viska.xmpp.plugins;
 
 import chat.viska.xmpp.Jid;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -39,7 +39,7 @@ public class RosterItem {
   private final Subscription subscription;
   private final String name;
 
-  public RosterItem(@NonNull final Jid jid,
+  public RosterItem(@Nonnull final Jid jid,
                     @Nullable final Subscription subscription,
                     @Nullable final String name,
                     @Nullable final Collection<String> groups) {

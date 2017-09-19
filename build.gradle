@@ -17,8 +17,10 @@
 buildscript {
   repositories {
     jcenter()
+    maven { url 'https://plugins.gradle.org/m2' }
   }
   dependencies {
+    classpath 'gradle.plugin.com.github.spotbugs:gradlePlugin:1.2'
     classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0'
   }
 }
@@ -30,7 +32,7 @@ allprojects {
 
 subprojects {
   apply plugin: 'checkstyle'
-  apply plugin: 'findbugs'
+  apply plugin: 'com.github.spotbugs'
   apply plugin: 'java'
   apply plugin: 'maven-publish'
   apply plugin: 'org.junit.platform.gradle.plugin'
@@ -60,16 +62,7 @@ subprojects {
     config = resources.text.fromFile(styleFile)
   }
 
-  tasks.withType(FindBugs) {
-    reports {
-      html.enabled = true
-      xml.enabled = false
-    }
-    ignoreFailures = true
-  }
-
   pmd {
-    ignoreFailures = true
     ruleSets = [
         'java-basic',
         'java-braces',
@@ -115,7 +108,8 @@ task javadocAll(type: Javadoc) {
   options {
     links(
         'http://reactivex.io/RxJava/2.x/javadoc',
-        'https://docs.oracle.com/javase/8/docs/api'
+        'https://docs.oracle.com/javase/8/docs/api',
+        'https://static.javadoc.io/com.google.code.findbugs/jsr305/3.0.2'
     )
     overview = overviewPath
   }

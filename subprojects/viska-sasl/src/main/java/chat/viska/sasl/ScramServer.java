@@ -22,16 +22,29 @@ import java.security.InvalidKeyException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.commons.codec.binary.Base64;
 
 /**
  * SASL server of <a href="https://datatracker.ietf.org/doc/rfc5802">SCRAM
  * Mechanism</a>. Note that this implementation does not support Channel
  * Binding.
+ *
+ * <p>The keys contained by the negotiated properties include:</p>
+ *
+ * <ul>
+ *   <li>{@link ScramMechanism#KEY_ITERATION}</li>
+ *   <li>{@link ScramMechanism#KEY_SALTED_PASSWORD}</li>
+ *   <li>{@link ScramMechanism#KEY_SALT}</li>
+ * </ul>
  */
+@NotThreadSafe
 public class ScramServer implements Server {
 
   private enum State {
@@ -44,10 +57,12 @@ public class ScramServer implements Server {
 
   private static final int DEFAULT_ITERATION = 4096;
 
+
   private final ScramMechanism scram;
   private final String initialNounce;
   private final Base64 base64 = new Base64(0, new byte[0], false);
   private final CredentialRetriever retriever;
+  private final Map<String, Object> properties = new HashMap<>();
   private String gs2Header = "";
   private String username = "";
   private byte[] saltedPassword;
@@ -63,25 +78,19 @@ public class ScramServer implements Server {
    * contain the following key-value pairs:
    * <ul>
    *   <li>
-   *     {@code password} ({@link String}): The raw password in
-   *     {@code stringprep}ed form. If this property is present, the server will
-   *     generate {@code salted-password} on demand using random {@code salt}
-   *     and {@code iteration}.
+   *     {@link ScramMechanism#KEY_PASSWORD}: If this is provided, the server generates a
+   *     salted password on demand using a random salt and iteration.
    *   </li>
    *   <li>
-   *     {@code salted-password} ({@link Byte}): Optional if {@code password} is
-   *     present.
+   *     {@link ScramMechanism#KEY_SALTED_PASSWORD}: Optional if a password is provided.
    *   </li>
    *   <li>
-   *     {@code salt} ({@link Byte}): Optional if {@code password} is present.
+   *     {@link ScramMechanism#KEY_SALT}: Optional if a password is provided.
    *   </li>
    *   <li>
-   *     {@code iteration} ({@link Integer}): Optional if {@code password} is
-   *     present.
+   *     {@link ScramMechanism#KEY_ITERATION}: Optional if a passworda is provided.
    *   </li>
    * </ul>
-   * @param retriever Method to retrieve sensitive data for the authentication.
-   * @throws NullPointerException if either of the parameters are {@code null}.
    */
   public ScramServer(final ScramMechanism scram,
                      final CredentialRetriever retriever) {
@@ -99,7 +108,7 @@ public class ScramServer implements Server {
   private void generateSaltedPassword()
       throws IOException, AbortedException, AuthenticationException, InvalidKeySpecException {
     final String password = (String) retriever.retrieve(
-        username, getMechanism(), "password"
+        username, getMechanism(), ScramMechanism.KEY_PASSWORD
     );
     if (password == null) {
       throw new AuthenticationException(
@@ -194,19 +203,20 @@ public class ScramServer implements Server {
     this.fullNounce = clientNounce + this.initialNounce;
   }
 
+  @Nonnull
   private String getChallenge() {
     try {
       final byte[] saltedPassword = (byte[]) retriever.retrieve(
           this.username,
           getMechanism(),
-          "salted-password"
+          ScramMechanism.KEY_SALTED_PASSWORD
       );
       if (saltedPassword != null) {
         final byte[] salt = (byte[]) retriever.retrieve(
-            username, getMechanism(), "salt"
+            username, getMechanism(), ScramMechanism.KEY_SALT
         );
         final Integer iteration = (Integer) retriever.retrieve(
-            username, getMechanism(), "iteration"
+            username, getMechanism(), ScramMechanism.KEY_ITERATION
         );
         if (salt != null && iteration != null) {
           this.saltedPassword = saltedPassword;
@@ -300,7 +310,7 @@ public class ScramServer implements Server {
               this.gs2Header
           )
       );
-      clientProof = Bytes.xor(clientKey,clientSig);
+      clientProof = ByteUtils.xor(clientKey,clientSig);
     } catch (InvalidKeyException ex) {
       throw new RuntimeException(ex);
     }
@@ -330,11 +340,19 @@ public class ScramServer implements Server {
     }
   }
 
+  private void prepareNegotiatedProperties() {
+    this.properties.put(ScramMechanism.KEY_SALT, this.salt);
+    this.properties.put(ScramMechanism.KEY_SALTED_PASSWORD, this.saltedPassword);
+    this.properties.put(ScramMechanism.KEY_ITERATION, this.iteration);
+  }
+
+  @Nonnull
   @Override
   public String getMechanism() {
     return "SCRAM-" + scram.getAlgorithm();
   }
 
+  @Nullable
   @Override
   public byte[] challenge() {
     switch (state) {
@@ -347,6 +365,7 @@ public class ScramServer implements Server {
           return ("e=" + error.getMessage()).getBytes(StandardCharsets.UTF_8);
         } else {
           state = State.COMPLETED;
+          prepareNegotiatedProperties();
           return getResult().getBytes(StandardCharsets.UTF_8);
         }
       default:
@@ -384,6 +403,7 @@ public class ScramServer implements Server {
     return state == State.COMPLETED;
   }
 
+  @Nullable
   @Override
   public AuthenticationException getError() {
     if (!isCompleted()) {
@@ -392,35 +412,17 @@ public class ScramServer implements Server {
     return error;
   }
 
-  /**
-   * Gets a {@link Map} containing properties negotiated during the
-   * authentication. It will contain the following key-value pairs:
-   * <ul>
-   *   <li>{@code salted-password} ({@link Byte})</li>
-   *   <li>{@code salt} ({@link Byte})</li>
-   *   <li>{@code iteration} ({@link Integer})</li>
-   *   <li>{@code username} ({@link String})</li>
-   * </ul>
-   * @return {@code null} if authentication not completed, otherwise a
-   *         {@link Map} which is either empty or containing properties.
-   */
   @Override
+  @Nonnull
   public Map<String, ?> getNegotiatedProperties() {
-    if (this.state != State.COMPLETED) {
-      return null;
-    }
-    final Map<String, Object> result = new HashMap<>();
-    result.put("salt", this.salt);
-    result.put("salted-password", this.saltedPassword);
-    result.put("username", this.username);
-    result.put("iteration", this.iteration);
-    return result;
+    return Collections.unmodifiableMap(properties);
   }
 
   @Override
+  @Nonnull
   public String getAuthorizationId() {
     if (this.state != State.COMPLETED) {
-      return null;
+      throw new IllegalStateException("Authentication not completed.");
     } else {
       return authzId.isEmpty() ? username : authzId;
     }

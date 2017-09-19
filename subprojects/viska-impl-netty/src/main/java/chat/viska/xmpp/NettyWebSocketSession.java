@@ -42,12 +42,14 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.reactivex.Completable;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.CompletableSubject;
 import java.util.Collections;
 import java.util.Set;
+import javax.annotation.CheckReturnValue;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
 import javax.xml.transform.TransformerException;
@@ -80,18 +82,55 @@ import org.xml.sax.SAXException;
  *   </tr>
  * </table>
  */
+@ThreadSafe
 public class NettyWebSocketSession extends DefaultSession {
+
+  private class ConsumerHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame msg)
+        throws Exception {
+      try {
+        feedXmlPipeline(DomUtils.readDocument(msg.text()));
+      } catch (SAXException ex) {
+        send(new StreamErrorException(
+            StreamErrorException.Condition.BAD_FORMAT
+        ));
+      }
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
+        throws Exception {
+      if (cause instanceof WebSocketHandshakeException) {
+        wsHandshakeCompleted.onError(cause);
+      }
+      triggerEvent(new ExceptionCaughtEvent(nettyChannel, cause));
+      super.exceptionCaught(ctx, cause);
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt)
+        throws Exception {
+      if (evt == WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE) {
+        wsHandshakeCompleted.onComplete();
+      }
+      super.userEventTriggered(ctx, evt);
+    }
+  }
 
   private static final int CACHE_SIZE_BYTES = 1024 * 1024;
 
   private static final Compression DEFAULT_CONNECTION_COMPRESSION = Compression.DEFLATE;
-  private static final Set<Compression> SUPPORTED_CONNECTION_COMPRESSION = Collections.singleton(Compression.DEFLATE);
+  private static final Set<Compression> SUPPORTED_CONNECTION_COMPRESSION =
+      Collections.singleton(Compression.DEFLATE);
 
   private final EventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup();
   private Compression connectionCompression;
   private SocketChannel nettyChannel;
   private WebSocketClientProtocolHandler websocketHandler;
   private SslHandler tlsHandler;
+  private CompletableSubject wsHandshakeCompleted = CompletableSubject.create();
 
   private String preprocessOutboundXml(final Document document)
       throws TransformerException {
@@ -110,6 +149,8 @@ public class NettyWebSocketSession extends DefaultSession {
     return result.toString();
   }
 
+  @CheckReturnValue
+  @Nonnull
   @Override
   protected Completable onOpeningConnection(Compression connectionCompression,
                                             Compression tlsCompression) {
@@ -133,7 +174,6 @@ public class NettyWebSocketSession extends DefaultSession {
         ),
         true
     );
-    final DefaultSession thisSession = this;
     final SslContext sslContext;
     try {
       sslContext = getConnection().isTlsEnabled()
@@ -145,7 +185,6 @@ public class NettyWebSocketSession extends DefaultSession {
     final Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(nettyEventLoopGroup);
     bootstrap.channel(NioSocketChannel.class);
-    final CompletableSubject wsHandshakeCompleted = CompletableSubject.create();
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel channel) throws Exception {
@@ -166,39 +205,7 @@ public class NettyWebSocketSession extends DefaultSession {
             "websocket-aggregator",
             new WebSocketFrameAggregator(CACHE_SIZE_BYTES)
         );
-        channel.pipeline().addLast("consumer", new SimpleChannelInboundHandler<TextWebSocketFrame>() {
-
-          @Override
-          protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame msg)
-              throws Exception {
-            try {
-              feedXmlPipeline(DomUtils.readDocument(msg.text()));
-            } catch (SAXException ex) {
-              send(new StreamErrorException(
-                  StreamErrorException.Condition.BAD_FORMAT
-              ));
-            }
-          }
-
-          @Override
-          public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
-              throws Exception {
-            if (cause instanceof WebSocketHandshakeException) {
-              wsHandshakeCompleted.onError(cause);
-            }
-            triggerEvent(new ExceptionCaughtEvent(thisSession, cause));
-            super.exceptionCaught(ctx, cause);
-          }
-
-          @Override
-          public void userEventTriggered(ChannelHandlerContext ctx, Object evt)
-              throws Exception {
-            if (evt == WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE) {
-              wsHandshakeCompleted.onComplete();
-            }
-            super.userEventTriggered(ctx, evt);
-          }
-        });
+        channel.pipeline().addLast("consumer", new ConsumerHandler());
       }
     });
     final ChannelFuture channelFuture = bootstrap.connect(
@@ -225,6 +232,8 @@ public class NettyWebSocketSession extends DefaultSession {
     })));
   }
 
+  @Nonnull
+  @CheckReturnValue
   @Override
   protected Completable onClosingConnection() {
     if (nettyChannel != null) {
@@ -241,6 +250,7 @@ public class NettyWebSocketSession extends DefaultSession {
     }
   }
 
+  @Nonnull
   @Override
   protected Completable onStartTls() {
     throw new UnsupportedOperationException(
@@ -261,18 +271,8 @@ public class NettyWebSocketSession extends DefaultSession {
   }
 
   public NettyWebSocketSession(@Nullable final Jid jid,
-                               @NonNull final Connection connection) {
-    this(
-        jid,
-        null,
-        connection,
-        false
-    );
-  }
-
-  public NettyWebSocketSession(@Nullable final Jid jid,
                                @Nullable final Jid authzId,
-                               @NonNull final Connection connection,
+                               @Nonnull final Connection connection,
                                final boolean streamManagement) {
     super(jid, authzId, connection, streamManagement);
     if (connection.getProtocol() != Connection.Protocol.WEBSOCKET) {
@@ -280,36 +280,43 @@ public class NettyWebSocketSession extends DefaultSession {
     }
   }
 
+  @Nullable
   @Override
   public Compression getConnectionCompression() {
     return connectionCompression;
   }
 
+  @Nonnull
   @Override
   public Set<Compression> getSupportedConnectionCompression() {
     return SUPPORTED_CONNECTION_COMPRESSION;
   }
 
+  @Nullable
   @Override
   public Compression getTlsCompression() {
     return null;
   }
 
+  @Nonnull
   @Override
   public Set<Compression> getSupportedTlsCompression() {
     return Collections.emptySet();
   }
 
+  @Nullable
   @Override
   public Compression getStreamCompression() {
     return null;
   }
 
+  @Nonnull
   @Override
   public Set<Compression> getSupportedStreamCompression() {
     return Collections.emptySet();
   }
 
+  @Nullable
   @Override
   public SSLSession getTlsSession() {
     return tlsHandler == null ? null : tlsHandler.engine().getSession();

@@ -16,8 +16,8 @@
 
 package chat.viska.commons;
 
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.EventObject;
 import java.util.logging.Level;
 import org.apache.commons.lang3.Validate;
@@ -26,8 +26,8 @@ public class ExceptionCaughtEvent extends EventObject {
 
   private Throwable cause;
 
-  public ExceptionCaughtEvent(@NonNull Object source,
-                              @NonNull Throwable cause) {
+  public ExceptionCaughtEvent(@Nonnull Object source,
+                              @Nonnull Throwable cause) {
     super(source);
     Validate.notNull(cause);
     this.cause = cause;

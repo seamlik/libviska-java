@@ -18,23 +18,25 @@ package chat.viska.xmpp;
 
 import chat.viska.xmpp.plugins.BasePlugin;
 import io.reactivex.Observable;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
 import io.reactivex.exceptions.OnErrorNotImplementedException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Contains information of {@link Plugin}s applied on an {@link DefaultSession}.
+ * Contains information of {@link Plugin}s applied on an {@link Session}.
  */
+@ThreadSafe
 public class PluginManager implements SessionAware {
 
   private final Session session;
   private final Set<Plugin> plugins = new HashSet<>();
 
-  PluginManager(@NonNull final Session session) {
+  PluginManager(@Nonnull final Session session) {
     this.session = session;
     getSession().getState().getStream().filter(
         it -> it == Session.State.ONLINE
@@ -59,7 +61,7 @@ public class PluginManager implements SessionAware {
    * has already been applied.
    * @throws IllegalArgumentException If it fails to apply the {@link Plugin}.
    */
-  public void apply(final @NonNull Class<? extends Plugin> type)
+  public synchronized void apply(final @Nonnull Class<? extends Plugin> type)
       throws IllegalArgumentException {
     Objects.requireNonNull(type);
     if (getPlugin(type) != null) {
@@ -94,7 +96,7 @@ public class PluginManager implements SessionAware {
    * @return {@code null} if the plugin cannot be found.
    */
   @Nullable
-  public Plugin getPlugin(Class<? extends Plugin> type) {
+  public synchronized Plugin getPlugin(Class<? extends Plugin> type) {
     for (Plugin plugin : plugins) {
       if (type.isInstance(plugin)) {
         return plugin;
@@ -103,12 +105,13 @@ public class PluginManager implements SessionAware {
     return null;
   }
 
-  @NonNull
+  @Nonnull
   public Set<Plugin> getPlugins() {
     return Collections.unmodifiableSet(plugins);
   }
 
   @Override
+  @Nonnull
   public Session getSession() {
     return session;
   }

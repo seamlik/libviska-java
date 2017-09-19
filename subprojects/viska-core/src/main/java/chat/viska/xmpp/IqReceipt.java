@@ -14,17 +14,24 @@
  * limitations under the License.
  */
 
-package chat.viska.commons.reactive;
+package chat.viska.xmpp;
 
-import io.reactivex.Flowable;
+import io.reactivex.Maybe;
+import java.util.Objects;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
-public interface ReactiveObject<T> {
+public class IqReceipt extends StanzaReceipt {
 
-  @Nullable
-  T getValue();
+  private final Maybe<Stanza> response;
+
+  public IqReceipt(Session session, Maybe<Boolean> serverAck, Maybe<Stanza> response) {
+    super(session, serverAck);
+    Objects.requireNonNull(response);
+    this.response = response;
+  }
 
   @Nonnull
-  Flowable<T> getStream();
+  public Maybe<Stanza> getResponse() {
+    return response;
+  }
 }

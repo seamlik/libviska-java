@@ -18,4 +18,7 @@
  * Provides fundamental classes for building an XMPP client.
  * {@link chat.viska.xmpp.Session} is the main entry point.
  */
+@ParametersAreNonnullByDefault
 package chat.viska.xmpp;
+
+import javax.annotation.ParametersAreNonnullByDefault;

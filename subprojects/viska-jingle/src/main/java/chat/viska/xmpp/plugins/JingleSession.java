@@ -20,7 +20,7 @@ import chat.viska.commons.reactive.MutableReactiveObject;
 import chat.viska.commons.reactive.ReactiveObject;
 import chat.viska.xmpp.Session;
 import chat.viska.xmpp.SessionAware;
-import io.reactivex.annotations.NonNull;
+import javax.annotation.Nonnull;
 
 /**
  * Jingle session.
@@ -37,18 +37,18 @@ public class JingleSession implements SessionAware {
   private final String sessionId;
   private final MutableReactiveObject<State> state = new MutableReactiveObject<>();
 
-  public JingleSession(@NonNull final Session session,
-                       @NonNull final String sessionId) {
+  public JingleSession(@Nonnull final Session session,
+                       @Nonnull final String sessionId) {
     this.session = session;
     this.sessionId = sessionId;
   }
 
-  @NonNull
+  @Nonnull
   public ReactiveObject<State> getState() {
     return state;
   }
 
-  @NonNull
+  @Nonnull
   public String getSessionId() {
     return sessionId;
   }

@@ -17,12 +17,12 @@
 package chat.viska.xmpp.plugins;
 
 import chat.viska.xmpp.Jid;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Objects;
 
 /**
- * Result of an item query defined in
+ * Result of an item sendIqQuery defined in
  * <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>.
  */
 public class DiscoItem {
@@ -32,8 +32,8 @@ public class DiscoItem {
   private final String node;
 
   public DiscoItem(@Nullable final Jid jid,
-                   @NonNull final String name,
-                   @NonNull final String node) {
+                   @Nonnull final String name,
+                   @Nonnull final String node) {
     this.jid = jid;
     this.name = name == null ? "" : name;
     this.node = node == null ? "" : node;
@@ -42,7 +42,7 @@ public class DiscoItem {
   /**
    * Gets the JID.
    */
-  @NonNull
+  @Nonnull
   public Jid getJid() {
     return jid;
   }
@@ -50,12 +50,12 @@ public class DiscoItem {
   /**
    * Gets the name.
    */
-  @NonNull
+  @Nonnull
   public String getName() {
     return name;
   }
 
-  @NonNull
+  @Nonnull
   public String getNode() {
     return node;
   }

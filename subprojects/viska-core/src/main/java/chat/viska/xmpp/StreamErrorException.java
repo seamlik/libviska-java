@@ -18,8 +18,8 @@ package chat.viska.xmpp;
 
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Objects;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -68,7 +68,7 @@ public class StreamErrorException extends Exception {
   private final Condition condition;
   private final String text;
 
-  public static StreamErrorException fromXml(@NonNull final Document xml) {
+  public static StreamErrorException fromXml(@Nonnull final Document xml) {
     StreamErrorException.Condition condition = null;
     Element conditionElement = null;
     int cursor = 0;
@@ -113,15 +113,15 @@ public class StreamErrorException extends Exception {
     }
   }
 
-  public StreamErrorException(@NonNull final Condition condition) {
+  public StreamErrorException(@Nonnull final Condition condition) {
     super("[" + EnumUtils.toXmlValue(condition) + "]");
     this.text = "";
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
 
-  public StreamErrorException(@NonNull final Condition condition,
-                              @NonNull final String text) {
+  public StreamErrorException(@Nonnull final Condition condition,
+                              @Nonnull final String text) {
     super("[" + EnumUtils.toXmlValue(condition) + "] " + text);
     Objects.requireNonNull(condition, "`condition` is absent.");
     Objects.requireNonNull(text, "`text` is absent.");
@@ -129,17 +129,17 @@ public class StreamErrorException extends Exception {
     this.text = text;
   }
 
-  @NonNull
+  @Nonnull
   public Condition getCondition() {
     return condition;
   }
 
-  @NonNull
+  @Nonnull
   public String getText() {
     return text;
   }
 
-  @NonNull
+  @Nonnull
   public Document toXml() {
     final Document xml;
     try {

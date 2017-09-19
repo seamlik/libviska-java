@@ -46,7 +46,7 @@ public class Cmd {
     @Parameter(converter = JidConverter.class, required = true)
     private List<Jid> entities;
 
-    private void run() throws Throwable {
+    public void run() throws Throwable {
       final BasePlugin basePlugin = (BasePlugin) session
           .getPluginManager()
           .getPlugin(BasePlugin.class);
@@ -88,10 +88,10 @@ public class Cmd {
     }
   }
 
-  @Parameters(commandNames = "roster-get")
-  private class RosterGetCommand {
+  @Parameters(commandNames = "roster")
+  private class RosterCommand {
 
-    private void run() throws Exception {
+    public void run() throws Exception {
       final BasePlugin plugin = (BasePlugin)
           session.getPluginManager().getPlugin(BasePlugin.class);
       List<RosterItem> roster = plugin.queryRoster().blockingGet();
@@ -113,10 +113,52 @@ public class Cmd {
     }
   }
 
-  @Parameter(names = "--jid", description = "JID", converter = JidConverter.class, required = true)
+  @Parameters(commandNames = "connections")
+  private class ConnectionsCommand {
+
+    @Parameter(required = true)
+    private List<String> domains;
+
+    public void run() {
+      for (String domain : domains) {
+        System.out.println('<' + domain + '>');
+        final List<Connection> connections = Connection
+            .queryAll(domain, null)
+            .blockingGet();
+        for (Connection it : connections) {
+          System.out.print(it.getProtocol());
+          System.out.println(':');
+          switch (it.getProtocol()) {
+            case TCP:
+              System.out.print("    ");
+              System.out.print("Domain: ");
+              System.out.println(it.getDomain());
+              System.out.print("    ");
+              System.out.print("Port: ");
+              System.out.println(it.getPort());
+              System.out.print("    ");
+              System.out.print("TLS: ");
+              System.out.println(it.getTlsMethod());
+              break;
+            case WEBSOCKET:
+              System.out.print("    ");
+              System.out.print("URI: ");
+              System.out.println(it.getUri());
+              break;
+            default:
+              break;
+          }
+        }
+      }
+
+
+    }
+  }
+
+  @Parameter(names = "--jid", description = "JID", converter = JidConverter.class)
   private Jid jid;
 
-  @Parameter(names = "--password", description = "Password", password = true, required = true)
+  @Parameter(names = "--password", description = "Password")
   private String password;
 
   @Parameter(names = "--websocket", description = "WebSocket URI", converter = URIConverter.class)
@@ -141,7 +183,7 @@ public class Cmd {
     } else {
       try {
         connection = Observable
-            .fromIterable(Connection.queryDns(jid.getDomainPart()).blockingGet())
+            .fromIterable(Connection.queryAll(jid.getDomainPart(), null).blockingGet())
             .filter(Connection::isTlsEnabled)
             .blockingFirst();
       } catch (Exception ex) {
@@ -152,7 +194,7 @@ public class Cmd {
       }
     }
     if (connection.getProtocol() == Connection.Protocol.WEBSOCKET) {
-      this.session = new NettyWebSocketSession(this.jid, connection);
+      this.session = new NettyWebSocketSession(this.jid, null, connection, false);
     } else {
       this.session = new NettyTcpSession(this.jid, null, connection, false);
     }
@@ -171,14 +213,16 @@ public class Cmd {
   }
 
   private void run(String... args) throws Throwable {
-    InfoCommand infoCommand = new InfoCommand();
-    RosterGetCommand rosterGetCommand = new RosterGetCommand();
+    final InfoCommand infoCommand = new InfoCommand();
+    final RosterCommand rosterCommand = new RosterCommand();
+    final ConnectionsCommand connectionsCommand = new ConnectionsCommand();
     JCommander jcommander = JCommander
         .newBuilder()
         .programName("viska-cmd-java")
         .addObject(this)
         .addCommand(infoCommand)
-        .addCommand(rosterGetCommand)
+        .addCommand(rosterCommand)
+        .addCommand(connectionsCommand)
         .build();
     if (args.length == 0) {
       jcommander.usage();
@@ -195,9 +239,12 @@ public class Cmd {
           initialize();
           infoCommand.run();
           break;
-        case "roster-get":
+        case "roster":
           initialize();
-          rosterGetCommand.run();
+          rosterCommand.run();
+          break;
+        case "connections":
+          connectionsCommand.run();
           break;
         default:
           jcommander.usage();

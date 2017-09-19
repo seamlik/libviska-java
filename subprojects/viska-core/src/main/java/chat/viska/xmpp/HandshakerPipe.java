@@ -28,8 +28,8 @@ import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
@@ -156,8 +156,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
 
     private final StreamFeature feature;
 
-    public FeatureNegotiatedEvent(@NonNull final HandshakerPipe source,
-                                  @NonNull final StreamFeature feature) {
+    public FeatureNegotiatedEvent(@Nonnull final HandshakerPipe source,
+                                  @Nonnull final StreamFeature feature) {
       super(source);
       Objects.requireNonNull(feature);
       this.feature = feature;
@@ -166,7 +166,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     /**
      * Gets the {@link StreamFeature} that was negotiated.
      */
-    @NonNull
+    @Nonnull
     public StreamFeature getFeature() {
       return feature;
     }
@@ -238,7 +238,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     }
   }
 
-  private void consumeStreamOpening(@NonNull final Document document) {
+  private void consumeStreamOpening(@Nonnull final Document document) {
     Objects.requireNonNull(document);
     Version serverVersion = null;
     final String serverVersionText = document.getDocumentElement().getAttribute(
@@ -276,7 +276,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    * @param document XML sent by the server.
    * @return {@link StreamFeature} selected to negotiate.
    */
-  private Element consumeStreamFeatures(@NonNull final Document document) {
+  @Nullable
+  private Element consumeStreamFeatures(@Nonnull final Document document) {
     final List<Node> announcedFeatures = DomUtils.convertToList(
         document.getDocumentElement().getChildNodes()
     );
@@ -286,8 +287,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
 
     for (StreamFeature informational : INFORMATIONAL_FEATURES) {
       for (Node announced : announcedFeatures) {
-        if (informational.getNamespace().equalsIgnoreCase(announced.getNamespaceURI())
-            && informational.getName().equalsIgnoreCase(announced.getLocalName())) {
+        if (informational.getNamespace().equals(announced.getNamespaceURI())
+            && informational.getName().equals(announced.getLocalName())) {
           if (this.negotiatedFeatures.add(informational)) {
             this.eventStream.onNext(
                 new FeatureNegotiatedEvent(this, informational)
@@ -299,8 +300,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
 
     for (StreamFeature supported : FEATURES_ORDER) {
       for (Node announced : announcedFeatures) {
-        if (supported.getNamespace().equalsIgnoreCase(announced.getNamespaceURI())
-            && supported.getName().equalsIgnoreCase(announced.getLocalName())) {
+        if (supported.getNamespace().equals(announced.getNamespaceURI())
+            && supported.getName().equals(announced.getLocalName())) {
           this.negotiatingFeature = supported;
           return (Element) announced;
         }
@@ -321,7 +322,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     }
   }
 
-  private void initiateSasl(@NonNull final Element mechanismsElement) 
+  private void initiateSasl(@Nonnull final Element mechanismsElement)
       throws SAXException {
     final List<String> mechanisms = Observable.fromIterable(DomUtils.convertToList(
         mechanismsElement.getElementsByTagName("mechanism")
@@ -379,7 +380,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     this.pipeline.write(iq);
   }
 
-  private void consumeStartTls(@NonNull final Document xml) {
+  private void consumeStartTls(@Nonnull final Document xml) {
     switch (xml.getDocumentElement().getLocalName()) {
       case "proceed":
         this.negotiatedFeatures.add(StreamFeature.STARTTLS);
@@ -400,7 +401,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     }
   }
 
-  private void consumeSasl(@NonNull final Document document) throws SAXException {
+  private void consumeSasl(@Nonnull final Document document) throws SAXException {
     final String msg = document.getDocumentElement().getTextContent();
 
     if (this.saslClient.isCompleted() && StringUtils.isNotBlank(msg)) {
@@ -471,11 +472,11 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     }
   }
 
-  private void consumeStreamCompression(@NonNull Document document) {
+  private void consumeStreamCompression(@Nonnull Document document) {
     throw new UnsupportedOperationException();
   }
 
-  private void consumeResourceBinding(@NonNull final Document document)
+  private void consumeResourceBinding(@Nonnull final Document document)
       throws SAXException {
     if (!this.resourceBindingIqId.equals(document.getDocumentElement().getAttribute("id"))) {
       sendStreamError(new StreamErrorException(
@@ -562,10 +563,10 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    * @param registering Indicates if the handshake includes in-band
    *                    registration.
    */
-  public HandshakerPipe(@NonNull final Session session,
-                        @NonNull final Jid jid,
+  public HandshakerPipe(@Nonnull final Session session,
+                        @Nonnull final Jid jid,
                         @Nullable final Jid authzId,
-                        @NonNull final CredentialRetriever retriever,
+                        @Nonnull final CredentialRetriever retriever,
                         @Nullable final List<String> saslMechanisms,
                         @Nullable final String resource,
                         final boolean registering) {
@@ -641,7 +642,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     }
   }
 
-  public void sendStreamError(@NonNull final StreamErrorException error) {
+  public void sendStreamError(@Nonnull final StreamErrorException error) {
     pipeline.write(error.toXml());
     this.clientStreamError.setValue(error);
     closeStream().observeOn(Schedulers.io()).subscribe();
@@ -659,7 +660,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   /**
    * Gets the current {@link State} of this class.
    */
-  @NonNull
+  @Nonnull
   public ReactiveObject<State> getState() {
     return state;
   }
@@ -669,7 +670,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    * @return {@code null} if the XMPP stream is still running, or if the server
    *         did not send any stream error during the last stream.
    */
-  @Nullable
+  @Nonnull
   public ReactiveObject<StreamErrorException> getServerStreamError() {
     return serverStreamError;
   }
@@ -679,7 +680,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    * @return {@code null} if the XMPP stream is still running, or if this class
    *         did not send any stream error during the last stream.
    */
-  @Nullable
+  @Nonnull
   public ReactiveObject<StreamErrorException> getClientStreamError() {
     return clientStreamError;
   }
@@ -689,17 +690,17 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    * @return {@code null} if the handshake is not completed yet or it was
    *         successful.
    */
-  @Nullable
+  @Nonnull
   public ReactiveObject<Exception> getHandshakeError() {
     return handshakeError;
   }
 
-  @NonNull
-  public Set<StreamFeature> getNegotiatedFeatures() {
+  @Nonnull
+  public Set<StreamFeature> getStreamFeatures() {
     return Collections.unmodifiableSet(negotiatedFeatures);
   }
 
-  @NonNull
+  @Nonnull
   public Flowable<EventObject> getEventStream() {
     return eventStream;
   }
@@ -776,7 +777,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
               this.state.setValue(State.COMPLETED);
             } else {
               sendStreamError(new StreamErrorException(
-                  StreamErrorException.Condition.UNSUPPORTED_FEATURE
+                  StreamErrorException.Condition.UNSUPPORTED_FEATURE,
+                  "We have mandatory features that you do not support."
               ));
             }
           } else {

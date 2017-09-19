@@ -16,13 +16,14 @@
 
 package chat.viska.xmpp;
 
-import io.reactivex.annotations.NonNull;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import javax.annotation.Nullable;
+import org.apache.commons.lang3.StringUtils;
 
 /**
- * Jabber/XMPP ID.
+ * XMPP address.
  *
  * <p>Also known as Jabber Identifier, an JID is an address for locating an XMPP
  * entity. A typical example of a JID would be
@@ -43,10 +44,13 @@ public class Jid {
   private final String domainPart;
   private final String resourcePart;
 
-  private static List<String> parseJidParts(@NonNull final String rawJid) {
+  private static List<String> parseJidParts(@Nullable final String rawJid) {
+    final List<String> result = Arrays.asList("", "", "");
+    if (StringUtils.isBlank(rawJid)) {
+      return result;
+    }
 
     final int indexOfSlash = rawJid.indexOf("/");
-    final List<String> result = Arrays.asList("", "", "");
 
     if (indexOfSlash > 0) {
       result.set(2, rawJid.substring(indexOfSlash + 1, rawJid.length()));

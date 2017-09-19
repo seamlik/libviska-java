@@ -22,8 +22,10 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import io.reactivex.Observable;
 import io.reactivex.Single;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import java.util.Collections;
+import java.util.Objects;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -36,7 +38,6 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import javax.xml.parsers.DocumentBuilderFactory;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
@@ -84,14 +85,25 @@ public class Connection {
     }
   }
 
+  /**
+   * Indicates how a {@link Connection} is establishing TLS connections.
+   */
   public enum TlsMethod {
+
+    /**
+     * Indicates connecting to the server using TLS in the beginning.
+     */
     DIRECT,
+
+    /**
+     * Indicates using StartTLS.
+     */
     STARTTLS
   }
 
-  private static final String DNS_TXT_QUERY = "_xmppconnect.";
-  private static final String DNR_SRV_QUERY = "_xmpp-client._tcp.";
-  private static final String DNR_SRV_SECURE_QUERY = "_xmpps-client._tcp.";
+  private static final String QUERY_DNS_TXT = "_xmppconnect.";
+  private static final String QUERY_DNR_SRV = "_xmpp-client._tcp.";
+  private static final String QUERY_DNR_SRV_TLS = "_xmpps-client._tcp.";
 
   private final Protocol protocol;
   private final String scheme;
@@ -101,7 +113,7 @@ public class Connection {
   private final TlsMethod tlsMethod;
 
   /**
-   * Returns a URL to the domain-meta file.
+   * Returns a URL to the host-meta file.
    * <p>This method forces to use HTTPS URL for security reasons.</p>
    * @param host The domain of the server, might be an IP address, a domain
    *               name, {@code localhost}, etc.. If it specifies a protocol
@@ -109,9 +121,9 @@ public class Connection {
    * @param json Indicates whether to get the JSON version or the XML version.
    * @throws MalformedURLException If {@code domain} is invalid.
    */
-  private static @NonNull URL getHostMetaUrl(@NonNull String host, boolean json)
+  private static @Nonnull URL getHostMetaUrl(@Nonnull String host, boolean json)
       throws MalformedURLException {
-    final String hostMetaPath = "/.well-known/domain-meta" + (json ? ".json" : "");
+    final String hostMetaPath = "/.well-known/host-meta" + (json ? ".json" : "");
     return new URL(
         "https",
         host,
@@ -119,47 +131,63 @@ public class Connection {
     );
   }
 
-  private static @NonNull Single<JsonObject>
-  downloadHostMetaJson(@NonNull final String domain, @Nullable final Proxy proxy)
-      throws MalformedURLException {
-    final URL hostMetaUrl = getHostMetaUrl(domain, true);
+  /**
+   * Downloads the {@literal host-meta.json}. Signals
+   * {@link MalformedURLException} if {@code domain} is invalid. Signals
+   * {@link InvalidHostMetaException} if the downloaded XML is invalid.
+   */
+  @Nonnull
+  private static Single<JsonObject>
+  downloadHostMetaJson(final String domain, @Nullable final Proxy proxy) {
     return Single.fromCallable(() -> {
-      try (
+      final URL hostMetaUrl = getHostMetaUrl(domain, true);
+      try {
           final InputStream stream = proxy == null
               ? hostMetaUrl.openStream()
               : hostMetaUrl.openConnection(proxy).getInputStream();
           final InputStreamReader reader = new InputStreamReader(
               stream, StandardCharsets.UTF_8
           );
-          ) {
-        return new JsonParser().parse(reader).getAsJsonObject();
+          return new JsonParser().parse(reader).getAsJsonObject();
       } catch (JsonParseException ex) {
         throw new InvalidHostMetaException(ex);
       }
     });
   }
 
-  private static @NonNull Single<Document>
-  downloadHostMetaXml(@NonNull final String domain, @Nullable final Proxy proxy)
-      throws MalformedURLException {
-    final URL hostMetaUrl = getHostMetaUrl(domain, false);
+  /**
+   * Downloads the {@literal host-meta.xml}. Signals
+   * {@link MalformedURLException} if {@code domain} is invalid. Signals
+   * {@link SAXException} if the downloaded XML is invalid.
+   */
+  @Nonnull
+  private static Single<Document>
+  downloadHostMetaXml(final String domain, @Nullable final Proxy proxy) {
     return Single.fromCallable(() -> {
-      try (
-          final InputStream stream = proxy == null
-              ? hostMetaUrl.openStream()
-              : hostMetaUrl.openConnection(proxy).getInputStream();
-          final InputStreamReader reader = new InputStreamReader(
-              stream, StandardCharsets.UTF_8
-          );
-      ) {
-        return DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(stream);
-      } catch (SAXException ex) {
-        throw new InvalidHostMetaException(ex);
-      }
+      final URL hostMetaUrl = getHostMetaUrl(domain, false);
+      final InputStream stream = proxy == null
+          ? hostMetaUrl.openStream()
+          : hostMetaUrl.openConnection(proxy).getInputStream();
+      return DomUtils.readDocument(stream);
     });
   }
 
-  private static List<Connection> queryHostMetaXml(@NonNull Document hostMeta) {
+  /**
+   * Queries {@literal host-meta.xml} for {@link Connection}s. Signals
+   * {@link MalformedURLException} if {@code domain} is invalid. Signals
+   * {@link SAXException} if the XML is invalid.
+   */
+  @Nonnull
+  public static Single<List<Connection>>
+  queryHostMetaXml(final String domain, @Nullable final Proxy proxy) {
+    return downloadHostMetaXml(domain, proxy).map(Connection::queryHostMetaXml);
+  }
+
+  /**
+   * Queries {@literal host-meta.xml} for {@link Connection}s.
+   */
+  @Nonnull
+  public static List<Connection> queryHostMetaXml(final Document hostMeta) {
     return Observable.fromIterable(
         DomUtils.convertToList(hostMeta.getDocumentElement().getElementsByTagName("Link"))
     ).cast(Element.class).filter(
@@ -170,30 +198,8 @@ public class Connection {
     )).toList().blockingGet();
   }
 
-  public static Single<List<Connection>>
-  queryHostMetaXml(@NonNull final String domain, @Nullable final Proxy proxy)
-      throws MalformedURLException {
-    return downloadHostMetaXml(domain, proxy)
-        .map(Connection::queryHostMetaXml);
-  }
-
-  public static Single<List<Connection>>
-  queryHostMetaXml(@NonNull final InputStream hostMeta)
-      throws IOException, InvalidHostMetaException {
-    return Single.fromCallable(() -> {
-      try {
-        return DocumentBuilderFactory
-            .newInstance()
-            .newDocumentBuilder()
-            .parse(hostMeta);
-      } catch (SAXException ex) {
-        throw new InvalidHostMetaException(ex);
-      }
-    }).map(Connection::queryHostMetaXml);
-  }
-
   private static List<Connection>
-  queryHostMetaJson(@NonNull final JsonObject hostMeta) {
+  queryHostMetaJson(@Nonnull final JsonObject hostMeta) {
     return Observable.fromIterable(
         hostMeta.getAsJsonObject().getAsJsonArray("links")
     ).filter(
@@ -205,30 +211,46 @@ public class Connection {
         Protocol.WEBSOCKET,
         new URI(
             element.getAsJsonObject()
-                   .getAsJsonPrimitive("href")
-                   .getAsString()
+                .getAsJsonPrimitive("href")
+                .getAsString()
         )
     )).toList().blockingGet();
   }
 
-  public static Single<List<Connection>>
-  queryHostMetaJson(@NonNull final Reader hostMeta) {
-    return Single.fromCallable(
-        () -> new JsonParser().parse(hostMeta).getAsJsonObject()
-    ).map(Connection::queryHostMetaJson);
+  /**
+   * Queries {@literal host-meta.json} for {@link Connection}s.
+   */
+  @Nonnull
+  public static List<Connection> queryHostMetaJson(final Reader hostMeta)
+      throws InvalidHostMetaException {
+    try {
+      return queryHostMetaJson(
+          new JsonParser().parse(hostMeta).getAsJsonObject()
+      );
+    } catch (Exception ex) {
+      throw new InvalidHostMetaException(ex);
+    }
   }
 
+  /**
+   * Queries {@literal host-meta.json} for XMPP connections. Signals
+   * {@link InvalidHostMetaException} if the JSON is invalid. Signals
+   * {@link IOException} if error occurs when downloading the JSON. Signals
+   * {@link MalformedURLException} if {@code domain} is invalid.
+   */
   public static Single<List<Connection>>
-  queryHostMetaJson(@NonNull final String domain, @Nullable final Proxy proxy)
-      throws InvalidHostMetaException, IOException {
+  queryHostMetaJson(@Nonnull final String domain, @Nullable final Proxy proxy) {
     return downloadHostMetaJson(domain, proxy).map(Connection::queryHostMetaJson);
   }
 
-  public static Single<List<Connection>> queryDns(@NonNull final String domain) {
+  /**
+   * Queries DNS records for {@link Connection}s.
+   */
+  public static Single<List<Connection>> queryDns(@Nonnull final String domain) {
     return Single.fromCallable(() -> {
       final List<Connection> result = new ArrayList<>();
       final Record[] tcpRecords = new Lookup(
-          DNR_SRV_QUERY + domain, Type.SRV
+          QUERY_DNR_SRV + domain, Type.SRV
       ).run();
       if (tcpRecords != null) {
         Observable.fromArray(tcpRecords).cast(SRVRecord.class).forEach(it -> {
@@ -240,7 +262,7 @@ public class Connection {
         });
       }
       final Record[] tcpTlsRecords = new Lookup(
-          DNR_SRV_SECURE_QUERY + domain, Type.SRV
+          QUERY_DNR_SRV_TLS + domain, Type.SRV
       ).run();
       if (tcpTlsRecords != null) {
         Observable.fromArray(tcpTlsRecords).cast(SRVRecord.class).forEach(it -> {
@@ -252,7 +274,7 @@ public class Connection {
         });
       }
       final Record[] txtRecords = new Lookup(
-          DNS_TXT_QUERY + domain, Type.TXT
+          QUERY_DNS_TXT + domain, Type.TXT
       ).run();
       if (txtRecords != null) {
         Observable.fromArray(txtRecords).cast(TXTRecord.class)
@@ -271,13 +293,40 @@ public class Connection {
     });
   }
 
-  public Connection(@NonNull final Protocol protocol,
-                    @NonNull final String scheme,
-                    @NonNull final String domain,
+  /**
+   * Queries {@link Connection}s from a server using all methods. The token
+   * silently ignores all signaled {@link Exception}s.
+   */
+  public static Single<List<Connection>>
+  queryAll(final String domain, @Nullable final Proxy proxy) {
+    return Single.zip(
+        queryDns(domain).onErrorReturnItem(Collections.emptyList()),
+        queryHostMetaXml(domain, proxy).onErrorReturnItem(Collections.emptyList()),
+        queryHostMetaJson(domain, proxy).onErrorReturnItem(Collections.emptyList()),
+        (list1, list2, list3) -> {
+          final List<Connection> result = new ArrayList<>(list1);
+          result.addAll(list2);
+          result.addAll(list3);
+          return result;
+        }
+    );
+  }
+
+  /**
+   * Constructs a {@link Connection} with full server URI.
+   * @param port Use {@code -1} to indicate no port.
+   * @throws IllegalArgumentException If {@link Protocol#TCP} is specified.
+   */
+  public Connection(@Nonnull final Protocol protocol,
+                    @Nonnull final String scheme,
+                    @Nonnull final String domain,
                     final int port,
                     @Nullable final String path) {
-    if (protocol == null || protocol == Protocol.TCP) {
-      throw new IllegalArgumentException();
+    Objects.requireNonNull(protocol, "`protocol` is absent.");
+    if (protocol == Protocol.TCP) {
+      throw new IllegalArgumentException(
+          "TCP protocol is not suitable for this constructor."
+      );
     }
     this.protocol = protocol;
     Validate.notBlank(scheme, "`scheme` is absent.");
@@ -289,7 +338,12 @@ public class Connection {
     this.tlsMethod = null;
   }
 
-  public Connection(@NonNull final String domain,
+  /**
+   * Constructs a TCP {@link Connection}.
+   * @param port Use {@code -1} to indicate no port.
+   * @param tlsMethod Use {@code null} for not using TLS at all.
+   */
+  public Connection(final String domain,
                     final int port,
                     @Nullable final TlsMethod tlsMethod) {
     this.protocol = Protocol.TCP;
@@ -301,8 +355,12 @@ public class Connection {
     path = "";
   }
 
-  public Connection(@NonNull final Protocol protocol,
-                    @NonNull final URI uri) {
+  /**
+   * Constructs a {@link Connection} with a full server URI. Convenient method
+   * of {@link #Connection(Protocol, String, String, int, String)}.
+   */
+  public Connection(final Protocol protocol,
+                    final URI uri) {
     this(
         protocol,
         uri.getScheme(),
@@ -312,26 +370,49 @@ public class Connection {
     );
   }
 
-  public @NonNull Protocol getProtocol() {
+  /**
+   * Gets the protocol.
+   */
+  @Nonnull
+  public Protocol getProtocol() {
     return protocol;
   }
 
+  /**
+   * Gets the port.
+   * @return {@code -1} if no port is specified.
+   */
   public int getPort() {
     return port;
   }
 
-  public @NonNull String getScheme() {
+  /**
+   * Gets the "scheme" part of a URL. Might be {@literal ws} or {@literal wss}.
+   */
+  @Nonnull
+  public String getScheme() {
     return scheme;
   }
 
-  public @NonNull String getDomain() {
+  /**
+   * Gets the domain name or IP address of the server.
+   */
+  @Nonnull
+  public String getDomain() {
     return domain;
   }
 
-  public @NonNull String getPath() {
+  /**
+   * Gets the "path" part of a URI.
+   */
+  @Nonnull
+  public String getPath() {
     return path;
   }
 
+  /**
+   * Indicates whether TLS is enabled.
+   */
   public boolean isTlsEnabled() {
     if (protocol == Protocol.TCP) {
       return tlsMethod != null;
@@ -346,7 +427,11 @@ public class Connection {
     }
   }
 
-  @NonNull
+  /**
+   * Gets how it establishes TLS connections.
+   * @return {@code null} if it does not use TLS at all.
+   */
+  @Nullable
   public TlsMethod getTlsMethod() {
     if (this.protocol == Protocol.TCP) {
       return this.tlsMethod;
@@ -357,8 +442,15 @@ public class Connection {
     }
   }
 
-  @NonNull
+  /**
+   * Gets the URI represented by this class.
+   * @return {@code null} if the protocol is {@link Protocol#TCP}.
+   */
+  @Nullable
   public URI getUri() {
+    if (getProtocol() == Protocol.TCP) {
+      return null;
+    }
     try {
       return new URI(scheme, null, domain, port, path, null, null);
     } catch (URISyntaxException ex) {

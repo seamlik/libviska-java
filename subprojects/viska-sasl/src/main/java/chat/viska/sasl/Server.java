@@ -17,19 +17,32 @@
 package chat.viska.sasl;
 
 import java.util.Map;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> server.
  */
+@NotThreadSafe
 public interface Server {
 
   /**
    * Gets the name of the SASL mechanism.
    */
+  @Nonnull
   String getMechanism();
 
+  /**
+   * Generates a challenge.
+   * @return {@code null} if error occurred.
+   */
+  @Nullable
   byte[] challenge();
 
+  /**
+   * Accepts and processes a response.
+   */
   void acceptResponse(byte[] response);
 
   /**
@@ -47,21 +60,22 @@ public interface Server {
    * Gets the error occurred during the authentication.
    * @throws IllegalStateException If authentication not completed.
    */
+  @Nullable
   AuthenticationException getError();
 
   /**
    * Gets the authorization ID in effect for the client of this session. If the
    * client did not specify one, it returns the authentication ID instead.
-   * @return {@code null} if authentication not completed.
+   * @throws IllegalStateException If authentication not completed.
    */
+  @Nonnull
   String getAuthorizationId();
 
   /**
    * Gets a {@link Map} containing properties negotiated during the
    * authentication. What key-value pairs it will contain is defined by the
    * implementations.
-   * @return {@code null} if authentication not completed, otherwise a
-   *         {@link Map} which is either empty or containing properties.
    */
+  @Nonnull
   Map<String, ?> getNegotiatedProperties();
 }

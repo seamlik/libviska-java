@@ -16,7 +16,7 @@
 
 package chat.viska.xmpp;
 
-import io.reactivex.annotations.NonNull;
+import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
 
@@ -29,7 +29,7 @@ public interface Plugin extends SessionAware {
    * Gets the dependencies. When this plugin is being applied, all dependencies
    * will also be applied automatically as well.
    */
-  @NonNull
+  @Nonnull
   Set<Class<? extends Plugin>> getDependencies();
 
   /**
@@ -41,7 +41,7 @@ public interface Plugin extends SessionAware {
    * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
    * Discovery</a></p>
    */
-  @NonNull
+  @Nonnull
   Set<String> getFeatures();
 
   /**
@@ -52,10 +52,10 @@ public interface Plugin extends SessionAware {
    * @return {@link Set} of {@link java.util.Map.Entry}s whose keys are XML
    *         namespaces and values are {@code <iq/>} sub-element tag names.
    */
-  @NonNull
+  @Nonnull
   Set<Map.Entry<String, String>> getSupportedIqs();
 
-  void onApplied(@NonNull final Session session);
+  void onApplied(@Nonnull final Session session);
 
   void onSessionOnline();
 

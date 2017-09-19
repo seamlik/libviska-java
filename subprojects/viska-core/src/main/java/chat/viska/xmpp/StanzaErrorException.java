@@ -17,8 +17,8 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.EnumUtils;
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Objects;
@@ -220,8 +220,8 @@ public class StanzaErrorException extends Exception {
    *         conform to <a href="https://datatracker.ietf.org/doc/rfc6120">RFC
    *         6120</a>.
    */
-  @NonNull
-  public static StanzaErrorException fromXml(@NonNull final Document document)
+  @Nonnull
+  public static StanzaErrorException fromXml(@Nonnull final Document document)
       throws StreamErrorException {
     final Element errorElement = (Element) document
         .getDocumentElement()
@@ -312,9 +312,9 @@ public class StanzaErrorException extends Exception {
     );
   }
 
-  public StanzaErrorException(@NonNull final Stanza stanza,
-                              @NonNull final Condition condition,
-                              @NonNull final Type type,
+  public StanzaErrorException(@Nonnull final Stanza stanza,
+                              @Nonnull final Condition condition,
+                              @Nonnull final Type type,
                               @Nullable final String text,
                               @Nullable final Jid errorGenerator,
                               @Nullable final URI redirect,
@@ -334,12 +334,12 @@ public class StanzaErrorException extends Exception {
   /**
    * Default constructor.
    */
-  public StanzaErrorException(@NonNull final Stanza.Type stanzaType,
-                              @NonNull final String id,
-                              @NonNull final Jid originalSender,
-                              @NonNull final Jid intendedRecipient,
-                              @NonNull final Condition condition,
-                              @NonNull final Type errorType,
+  public StanzaErrorException(@Nonnull final Stanza.Type stanzaType,
+                              @Nonnull final String id,
+                              @Nonnull final Jid originalSender,
+                              @Nonnull final Jid intendedRecipient,
+                              @Nonnull final Condition condition,
+                              @Nonnull final Type errorType,
                               @Nullable final String text,
                               @Nullable final Jid errorGenerator,
                               @Nullable final URI redirect,
@@ -372,7 +372,7 @@ public class StanzaErrorException extends Exception {
   /**
    * Gets the stanza ID.
    */
-  @NonNull
+  @Nonnull
   public String getId() {
     return id;
   }
@@ -420,7 +420,7 @@ public class StanzaErrorException extends Exception {
   /**
    * Gets the descriptive text.
    */
-  @NonNull
+  @Nonnull
   public String getText() {
     return text;
   }
@@ -458,7 +458,7 @@ public class StanzaErrorException extends Exception {
     return stanzaType;
   }
 
-  @NonNull
+  @Nonnull
   public Document toXml() {
     throw new UnsupportedOperationException();
   }

@@ -16,14 +16,26 @@
 
 package chat.viska.commons;
 
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import org.apache.commons.lang3.StringUtils;
 
+/**
+ * Provides utility functions for working with {@link Enum}s.
+ */
 public class EnumUtils {
 
+  /**
+   * Gets an enum value based on its value appearing in an XML document.
+   * @param type Type of the enum.
+   * @param value XML value.
+   * @param <T> Tyle of the enum.
+   * @return {@code null} if {@code value} is {@code null}.
+   * @throws IllegalArgumentException If the conversion cannot be done.
+   */
+  @Nullable
   public static <T extends Enum<T>> T
-  fromXmlValue(@NonNull final Class<T> type,
+  fromXmlValue(@Nonnull final Class<T> type,
                @Nullable final String value) throws IllegalArgumentException {
     if (StringUtils.isBlank(value)) {
       return null;
@@ -32,8 +44,15 @@ public class EnumUtils {
     }
   }
 
+  /**
+   * Converts an enum to a {@link String} representation for being used in an
+   * XML document.
+   * @param value The enum.
+   * @param <T> Type of the enum.
+   */
+  @Nonnull
   public static <T extends Enum<T>> String
-  toXmlValue(@NonNull final T value) {
+  toXmlValue(@Nonnull final T value) {
     return value.name().replace('_', '-').toLowerCase();
   }
 }

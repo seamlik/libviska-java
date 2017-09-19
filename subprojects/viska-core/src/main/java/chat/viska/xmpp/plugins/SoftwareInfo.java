@@ -16,8 +16,8 @@
 
 package chat.viska.xmpp.plugins;
 
-import io.reactivex.annotations.NonNull;
-import io.reactivex.annotations.Nullable;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Objects;
 
 /**
@@ -42,7 +42,7 @@ public class SoftwareInfo {
   /**
    * Gets the software name.
    */
-  @NonNull
+  @Nonnull
   public String getName() {
     return name;
   }
@@ -50,7 +50,7 @@ public class SoftwareInfo {
   /**
    * Gets the software version.
    */
-  @NonNull
+  @Nonnull
   public String getVersion() {
     return version;
   }
@@ -58,7 +58,7 @@ public class SoftwareInfo {
   /**
    * Gets the operating system name.
    */
-  @NonNull
+  @Nonnull
   public String getOperatingSystem() {
     return operatingSystem;
   }
