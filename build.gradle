@@ -108,7 +108,7 @@ task javadocAll(type: Javadoc) {
   options {
     links(
         'http://reactivex.io/RxJava/2.x/javadoc',
-        'https://docs.oracle.com/javase/8/docs/api',
+        'https://docs.oracle.com/javase/9/docs/api',
         'https://static.javadoc.io/com.google.code.findbugs/jsr305/3.0.2'
     )
     overview = overviewPath
