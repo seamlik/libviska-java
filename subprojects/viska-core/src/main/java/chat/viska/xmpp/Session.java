@@ -24,10 +24,13 @@ import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.commons.reactive.MutableReactiveObject;
 import chat.viska.commons.reactive.ReactiveObject;
 import chat.viska.sasl.CredentialRetriever;
+import chat.viska.xmpp.plugins.BasePlugin;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
+import io.reactivex.Observable;
 import io.reactivex.Single;
+import io.reactivex.exceptions.OnErrorNotImplementedException;
 import io.reactivex.functions.Action;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
@@ -35,6 +38,7 @@ import io.reactivex.schedulers.Schedulers;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EventObject;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -45,26 +49,208 @@ import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.WillCloseWhenClosed;
 import javax.annotation.concurrent.ThreadSafe;
+import javax.net.ssl.SSLSession;
 import javax.xml.transform.TransformerException;
 import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 /**
- * Default parent of all implementations of {@link Session}.
+ * XMPP session responsible for connecting to an XMPP server, exchanging XMPP
+ * stanzas and all other heavy work. This is the main entry point for an XMPP
+ * client developer.
+ *
+ * <p>Different implementations of this interface differ in the connection
+ * methods they use and how they are implemented, e.g. WebSocket vs. plain TCP
+ * and <a href="https://netty.io">Netty</a> vs. {@link java.nio}.</p>
+ *
+ * <p>Implementations of this interface must designed as {@link ThreadSafe}.</p>
+ *
+ * <h1>Usage</h1>
+ *
+ * <p>The following is a brief workflow of using a {@link Session}:</p>
+ *
+ * <ol>
+ *   <li>Initialize a {@link Session}.</li>
+ *   <li>
+ *     Obtain a {@link Connection} based on the domain name of an XMPP server.
+ *   </li>
+ *   <li>
+ *     Apply some {@link Plugin}s in order to support more XMPP extensions.
+ *   </li>
+ *   <li>Login or register using {@code login()}.</li>
+ *   <li>Shutdown the {@link Session} using {@link #disconnect()}.</li>
+ * </ol>
  *
  * <p>This class does not support stream level compression.</p>
  */
 @ThreadSafe
-public abstract class DefaultSession implements Session {
+public abstract class Session implements AutoCloseable {
+
+  /**
+   * State of a {@link Session}.
+   *
+   * <h1>State diagram</h1>
+   * <pre>{@code
+   *             +--------------+
+   *             |              |
+   *             |   DISPOSED   |
+   *             |              |
+   *             +--------------+
+   *
+   *                    ^
+   *                    | dispose()
+   *                    +
+   *
+   *             +---------------+
+   *             |               |                            Connection loss
+   * +---------> | DISCONNECTED  |    <------------+------------------------------+-----------------------+
+   * |           |               |                 |                              |                       |
+   * |           +---------------+                 |                              |                       |
+   * |                                             |                              |                       |
+   * |                 +  ^                        |                              |                       |
+   * |         login() |  | Connection loss        |                              |                       |
+   * |                 v  +                        +                              +                       +
+   * |
+   * |           +--------------+           +--------------+               +--------------+        +--------------+
+   * |           |              |           |              |               |              |        |              |
+   * |           |  CONNECTING  | +-------> |  CONNECTED   | +---------->  | HANDSHAKING  | +----> |   ONLINE     |
+   * |           |              |           |              |               |              |        |              |
+   * |           +--------------+           +--------------+               +--------------+        +--------------+
+   * |
+   * |                  +                           +                             +                       +
+   * |                  | disconnect()              |                             |                       |
+   * |                  v                           |                             |                       |
+   * |                                              |                             |                       |
+   * |           +---------------+                  |                             |                       |
+   * |           |               |                  |                             |                       |
+   * +---------+ | DISCONNECTING | <----------------+-----------------------------+-----------------------+
+   *             |               |                             disconnect()
+   *             +---------------+
+   * }</pre>
+   */
+  public enum State {
+
+    /**
+     * Indicates a network connection to the server is established and is
+     * about to login or perform in-band registration.
+     */
+    CONNECTED,
+
+    /**
+     * Indicates the {@link Session} is establishing a network
+     * connection to a server.
+     */
+    CONNECTING,
+
+    /**
+     * Indicates the network connection is lost and waiting to reconnect and
+     * resume the XMPP stream. However, it enters {@link State#DISPOSED} directly
+     * upon losing the connection if
+     * <a href="https://xmpp.org/extensions/xep-0198.html">Stream
+     * Management</a> is disabled.
+     */
+    DISCONNECTED,
+
+    /**
+     * Indicates the {@link Session} is closing the connection or the
+     * server is doing so.
+     */
+    DISCONNECTING,
+
+    /**
+     * Indicates the {@link Session} has been shut down. Most actions
+     * that changes the state will throw an {@link IllegalStateException}.
+     */
+    DISPOSED,
+
+    /**
+     * Indicates the {@link Session} is logging in.
+     */
+    HANDSHAKING,
+
+    /**
+     * Indicates the user has logged into the server.
+     */
+    ONLINE
+  }
+
+  /**
+   * Contains information of {@link Plugin}s applied on an {@link Session}.
+   */
+  @ThreadSafe
+  public class PluginManager implements SessionAware {
+
+    private final Set<Plugin> plugins = new HashSet<>();
+
+    private PluginManager() {}
+
+    /**
+     * Applies a {@link Plugin}. This method does nothing if the plugin
+     * has already been applied.
+     * @throws IllegalArgumentException If it fails to apply the {@link Plugin}.
+     */
+    public synchronized void apply(final @Nonnull Class<? extends Plugin> type)
+        throws IllegalArgumentException {
+      Objects.requireNonNull(type);
+      if (getPlugin(type) != null) {
+        return;
+      }
+      final Plugin plugin;
+      try {
+        plugin = type.getConstructor().newInstance();
+      } catch (Exception ex) {
+        throw new IllegalArgumentException(
+            "Unable to instantiate plugin " + type.getCanonicalName(),
+            ex
+        );
+      }
+      try {
+        Observable.fromIterable(plugin.getDependencies()).forEach(this::apply);
+      } catch (OnErrorNotImplementedException ex) {
+        throw new IllegalArgumentException(
+            "Unable to apply dependencies of plugin " + type.getCanonicalName(),
+            ex.getCause()
+        );
+      }
+      this.plugins.add(plugin);
+      plugin.onApplied(getSession());
+    }
+
+    /**
+     * Gets an applied plugin which is of a particular type.
+     * @return {@code null} if the plugin cannot be found.
+     */
+    @Nullable
+    public synchronized Plugin getPlugin(Class<? extends Plugin> type) {
+      for (Plugin plugin : plugins) {
+        if (type.isInstance(plugin)) {
+          return plugin;
+        }
+      }
+      return null;
+    }
+
+    @Nonnull
+    public Set<Plugin> getPlugins() {
+      return Collections.unmodifiableSet(plugins);
+    }
+
+    @Override
+    @Nonnull
+    public Session getSession() {
+      return Session.this;
+    }
+  }
 
   /**
    * Indicates the connection is terminated.
    */
   public static class ConnectionTerminatedEvent extends EventObject {
 
-    public ConnectionTerminatedEvent(@Nonnull final DefaultSession source) {
+    public ConnectionTerminatedEvent(@Nonnull final Session source) {
       super(source);
     }
   }
@@ -75,7 +261,7 @@ public abstract class DefaultSession implements Session {
    */
   public static class StartTlsHandshakeCompletedEvent extends EventObject {
 
-    public StartTlsHandshakeCompletedEvent(DefaultSession o) {
+    public StartTlsHandshakeCompletedEvent(Session o) {
       super(o);
     }
   }
@@ -88,7 +274,7 @@ public abstract class DefaultSession implements Session {
   private final MutableReactiveObject<State> state = new MutableReactiveObject<>(
       State.DISCONNECTED
   );
-  private final PluginManager pluginManager;
+  private final PluginManager pluginManager = new PluginManager();
   private final Connection connection;
   private final Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
   private final Flowable<Stanza> inboundStanzaStream;
@@ -112,10 +298,10 @@ public abstract class DefaultSession implements Session {
    *        <a href="https://xmpp.org/extensions/xep-0198.html">Stream
    *        Management</a>
    */
-  protected DefaultSession(@Nullable final Jid jid,
-                           @Nullable final Jid authzId,
-                           final Connection connection,
-                           final boolean streamManagement) {
+  protected Session(@Nullable final Jid jid,
+                    @Nullable final Jid authzId,
+                    final Connection connection,
+                    final boolean streamManagement) {
     Objects.requireNonNull(connection, "`connection` is absent.");
     this.connection = connection;
     this.jid = jid;
@@ -178,7 +364,7 @@ public abstract class DefaultSession implements Session {
         "Session is now " + it.name())
     );
 
-    this.pluginManager = new PluginManager(this);
+    getPluginManager().apply(BasePlugin.class);
   }
 
   /**
@@ -198,7 +384,7 @@ public abstract class DefaultSession implements Session {
    *       </li>
    *       <li>
    *         Fetch inbound XML data sent by the server and feed it to
-   *         {@link DefaultSession} using {@link #feedXmlPipeline(Document)}.
+   *         {@link Session} using {@link #feedXmlPipeline(Document)}.
    *       </li>
    *     </ul>
    *   </li>
@@ -268,7 +454,12 @@ public abstract class DefaultSession implements Session {
     xmlPipeline.read(xml);
   }
 
-  @Override
+  /**
+   * Starts logging in.
+   * @return Token to track the completion.
+   * @throws IllegalStateException If this {@link Session} is not disconnected.
+   */
+  @CheckReturnValue
   @Nonnull
   public Completable login(@Nonnull final String password) {
     Validate.notBlank(password, "`password` is absent.");
@@ -291,8 +482,13 @@ public abstract class DefaultSession implements Session {
     );
   }
 
+  /**
+   * Starts logging in.
+   * @return Token to track the completion.
+   * @throws IllegalStateException If this {@link Session} is not disconnected.
+   */
   @Nonnull
-  @Override
+  @CheckReturnValue
   public Completable login(final CredentialRetriever retriever,
                            @Nullable final String resource,
                            final boolean registering,
@@ -391,8 +587,11 @@ public abstract class DefaultSession implements Session {
         .doOnError(it -> disconnect().observeOn(Schedulers.io()).subscribe());
   }
 
+  /**
+   * Starts closing the XMPP stream and the network connection.
+   */
   @Nonnull
-  @Override
+  @CheckReturnValue
   public Completable disconnect() {
     synchronized (this.state) {
       switch (this.state.getValue()) {
@@ -418,8 +617,12 @@ public abstract class DefaultSession implements Session {
     }).andThen(handshakerPipe.closeStream()).andThen(onClosingConnection());
   }
 
+  /**
+   * Starts shutting down the Session and releasing all system resources.
+   */
   @Nonnull
-  @Override
+  @CheckReturnValue
+  @WillCloseWhenClosed
   public Completable dispose() {
     final Action action = () -> {
       synchronized (this.state) {
@@ -453,14 +656,23 @@ public abstract class DefaultSession implements Session {
     dispose().blockingAwait();
   }
 
-  @Override
+  /**
+   * Sends an XML stanza to the server. The stanza will not be validated by any
+   * means, so beware that the server may close the connection once any policy
+   * is violated.
+   * @throws IllegalStateException If this class is disposed of.
+   */
   @Nonnull
   public StanzaReceipt send(final Document xml) {
     xmlPipeline.write(xml);
     return new StanzaReceipt(this, Maybe.empty());
   }
 
-  @Override
+  /**
+   * Sends a stream error and then disconnects.
+   * @throws IllegalStateException If this {@link Session} is not connected or
+   *         online.
+   */
   public void send(StreamErrorException error) {
     synchronized (this.state) {
       switch (this.state.getValue()) {
@@ -481,7 +693,6 @@ public abstract class DefaultSession implements Session {
   }
 
   @Nonnull
-  @Override
   public IqReceipt sendIqQuery(final String namespace,
                                @Nullable final Jid target,
                                @Nullable final Map<String, String> params) {
@@ -524,44 +735,69 @@ public abstract class DefaultSession implements Session {
 
   }
 
+  /**
+   * Gets the logger.
+   */
   @Nonnull
-  @Override
   public Logger getLogger() {
     return logger;
   }
 
+  /**
+   * Gets the {@link Connection} that is currently using or will be used.
+   */
   @Nullable
-  @Override
   public Connection getConnection() {
     return connection;
   }
 
+  /**
+   * Gets a stream of inbound XMPP stanzas. The stream will not emits
+   * any errors but will emit a completion after this class is disposed of.
+   */
   @Nonnull
-  @Override
   public Flowable<Stanza> getInboundStanzaStream() {
     return inboundStanzaStream;
   }
 
-  @Override
+  /**
+   * Gets the plugin manager.
+   */
   @Nonnull
   public PluginManager getPluginManager() {
     return pluginManager;
   }
 
-  @Override
+  /**
+   * Gets the current {@link State}.
+   */
   @Nonnull
   public ReactiveObject<State> getState() {
     return state;
   }
 
-  @Override
+  /**
+   * Gets a stream of emitted {@link EventObject}s. It never emits any errors
+   * but will emit a completion signal once this class enters
+   * {@link State#DISPOSED}.
+   *
+   * <p>This class emits only the following types of {@link EventObject}:</p>
+   *
+   * <ul>
+   *   <li>{@link chat.viska.commons.ExceptionCaughtEvent}</li>
+   *   <li>{@link ConnectionTerminatedEvent}</li>
+   * </ul>
+   */
   @Nonnull
   public Flowable<EventObject> getEventStream() {
     return eventStream;
   }
 
+  /**
+   * Gets the negotiated {@link Jid} after handshake.
+   * @return {@code null} if the handshake has not completed yet.
+   */
   @Nullable
-  @Override
   public Jid getJid() {
     final Pipe handshaker = this.xmlPipeline.get(PIPE_HANDSHAKER);
     if (handshaker instanceof HandshakerPipe) {
@@ -572,7 +808,6 @@ public abstract class DefaultSession implements Session {
   }
 
   @Nonnull
-  @Override
   public Set<StreamFeature> getStreamFeatures() {
     final Pipe handshaker = this.xmlPipeline.get(PIPE_HANDSHAKER);
     if (handshaker instanceof HandshakerPipe) {
@@ -581,4 +816,48 @@ public abstract class DefaultSession implements Session {
       return Collections.emptySet();
     }
   }
+
+  /**
+   * Gets the connection level {@link Compression}.
+   * @return {@code null} is no {@link Compression} is used, always {@code null}
+   *         if it is not implemented.
+   */
+  @Nullable
+  public abstract Compression getConnectionCompression();
+
+  @Nonnull
+  public abstract Set<Compression> getSupportedConnectionCompression();
+
+  /**
+   * Gets the
+   * <a href="https://datatracker.ietf.org/doc/rfc3749">TLS level
+   * compression</a>. It is not recommended to use because of security reason.
+   * @return {@code null} if no {@link Compression} is used, always {@code null}
+   *         if it is not implemented.
+   */
+  @Nullable
+  public abstract Compression getTlsCompression();
+
+  @Nonnull
+  public abstract Set<Compression> getSupportedTlsCompression();
+
+  /**
+   * Gets the stream level {@link Compression} which is defined in
+   * <a href="https://xmpp.org/extensions/xep-0138.html">XEP-0138: Stream
+   * Compression</a>.
+   */
+  @Nullable
+  public abstract Compression getStreamCompression();
+
+  @Nonnull
+  public abstract Set<Compression> getSupportedStreamCompression();
+
+  /**
+   * Gets the
+   * <a href="https://en.wikipedia.org/wiki/Transport_Layer_Security">TLS</a>
+   * information of the server connection.
+   * @return {@code null} if the connection is not using TLS.
+   */
+  @Nullable
+  public abstract SSLSession getTlsSession();
 }

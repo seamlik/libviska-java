@@ -158,7 +158,7 @@ public class Cmd {
   @Parameter(names = "--jid", description = "JID", converter = JidConverter.class)
   private Jid jid;
 
-  @Parameter(names = "--password", description = "Password")
+  @Parameter(names = "--password", description = "Password", password = true)
   private String password;
 
   @Parameter(names = "--websocket", description = "WebSocket URI", converter = URIConverter.class)

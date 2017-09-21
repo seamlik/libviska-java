@@ -20,13 +20,20 @@ import chat.viska.commons.DomUtils;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
+import io.netty.channel.AddressedEnvelope;
+import io.netty.channel.ReflectiveChannelFactory;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.handler.codec.dns.DefaultDnsQuestion;
+import io.netty.handler.codec.dns.DefaultDnsRawRecord;
+import io.netty.handler.codec.dns.DnsRecord;
+import io.netty.handler.codec.dns.DnsRecordType;
+import io.netty.handler.codec.dns.DnsSection;
+import io.netty.resolver.dns.DnsNameResolverBuilder;
+import io.reactivex.Maybe;
 import io.reactivex.Observable;
 import io.reactivex.Single;
-import java.util.Collections;
-import java.util.Objects;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.io.IOException;
+import io.reactivex.schedulers.Schedulers;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -37,7 +44,12 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
@@ -46,6 +58,7 @@ import org.xbill.DNS.Lookup;
 import org.xbill.DNS.Record;
 import org.xbill.DNS.SRVRecord;
 import org.xbill.DNS.TXTRecord;
+import org.xbill.DNS.TextParseException;
 import org.xbill.DNS.Type;
 import org.xml.sax.SAXException;
 
@@ -102,8 +115,9 @@ public class Connection {
   }
 
   private static final String QUERY_DNS_TXT = "_xmppconnect.";
-  private static final String QUERY_DNR_SRV = "_xmpp-client._tcp.";
-  private static final String QUERY_DNR_SRV_TLS = "_xmpps-client._tcp.";
+  private static final String QUERY_DNR_SRV_STARTTLS = "_xmpp-client._tcp.";
+  private static final String QUERY_DNR_SRV_DIRECTTLS = "_xmpps-client._tcp.";
+  private static final String KEY_TXT_WEBSOCKET = "_xmpp-client-websocket=";
 
   private final Protocol protocol;
   private final String scheme;
@@ -121,7 +135,8 @@ public class Connection {
    * @param json Indicates whether to get the JSON version or the XML version.
    * @throws MalformedURLException If {@code domain} is invalid.
    */
-  private static @Nonnull URL getHostMetaUrl(@Nonnull String host, boolean json)
+  @Nonnull
+  private static URL getHostMetaUrl(final String host, final boolean json)
       throws MalformedURLException {
     final String hostMetaPath = "/.well-known/host-meta" + (json ? ".json" : "");
     return new URL(
@@ -137,9 +152,9 @@ public class Connection {
    * {@link InvalidHostMetaException} if the downloaded XML is invalid.
    */
   @Nonnull
-  private static Single<JsonObject>
+  private static Maybe<JsonObject>
   downloadHostMetaJson(final String domain, @Nullable final Proxy proxy) {
-    return Single.fromCallable(() -> {
+    return Maybe.fromCallable(() -> {
       final URL hostMetaUrl = getHostMetaUrl(domain, true);
       try {
           final InputStream stream = proxy == null
@@ -151,6 +166,8 @@ public class Connection {
           return new JsonParser().parse(reader).getAsJsonObject();
       } catch (JsonParseException ex) {
         throw new InvalidHostMetaException(ex);
+      } catch (Exception ex) {
+        return null;
       }
     });
   }
@@ -161,14 +178,20 @@ public class Connection {
    * {@link SAXException} if the downloaded XML is invalid.
    */
   @Nonnull
-  private static Single<Document>
+  private static Maybe<Document>
   downloadHostMetaXml(final String domain, @Nullable final Proxy proxy) {
-    return Single.fromCallable(() -> {
+    return Maybe.fromCallable(() -> {
       final URL hostMetaUrl = getHostMetaUrl(domain, false);
-      final InputStream stream = proxy == null
-          ? hostMetaUrl.openStream()
-          : hostMetaUrl.openConnection(proxy).getInputStream();
-      return DomUtils.readDocument(stream);
+      try {
+        final InputStream stream = proxy == null
+            ? hostMetaUrl.openStream()
+            : hostMetaUrl.openConnection(proxy).getInputStream();
+        return DomUtils.readDocument(stream);
+      } catch (SAXException ex) {
+        throw ex;
+      } catch (Exception ex) {
+        return null;
+      }
     });
   }
 
@@ -178,7 +201,7 @@ public class Connection {
    * {@link SAXException} if the XML is invalid.
    */
   @Nonnull
-  public static Single<List<Connection>>
+  public static Maybe<List<Connection>>
   queryHostMetaXml(final String domain, @Nullable final Proxy proxy) {
     return downloadHostMetaXml(domain, proxy).map(Connection::queryHostMetaXml);
   }
@@ -217,6 +240,46 @@ public class Connection {
     )).toList().blockingGet();
   }
 
+  private static Single<List<Record>>
+  lookupDnsUsingDnsjava(final String query, final int type) throws TextParseException {
+    return Single.fromCallable(() -> {
+      final Lookup lookup = new Lookup(query, type);
+      final Record[] records = lookup.run();
+      if (records == null) {
+        if ("host not found".equals(lookup.getErrorString())) {
+          return Collections.emptyList();
+        } else {
+          throw new DnsQueryException(lookup.getErrorString());
+        }
+      } else {
+        return Arrays.asList(records);
+      }
+    });
+  }
+
+  private static Single<List<DnsRecord>>
+  lookupDnsUsingNetty(final String query,
+                      final DnsRecordType type,
+                      @Nullable final Iterable<String> dns) {
+    final NioEventLoopGroup threadPool = new NioEventLoopGroup();
+    final DnsNameResolverBuilder builder = new DnsNameResolverBuilder(threadPool.next());
+    builder.channelFactory(new ReflectiveChannelFactory<>(NioDatagramChannel.class));
+    builder.decodeIdn(true);
+    if (dns != null) {
+      builder.searchDomains(dns);
+    }
+    return Single.fromFuture(
+        builder.build().query(new DefaultDnsQuestion(query, type))
+    ).map(AddressedEnvelope::content).map(message -> {
+      final int recordsSize = message.count(DnsSection.ANSWER);
+      final List<DnsRecord> records = new ArrayList<>(recordsSize);
+      for (int it = 0; it < recordsSize; ++it) {
+        records.add(message.recordAt(DnsSection.ANSWER, it));
+      }
+      return records;
+    }).doFinally(threadPool::shutdownGracefully);
+  }
+
   /**
    * Queries {@literal host-meta.json} for {@link Connection}s.
    */
@@ -235,62 +298,115 @@ public class Connection {
   /**
    * Queries {@literal host-meta.json} for XMPP connections. Signals
    * {@link InvalidHostMetaException} if the JSON is invalid. Signals
-   * {@link IOException} if error occurs when downloading the JSON. Signals
    * {@link MalformedURLException} if {@code domain} is invalid.
    */
-  public static Single<List<Connection>>
+  public static Maybe<List<Connection>>
   queryHostMetaJson(@Nonnull final String domain, @Nullable final Proxy proxy) {
     return downloadHostMetaJson(domain, proxy).map(Connection::queryHostMetaJson);
   }
 
   /**
-   * Queries DNS records for {@link Connection}s.
+   * Queries DNS records for {@link Connection}s. Signals {@link Exception} if
+   * DNS queries could not be made.
+   * @throws IllegalArgumentException If {@code domain} is invalid.
    */
-  public static Single<List<Connection>> queryDns(@Nonnull final String domain) {
-    return Single.fromCallable(() -> {
-      final List<Connection> result = new ArrayList<>();
-      final Record[] tcpRecords = new Lookup(
-          QUERY_DNR_SRV + domain, Type.SRV
-      ).run();
-      if (tcpRecords != null) {
-        Observable.fromArray(tcpRecords).cast(SRVRecord.class).forEach(it -> {
-          result.add(new Connection(
-              it.getTarget().toString(true),
-              it.getPort(),
-              TlsMethod.STARTTLS
-          ));
-        });
-      }
-      final Record[] tcpTlsRecords = new Lookup(
-          QUERY_DNR_SRV_TLS + domain, Type.SRV
-      ).run();
-      if (tcpTlsRecords != null) {
-        Observable.fromArray(tcpTlsRecords).cast(SRVRecord.class).forEach(it -> {
-          result.add(new Connection(
-              it.getTarget().toString(true),
-              it.getPort(),
-              TlsMethod.DIRECT
-          ));
-        });
-      }
-      final Record[] txtRecords = new Lookup(
+  @Nonnull
+  public static Single<List<Connection>> queryDns(final String domain) {
+    final Observable<Connection> startTlsResults;
+    final Observable<Connection> directTlsResults;
+    final Observable<Connection> txtResults;
+
+    try {
+      startTlsResults = lookupDnsUsingDnsjava(
+          QUERY_DNR_SRV_STARTTLS + domain, Type.SRV
+      ).flattenAsObservable(it -> it).cast(SRVRecord.class).map(it -> new Connection(
+          it.getTarget().toString(true),
+          it.getPort(),
+          TlsMethod.STARTTLS
+      ));
+      directTlsResults = lookupDnsUsingDnsjava(
+          QUERY_DNR_SRV_DIRECTTLS + domain, Type.SRV
+      ).flattenAsObservable(it -> it).cast(SRVRecord.class).map(it -> new Connection(
+          it.getTarget().toString(true),
+          it.getPort(),
+          TlsMethod.DIRECT
+      ));
+      txtResults = lookupDnsUsingDnsjava(
           QUERY_DNS_TXT + domain, Type.TXT
-      ).run();
-      if (txtRecords != null) {
-        Observable.fromArray(txtRecords).cast(TXTRecord.class)
-            .map(TXTRecord::getStrings)
-            .forEach(it -> {
-              final String txt = (String) it.get(0);
-              if (txt.startsWith("_xmpp-client-websocket=")) {
-                result.add(new Connection(
-                    Protocol.WEBSOCKET,
-                    new URI(txt.substring(txt.indexOf('=') + 1))
-                ));
-              }
-            });
-      }
-      return result;
-    });
+      ).flattenAsObservable(
+          it -> it
+      ).cast(
+          TXTRecord.class
+      ).map(
+          TXTRecord::getStrings
+      ).flatMap(
+          Observable::fromArray
+      ).cast(
+          String.class
+      ).filter(
+          it -> it.startsWith(KEY_TXT_WEBSOCKET)
+      ).map(it -> new Connection(
+          Protocol.WEBSOCKET,
+          new URI(it.substring(it.indexOf('=') + 1))
+      ));
+    } catch (TextParseException ex) {
+      throw new IllegalArgumentException(ex);
+    }
+
+    /*
+    startTlsResults = lookupDnsUsingNetty(
+        QUERY_DNR_SRV_STARTTLS + domain, DnsRecordType.SRV, null
+    ).flattenAsObservable(
+        it -> it
+    ).ofType(
+        DefaultDnsRawRecord.class
+    ).cast(
+        DefaultDnsRawRecord.class
+    ).map(
+        it -> it.content().toString(StandardCharsets.UTF_8)
+    ).map(
+        it -> it.split(" ")
+    ).map(
+        it -> new Connection(it[7], Integer.parseInt(it[6]), TlsMethod.STARTTLS)
+    );
+
+    directTlsResults = lookupDnsUsingNetty(
+        QUERY_DNR_SRV_DIRECTTLS + domain, DnsRecordType.SRV, null
+    ).flattenAsObservable(
+        it -> it
+    ).ofType(
+        DefaultDnsRawRecord.class
+    ).cast(
+        DefaultDnsRawRecord.class
+    ).map(
+        DefaultDnsRawRecord::toString
+    ).map(
+        it -> it.split(" ")
+    ).map(
+        it -> new Connection(it[7], Integer.parseInt(it[6]), TlsMethod.DIRECT)
+    );
+
+    txtResults = lookupDnsUsingNetty(
+        QUERY_DNS_TXT + domain, DnsRecordType.TXT, null
+    ).flattenAsObservable(
+        it -> it
+    ).ofType(
+        DefaultDnsRawRecord.class
+    ).cast(
+        DefaultDnsRawRecord.class
+    ).map(
+        DefaultDnsRawRecord::toString
+    ).filter(
+        it -> it.startsWith(KEY_TXT_WEBSOCKET)
+    ).map(it -> new Connection(
+        Protocol.WEBSOCKET,
+        new URI(it.substring(it.indexOf('=') + 1))
+    ));
+    */
+
+    return Observable.concat(
+        startTlsResults, directTlsResults, txtResults
+    ).toList();
   }
 
   /**
@@ -300,9 +416,9 @@ public class Connection {
   public static Single<List<Connection>>
   queryAll(final String domain, @Nullable final Proxy proxy) {
     return Single.zip(
-        queryDns(domain).onErrorReturnItem(Collections.emptyList()),
-        queryHostMetaXml(domain, proxy).onErrorReturnItem(Collections.emptyList()),
-        queryHostMetaJson(domain, proxy).onErrorReturnItem(Collections.emptyList()),
+        queryDns(domain),
+        queryHostMetaXml(domain, proxy).toSingle(Collections.emptyList()),
+        queryHostMetaJson(domain, proxy).toSingle(Collections.emptyList()),
         (list1, list2, list3) -> {
           final List<Connection> result = new ArrayList<>(list1);
           result.addAll(list2);

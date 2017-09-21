@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+ * Copyright 2017 Kai-Chung Yan (殷啟聰)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,22 @@
  * limitations under the License.
  */
 
-dependencies {
-  compile 'com.google.code.gson:gson:2.8.1'
-  compile 'dnsjava:dnsjava:2.1.8'
-  compile 'io.netty:netty-resolver-dns:4.1.15.Final'
-  compile 'io.netty:netty-transport:4.1.15.Final'
-  compile project(':viska-commons')
-  compile project(':viska-sasl')
+package chat.viska.xmpp;
+
+public class DnsQueryException extends Exception {
+
+  public DnsQueryException() {
+  }
+
+  public DnsQueryException(String s) {
+    super(s);
+  }
+
+  public DnsQueryException(String s, Throwable throwable) {
+    super(s, throwable);
+  }
+
+  public DnsQueryException(Throwable throwable) {
+    super(throwable);
+  }
 }
