@@ -21,6 +21,7 @@ import chat.viska.commons.EnumUtils;
 import chat.viska.commons.reactive.MutableReactiveObject;
 import chat.viska.xmpp.CommonXmlns;
 import chat.viska.xmpp.Jid;
+import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
 import chat.viska.xmpp.Stanza;
 import io.reactivex.Maybe;
@@ -50,7 +51,7 @@ import org.w3c.dom.Node;
  *   <li><a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software Version</a></li>
  * </ul>
  */
-public class BasePlugin extends BlankPlugin {
+public class BasePlugin implements Plugin {
 
   private static final Set<String> features = new HashSet<>(Arrays.asList(
       CommonXmlns.SOFTWARE_VERSION
@@ -72,6 +73,8 @@ public class BasePlugin extends BlankPlugin {
   private final MutableReactiveObject<String> softwareVersion = new MutableReactiveObject<>("");
   private final MutableReactiveObject<String> operatingSystem = new MutableReactiveObject<>("");
   private final MutableReactiveObject<String> softwareType = new MutableReactiveObject<>("");
+
+  private Session session;
 
   @Nullable
   private static List<DiscoItem> convertToDiscoItems(@Nonnull final Document xml) {
@@ -336,8 +339,8 @@ public class BasePlugin extends BlankPlugin {
   }
 
   @Override
-  public void onApplied(Session session) {
-    super.onApplied(session);
+  public void onApplied(final Session session) {
+    this.session = session;
 
     // Software Version
     getSession()
@@ -372,5 +375,17 @@ public class BasePlugin extends BlankPlugin {
         .subscribe(it -> getSession().send(
             getDiscoItemsResult(it)
         ));
+  }
+
+  @Nullable
+  @Override
+  public Session getSession() {
+    return session;
+  }
+
+  @Nonnull
+  @Override
+  public Set<Class<? extends Plugin>> getDependencies() {
+    return Collections.emptySet();
   }
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp.plugins;
+package chat.viska.xmpp.plugins.jingle;
 
 import chat.viska.commons.reactive.MutableReactiveObject;
 import chat.viska.commons.reactive.ReactiveObject;

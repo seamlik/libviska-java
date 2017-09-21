@@ -4,7 +4,6 @@ include ':viska-cmd-java'
 include ':viska-commons'
 include ':viska-core'
 include ':viska-impl-netty'
-include ':viska-jingle'
 include ':viska-sasl'
 
 rootProject.children.each { pr ->

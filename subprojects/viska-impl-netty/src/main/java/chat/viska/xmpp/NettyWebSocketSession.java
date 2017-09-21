@@ -83,7 +83,7 @@ import org.xml.sax.SAXException;
  * </table>
  */
 @ThreadSafe
-public class NettyWebSocketSession extends DefaultSession {
+public class NettyWebSocketSession extends Session {
 
   private class ConsumerHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
 

@@ -64,7 +64,7 @@ import org.xml.sax.SAXException;
  * <p>This class does not support any compression.</p>
  */
 @ThreadSafe
-public class NettyTcpSession extends DefaultSession {
+public class NettyTcpSession extends Session {
 
   private class StreamClosingDetector extends ByteToMessageDecoder {
 

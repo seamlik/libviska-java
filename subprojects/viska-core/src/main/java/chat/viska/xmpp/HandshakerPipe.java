@@ -78,7 +78,7 @@ import org.xml.sax.SAXException;
  * {@link Document}s to represent each top-level elements in the XMPP stream,
  * it assumes the XML framing conforms to
  * <a href="https://datatracker.ietf.org/doc/rfc7395">RFC 7395</a>.
- * Implementations of {@link DefaultSession} should take care of the
+ * Implementations of {@link Session} should take care of the
  * conversion.</p>
  *
  * <h3>SASL</h3>
@@ -599,12 +599,12 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     if (getSession().getConnection().getTlsMethod() == Connection.TlsMethod.STARTTLS) {
       getSession()
           .getEventStream()
-          .ofType(DefaultSession.StartTlsHandshakeCompletedEvent.class)
+          .ofType(Session.StartTlsHandshakeCompletedEvent.class)
           .subscribe(it -> sendStreamOpening());
     }
     getSession()
         .getEventStream()
-        .ofType(DefaultSession.ConnectionTerminatedEvent.class)
+        .ofType(Session.ConnectionTerminatedEvent.class)
         .filter(it -> getState().getValue() != State.STREAM_CLOSED)
         .observeOn(Schedulers.io())
         .subscribe(it -> {
