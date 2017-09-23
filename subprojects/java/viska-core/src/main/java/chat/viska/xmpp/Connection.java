@@ -405,7 +405,7 @@ public class Connection {
     */
 
     return Observable.concat(
-        startTlsResults, directTlsResults, txtResults
+        txtResults, directTlsResults, startTlsResults
     ).toList();
   }
 
