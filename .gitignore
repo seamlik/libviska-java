@@ -7,4 +7,5 @@
 /gradlew
 /gradlew.bat
 build/
+local.properties
 out/

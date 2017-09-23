@@ -18,8 +18,10 @@ buildscript {
   repositories {
     jcenter()
     maven { url 'https://plugins.gradle.org/m2' }
+    google()
   }
   dependencies {
+    classpath 'com.android.tools.build:gradle:3.0.0-beta6'
     classpath 'gradle.plugin.com.github.spotbugs:gradlePlugin:1.2'
     classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0'
   }
@@ -28,95 +30,59 @@ buildscript {
 allprojects {
   group = 'chat.viska'
   version = file("${rootDir}/VERSION").text
-}
-
-subprojects {
-  apply plugin: 'checkstyle'
-  apply plugin: 'com.github.spotbugs'
-  apply plugin: 'java'
-  apply plugin: 'maven-publish'
-  apply plugin: 'org.junit.platform.gradle.plugin'
-  apply plugin: 'pmd'
-
-  sourceCompatibility = 8
-
-  repositories {
-    jcenter()
-  }
-
-  dependencies {
-    testCompile("org.junit.jupiter:junit-jupiter-api:5.0.0")
-    testRuntime("org.junit.jupiter:junit-jupiter-engine:5.0.0")
-  }
-
-  checkstyle {
-    toolVersion = '8.1'
-    File styleFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
-    if (!styleFile.exists()) {
-      mkdir styleFile.parent
-      styleFile.createNewFile()
-      styleFile.write(new URL(
-        'https://raw.githubusercontent.com/checkstyle/checkstyle/master/src/main/resources/google_checks.xml'
-      ).text)
-    }
-    config = resources.text.fromFile(styleFile)
-  }
-
-  pmd {
-    ruleSets = [
-        'java-basic',
-        'java-braces',
-        'java-clone',
-        'java-codesize',
-        'java-controversial',
-        'java-coupling',
-        'java-design',
-        'java-empty',
-        'java-finalizers',
-        'java-imports',
-        'java-junit',
-        'java-logging-java',
-        'java-migrating',
-        'java-naming',
-        'java-optimizations',
-        'java-strictexception',
-        'java-strings',
-        'java-sunsecure',
-        'java-typeresolution',
-        'java-unnecessary',
-        'java-unusedcode'
-    ]
-  }
-
-  publishing {
-    publications {
-      main(MavenPublication) {
-        from components.java
+  configurations {
+    all {
+      resolutionStrategy {
+        preferProjectModules()
       }
     }
   }
+  repositories {
+    jcenter()
+    google()
+  }
+}
+
+project(':java').subprojects {
+  apply from: "${rootDir}/gradle/java.gradle"
+}
+
+project(':android').subprojects {
+  apply from: "${rootDir}/gradle/android.gradle"
+}
+
+wrapper {
+  gradleVersion = '4.2'
 }
 
 task javadocAll(type: Javadoc) {
+  def outputDir = file("${buildDir}/javadocAll")
+  def overviewPath = 'doc/javadoc-overview.html'
+  def cssPath = 'doc/javadoc.css'
   group = 'documentation'
   description = 'Generates Javadoc for the whole project.'
-  def outputDir = file("${buildDir}/javadocAll")
   outputs.dir outputDir
   outputs.files "${outputDir}/**/*"
-  def overviewPath = 'doc/overview.html'
-  inputs.file overviewPath
+  inputs.files overviewPath, cssPath
   options {
     links(
-        'http://reactivex.io/RxJava/2.x/javadoc',
         'https://docs.oracle.com/javase/9/docs/api',
+        'https://developer.android.com/reference',
+        'http://reactivex.io/RxJava/2.x/javadoc',
         'https://static.javadoc.io/com.google.code.findbugs/jsr305/3.0.2'
     )
     overview = overviewPath
+    //stylesheetFile = file(cssPath)
   }
-  source(subprojects.collect { pr ->
-    pr.sourceSets.main.allJava
+  source(project(':java').subprojects.collect {
+    it.sourceSets.main.allJava
   })
-  classpath += files(subprojects.collect { pr ->
+  /*
+  source(project(':android').subprojects.collect {
+    it.android.sourceSets.getByName('java').sourceFiles
+  })
+  */
+  classpath += files(project(':java').subprojects.collect { pr ->
     pr.sourceSets.main.compileClasspath
   })
   destinationDir = outputDir
@@ -130,5 +96,3 @@ task clean {
     delete file('config/checkstyle/checkstyle.xml')
   }
 }
-
-defaultTasks 'assemble', 'javadocAll'

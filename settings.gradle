@@ -1,11 +1,16 @@
 rootProject.name = 'viska'
 
-include ':viska-cmd-java'
-include ':viska-commons'
-include ':viska-core'
-include ':viska-impl-netty'
-include ':viska-sasl'
+include ':android:viska-impl-android'
+include ':java:viska-cmd-java'
+include ':java:viska-commons'
+include ':java:viska-core'
+include ':java:viska-impl-jdk'
+include ':java:viska-impl-netty'
+include ':java:viska-sasl'
 
-rootProject.children.each { pr ->
-  pr.projectDir = file("${rootDir}/subprojects/${pr.name}")
+rootProject.children.each { it ->
+  it.projectDir = file("${rootDir}/subprojects/${it.name}")
+  it.children.each { itt ->
+    itt.projectDir = file("${rootDir}/subprojects/${itt.parent.name}/${itt.name}")
+  }
 }

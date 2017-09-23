@@ -1,0 +1,2 @@
+chat.viska.xmpp.NettyTcpSession
+chat.viska.xmpp.NettyWebSocketSession
