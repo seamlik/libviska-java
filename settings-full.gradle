@@ -1,6 +1,6 @@
 rootProject.name = 'viska'
 
-include ':android'
+include ':android:viska-impl-android'
 include ':java:viska-cmd-java'
 include ':java:viska-commons'
 include ':java:viska-core'

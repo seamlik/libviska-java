@@ -37,5 +37,13 @@ to download and install a newer Gradle.
 In order to build the project, simply run `gradle assemble` or
 `./gradlew assemble` if you are using Gradle Wrapper.
 
-Since Android Gradle Plugin supports Android Studio 3.0 only, this project can't be opened using
-IntelliJ IDEA. Hopefully this will be fixed by a future version of the plugin.
+Since Android Gradle Plugin supports Android Studio 3.0 only, the build scripts
+by default will not any Android related subprojects in order to maintain
+compatibility with Intellij IDEA. In order to build all components, use
+`settings-full.gradle` when running Gradle commands. For example:
+
+```bash
+gradle assemble --settings-file settings-full.gradle
+```
+
+Hopefully this will be fixed by a future version of the plugin.
