@@ -526,7 +526,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
           break;
       }
     }
-    if (this.negotiatedJid != null) {
+    if (!this.negotiatedJid.isEmpty()) {
       if (this.negotiatedFeatures.add(this.negotiatingFeature)) {
         this.eventStream.onNext(
             new FeatureNegotiatedEvent(this, StreamFeature.RESOURCE_BINDING)
@@ -662,8 +662,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    * Gets the JID negotiated during Resource Binding.
    * @return {@code null} if the negotiation is not completed yet.
    */
-  @Nullable
-  public Jid getJid() {
+  @Nonnull
+  public Jid getNegotiatedJid() {
     return negotiatedJid;
   }
 

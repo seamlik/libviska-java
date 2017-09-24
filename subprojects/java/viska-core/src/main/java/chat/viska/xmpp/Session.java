@@ -905,7 +905,7 @@ public abstract class Session implements AutoCloseable {
   public Jid getNegotiatedJid() {
     final Pipe handshaker = this.xmlPipeline.get(PIPE_HANDSHAKER);
     if (handshaker instanceof HandshakerPipe) {
-      return ((HandshakerPipe) handshaker).getJid();
+      return ((HandshakerPipe) handshaker).getNegotiatedJid();
     } else {
       return Jid.EMPTY;
     }
