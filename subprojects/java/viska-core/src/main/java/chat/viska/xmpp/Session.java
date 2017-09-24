@@ -629,16 +629,20 @@ public abstract class Session implements AutoCloseable {
         default:
           break;
       }
-    }
-    final Pipe handshakerPipe = xmlPipeline.get("handshaker");
-    final Completable closingStream = handshakerPipe instanceof HandshakerPipe
-        ? ((HandshakerPipe) handshakerPipe).closeStream()
-        : Completable.complete();
-    return Completable.fromAction(() -> {
-      synchronized (this.state) {
-        this.state.setValue(State.DISCONNECTING);
+      final Pipe handshakerPipe = xmlPipeline.get("handshaker");
+      final Completable action = Completable.fromAction(() -> {
+        synchronized (this.state) {
+          this.state.setValue(State.DISCONNECTING);
+        }
+      });
+      if (handshakerPipe instanceof HandshakerPipe) {
+        return action.andThen(
+            ((HandshakerPipe) handshakerPipe).closeStream()
+        ).andThen(onClosingConnection());
+      } else {
+        return action.andThen(onClosingConnection());
       }
-    }).andThen(closingStream).andThen(onClosingConnection());
+    }
   }
 
   /**
