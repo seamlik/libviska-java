@@ -24,6 +24,7 @@ import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
 import chat.viska.xmpp.Stanza;
+import io.reactivex.Completable;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
 import javax.annotation.Nonnull;
@@ -49,11 +50,13 @@ import org.w3c.dom.Node;
  * <ul>
  *   <li><a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service Discovery</a></li>
  *   <li><a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software Version</a></li>
+ *   <li><a href="https://xmpp.org/extensions/xep-0199.html">XEP-0199: XMPP Ping</a></li>
  * </ul>
  */
 public class BasePlugin implements Plugin {
 
   private static final Set<String> features = new HashSet<>(Arrays.asList(
+      CommonXmlns.PING,
       CommonXmlns.SOFTWARE_VERSION
   ));
   private static final Set<Map.Entry<String, String>> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
@@ -326,6 +329,23 @@ public class BasePlugin implements Plugin {
     throw new UnsupportedOperationException();
   }
 
+  /**
+   * Pings an entity. Signals a {@link java.util.NoSuchElementException} if the remote entity never
+   * responds before the {@link Session} is disposed of. Signals a
+   * {@link chat.viska.xmpp.StreamErrorException} if a stream error is received.
+   * @param jid The entity address. If {@code null} is specified, the server will be pinged.
+   * @throws IllegalStateException If the plugin is not applied to any {@link Session}.
+   */
+  @Nonnull
+  public Completable ping(@Nullable Jid jid) {
+    if (getSession() == null) {
+      throw new IllegalStateException();
+    }
+    return getSession().sendIqQuery(
+        CommonXmlns.PING, jid, null
+    ).getResponse().toSingle().toCompletable();
+  }
+
   @Override
   @Nonnull
   public Set<String> getFeatures() {
@@ -339,42 +359,42 @@ public class BasePlugin implements Plugin {
   }
 
   @Override
-  public void onApplied(final Session session) {
+  public void onApplied(@Nonnull final Session session) {
     this.session = session;
 
     // Software Version
-    getSession()
+    session
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(CommonXmlns.SOFTWARE_VERSION))
-        .subscribe(it -> getSession().send(
-            getSoftwareVersionResult(it.getSender(), it.getId())
-        ));
+        .subscribe(it -> session.send(getSoftwareVersionResult(it.getSender(), it.getId())));
 
     // disco#info
-    getSession()
+    session
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
-        .filter(it -> it.getIqNamespace().equals(
-            CommonXmlns.SERVICE_DISCOVERY + "#info"
-        ))
-        .subscribe(it -> getSession().send(
-            getDiscoInfoResult(it.getSender(), it.getId())
-        ));
+        .filter(it -> it.getIqNamespace().equals(CommonXmlns.SERVICE_DISCOVERY + "#info"))
+        .subscribe(it -> session.send(getDiscoInfoResult(it.getSender(), it.getId())));
 
     // disco#items
-    getSession()
+    session
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(
             CommonXmlns.SERVICE_DISCOVERY + "#items"
         ))
-        .subscribe(it -> getSession().send(
-            getDiscoItemsResult(it)
-        ));
+        .subscribe(it -> session.send(getDiscoItemsResult(it)));
+
+    // Ping
+    session
+        .getInboundStanzaStream()
+        .filter(it -> it.getIqType() == Stanza.IqType.GET)
+        .filter(it -> "query".equals(it.getIqName()))
+        .filter(it -> CommonXmlns.PING.equals(it.getIqNamespace()))
+        .subscribe(it -> session.send(it.getResultTemplate()));
   }
 
   @Nullable

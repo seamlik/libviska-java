@@ -21,6 +21,7 @@ package chat.viska.xmpp;
  */
 public final class CommonXmlns {
   public static final String JINGLE = "urn:xmpp:jingle:1";
+  public static final String PING = "urn:xmpp:ping";
   public static final String RESOURCE_BINDING = "urn:ietf:params:xml:ns:xmpp-bind";
   public static final String RESOURCE_BINDING_2 = "urn:xmpp:bind2:0";
   public static final String ROSTER = "jabber:iq:roster";
