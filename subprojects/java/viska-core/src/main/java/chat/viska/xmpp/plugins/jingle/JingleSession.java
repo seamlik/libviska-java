@@ -35,7 +35,6 @@ public class JingleSession implements SessionAware {
 
   private final Session session;
   private final String sessionId;
-  private final MutableReactiveObject<State> state = new MutableReactiveObject<>();
 
   public JingleSession(@Nonnull final Session session,
                        @Nonnull final String sessionId) {
@@ -44,16 +43,12 @@ public class JingleSession implements SessionAware {
   }
 
   @Nonnull
-  public ReactiveObject<State> getState() {
-    return state;
-  }
-
-  @Nonnull
   public String getSessionId() {
     return sessionId;
   }
 
   @Override
+  @Nonnull
   public Session getSession() {
     return session;
   }

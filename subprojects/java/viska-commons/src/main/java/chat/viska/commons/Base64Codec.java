@@ -18,6 +18,7 @@ package chat.viska.commons;
 
 import java.security.NoSuchProviderException;
 import java.util.ServiceLoader;
+import javax.annotation.Nullable;
 
 public abstract class Base64Codec {
 
@@ -28,7 +29,7 @@ public abstract class Base64Codec {
     throw new NoSuchProviderException();
   }
 
-  public abstract String encode(final byte[] data);
+  public abstract String encode(@Nullable final byte[] data);
 
-  public abstract byte[] decode(final String base64);
+  public abstract byte[] decode(@Nullable final String base64);
 }

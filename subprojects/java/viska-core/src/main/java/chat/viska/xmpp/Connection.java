@@ -25,7 +25,6 @@ import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.handler.codec.dns.DefaultDnsQuestion;
-import io.netty.handler.codec.dns.DefaultDnsRawRecord;
 import io.netty.handler.codec.dns.DnsRecord;
 import io.netty.handler.codec.dns.DnsRecordType;
 import io.netty.handler.codec.dns.DnsSection;
@@ -33,10 +32,10 @@ import io.netty.resolver.dns.DnsNameResolverBuilder;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
 import io.reactivex.Single;
-import io.reactivex.schedulers.Schedulers;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.Proxy;
 import java.net.URI;
@@ -54,9 +53,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.xbill.DNS.ExtendedResolver;
 import org.xbill.DNS.Lookup;
 import org.xbill.DNS.Record;
+import org.xbill.DNS.Resolver;
 import org.xbill.DNS.SRVRecord;
+import org.xbill.DNS.SimpleResolver;
 import org.xbill.DNS.TXTRecord;
 import org.xbill.DNS.TextParseException;
 import org.xbill.DNS.Type;
@@ -241,9 +243,23 @@ public class Connection {
   }
 
   private static Single<List<Record>>
-  lookupDnsUsingDnsjava(final String query, final int type) throws TextParseException {
+  lookupDnsUsingDnsjava(@Nonnull final String query,
+                        final int type,
+                        @Nullable final List<InetAddress> dns) throws TextParseException {
     return Single.fromCallable(() -> {
+      final List<? extends Resolver> resolvers = dns == null
+          ? Collections.emptyList()
+          : Observable.fromIterable(dns).map(it -> {
+            final SimpleResolver resolver = new SimpleResolver("localhost");
+            resolver.setAddress(it);
+            return resolver;
+          }).toList().blockingGet();
+      final Resolver resolver = resolvers.size() == 0
+          ? Lookup.getDefaultResolver()
+          : new ExtendedResolver(resolvers.toArray(new Resolver[resolvers.size()]));
+
       final Lookup lookup = new Lookup(query, type);
+      lookup.setResolver(resolver);
       final Record[] records = lookup.run();
       if (records == null) {
         if ("host not found".equals(lookup.getErrorString())) {
@@ -311,28 +327,31 @@ public class Connection {
    * @throws IllegalArgumentException If {@code domain} is invalid.
    */
   @Nonnull
-  public static Single<List<Connection>> queryDns(final String domain) {
+  public static Single<List<Connection>> queryDns(@Nonnull final String domain,
+                                                  @Nullable final List<InetAddress> dns) {
     final Observable<Connection> startTlsResults;
     final Observable<Connection> directTlsResults;
     final Observable<Connection> txtResults;
 
+
+
     try {
       startTlsResults = lookupDnsUsingDnsjava(
-          QUERY_DNR_SRV_STARTTLS + domain, Type.SRV
+          QUERY_DNR_SRV_STARTTLS + domain, Type.SRV, dns
       ).flattenAsObservable(it -> it).cast(SRVRecord.class).map(it -> new Connection(
           it.getTarget().toString(true),
           it.getPort(),
           TlsMethod.STARTTLS
       ));
       directTlsResults = lookupDnsUsingDnsjava(
-          QUERY_DNR_SRV_DIRECTTLS + domain, Type.SRV
+          QUERY_DNR_SRV_DIRECTTLS + domain, Type.SRV, dns
       ).flattenAsObservable(it -> it).cast(SRVRecord.class).map(it -> new Connection(
           it.getTarget().toString(true),
           it.getPort(),
           TlsMethod.DIRECT
       ));
       txtResults = lookupDnsUsingDnsjava(
-          QUERY_DNS_TXT + domain, Type.TXT
+          QUERY_DNS_TXT + domain, Type.TXT, dns
       ).flattenAsObservable(
           it -> it
       ).cast(
@@ -414,9 +433,9 @@ public class Connection {
    * silently ignores all signaled {@link Exception}s.
    */
   public static Single<List<Connection>>
-  queryAll(final String domain, @Nullable final Proxy proxy) {
+  queryAll(final String domain, @Nullable final Proxy proxy, @Nullable List<InetAddress> dns) {
     return Single.zip(
-        queryDns(domain),
+        queryDns(domain, dns),
         queryHostMetaXml(domain, proxy).toSingle(Collections.emptyList()),
         queryHostMetaJson(domain, proxy).toSingle(Collections.emptyList()),
         (list1, list2, list3) -> {

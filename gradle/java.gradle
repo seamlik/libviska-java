@@ -41,6 +41,13 @@ checkstyle {
   config = resources.text.fromFile(styleFile)
 }
 
+spotbugsMain {
+  reports {
+    html.enabled = true
+    xml.enabled = false
+  }
+}
+
 pmd {
   ruleSets = [
       'java-basic',

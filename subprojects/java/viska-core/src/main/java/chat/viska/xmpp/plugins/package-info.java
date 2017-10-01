@@ -17,7 +17,4 @@
 /**
  * Provides the built-in plugins.
  */
-@ParametersAreNonnullByDefault
 package chat.viska.xmpp.plugins;
-
-import javax.annotation.ParametersAreNonnullByDefault;

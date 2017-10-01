@@ -34,31 +34,10 @@ public class StanzaErrorException extends Exception {
    * Type of a stanza error.
    */
   public enum Type {
-
-    /**
-     * Indicates the client should retry after providing credentials.
-     */
     AUTH,
-
-    /**
-     * Indicates the entity has cancel the operation.
-     */
     CANCEL,
-
-    /**
-     * Indicates a warning and that the client may proceed.
-     */
     CONTINUE,
-
-    /**
-     * Indicates the client should retry after changing the data sent.
-     */
     MODIFY,
-
-    /**
-     * Indicates the error is temporary and the client should retry after
-     * waiting.
-     */
     WAIT
   }
 
@@ -66,140 +45,28 @@ public class StanzaErrorException extends Exception {
    * Condition of a stanza error.
    */
   public enum Condition {
-
-    /**
-     * Indicates the sent stanza does not conform to the schema and can not be
-     * processed.
-     */
     BAD_REQUEST,
-
-    /**
-     * Indicates access cannot be granted because an existing resource exists
-     * with the same name or address.
-     */
     CONFLICT,
-
-    /**
-     * Indicates the feature represented in the XML stanza is not implemented by
-     * the intended recipient or an intermediate server and therefore the stanza
-     * cannot be processed.
-     */
     FEATURE_NOT_IMPLEMENTED,
-
-    /**
-     * Indicates the requesting entity does not possess the necessary
-     * permissions to perform an action that only certain authorized roles or
-     * individuals are allowed to complete.
-     */
     FORBIDDEN,
-
-    /**
-     * Indicates the recipient or server can no longer be contacted at this
-     * address, typically on a permanent basis.
-     */
     GONE,
-
-    /**
-     * Indicates the server has experienced a misconfiguration or other internal
-     * error that prevents it from processing the stanza.
-     */
     INTERNAL_SERVER_ERROR,
-
-    /**
-     * Indicates the addressed JID or item requested cannot be found.
-     */
     ITEM_NOT_FOUND,
-
-    /**
-     * Indicates the stanza provided a malformed {@link Jid}.
-     */
     JID_MALFORMED,
-
-    /**
-     * Indicates the request does not meet criteria defined by the recipient or
-     * server.
-     */
     NOT_ACCEPTABLE,
-
-    /**
-     * Indicates the recipient or server does not allow any entity to perform
-     * the action.
-     */
     NOT_ALLOWED,
-
-    /**
-     * Indicates the sender needs to provide credentials before being allowed to
-     * perform the action, or has provided improper credentials.
-     */
     NOT_AUTHORIZED,
-
-    /**
-     * Indicates the entity has violated some local service policy.
-     */
     POLICY_VIOLATION,
-
-    /**
-     * Indicates the intended recipient is temporarily unavailable.
-     */
     RECIPIENT_UNAVAILABLE,
-
-    /**
-     * Indicates the recipient or server is redirecting requests for this
-     * information to another entity, typically in a temporary fashion.
-     */
     REDIRECT,
-
-    /**
-     * Indicates the requesting entity is not authorized to access the requested
-     * service because prior registration is necessary.
-     */
     REGISTRATION_REQUIRED,
-
-    /**
-     * Indicates a remote server or service specified as part or all of the
-     * {@link Jid}s of the intended recipient does not exist or cannot be
-     * resolved.
-     */
     REMOTE_SERVER_NOT_FOUND,
-
-    /**
-     * Indicates a remote server or service specified as part or all of the
-     * {@link Jid}s of the intended recipient (or needed to fulfill a request)
-     * was resolved but communications could not be established within a
-     * reasonable amount of time.
-     */
     REMOTE_SERVER_TIMEOUT,
-
-    /**
-     * Indicates the server or recipient is busy or lacks the system resources
-     * necessary to service the request.
-     */
     RESOURCE_CONSTRAINT,
-
-    /**
-     * Indicates the server or recipient does not currently provide the
-     * requested service.
-     */
     SERVICE_UNAVAILABLE,
-
-    /**
-     * Indicates the requesting entity is not authorized to access the requested
-     * service because a prior subscription is necessary.
-     */
     SUBSCRIPTION_REQUIRED,
-
-    /**
-     * Indicates the error condition is not one of those defined by
-     * <a href="https://datatracker.ietf.org/doc/rfc6120">RFC 6120</a>.
-     */
     UNDEFINED_CONDITION,
-
-    /**
-     * Indicates the recipient or server understood the request but was not
-     * expecting it at this time.
-     */
     UNEXPECTED_REQUEST,
-
   }
 
   private final Stanza.Type stanzaType;
@@ -216,7 +83,7 @@ public class StanzaErrorException extends Exception {
 
   /**
    * Generates an instance of this type based on the XML data of a stanza error.
-   * @throws IllegalArgumentException If the XML data is malformed or does nor
+   * @throws StreamErrorException If the XML data is malformed or does nor
    *         conform to <a href="https://datatracker.ietf.org/doc/rfc6120">RFC
    *         6120</a>.
    */

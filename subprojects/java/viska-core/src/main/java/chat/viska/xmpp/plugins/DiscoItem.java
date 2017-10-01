@@ -22,7 +22,7 @@ import javax.annotation.Nullable;
 import java.util.Objects;
 
 /**
- * Result of an item sendIqQuery defined in
+ * Result of an {@code #items} query defined in
  * <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>.
  */
 public class DiscoItem {

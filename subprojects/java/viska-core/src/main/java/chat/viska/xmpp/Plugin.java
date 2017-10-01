@@ -19,10 +19,12 @@ package chat.viska.xmpp;
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Plugin for an {@link Session}.
  */
+@ThreadSafe
 public interface Plugin extends SessionAware {
 
   /**
@@ -55,5 +57,5 @@ public interface Plugin extends SessionAware {
   @Nonnull
   Set<Map.Entry<String, String>> getSupportedIqs();
 
-  void onApplied(@Nonnull final Session session);
+  void onApplying(@Nonnull final Session.PluginContext context);
 }

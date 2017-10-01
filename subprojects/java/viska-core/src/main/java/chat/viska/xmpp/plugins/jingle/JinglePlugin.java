@@ -19,6 +19,7 @@ package chat.viska.xmpp.plugins.jingle;
 import chat.viska.xmpp.CommonXmlns;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
+import chat.viska.xmpp.plugins.BasePlugin;
 import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.HashSet;
@@ -30,7 +31,7 @@ import javax.annotation.Nullable;
 public class JinglePlugin implements Plugin {
 
   private final Set<JingleSession> sessions = new HashSet<>();
-  private Session xmppSession;
+  private Session.PluginContext context;
 
   public Set<JingleSession> getJingleSessions() {
     return Collections.unmodifiableSet(sessions);
@@ -51,19 +52,19 @@ public class JinglePlugin implements Plugin {
   }
 
   @Override
-  public void onApplied(@Nonnull Session session) {
-    xmppSession = session;
+  public void onApplying(@Nonnull Session.PluginContext context) {
+    this.context = context;
   }
 
-  @Nullable
+  @Nonnull
   @Override
   public Session getSession() {
-    return xmppSession;
+    return context.getSession();
   }
 
   @Nonnull
   @Override
   public Set<Class<? extends Plugin>> getDependencies() {
-    return Collections.emptySet();
+    return Collections.singleton(BasePlugin.class);
   }
 }

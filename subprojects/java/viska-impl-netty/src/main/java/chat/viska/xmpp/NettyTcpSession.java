@@ -64,7 +64,7 @@ import org.xml.sax.SAXException;
  * <p>This class does not support any compression.</p>
  */
 @ThreadSafe
-public class NettyTcpSession extends Session {
+public class NettyTcpSession extends StandardSession {
 
   private class StreamClosingDetector extends ByteToMessageDecoder {
 
@@ -108,7 +108,7 @@ public class NettyTcpSession extends Session {
       if (!"stream".equals(msg.name())
           || !CommonXmlns.STREAM_HEADER.equals(msg.namespace())
           || !CommonXmlns.STANZA_CLIENT.equals(bareNamespace)) {
-        send(new StreamErrorException(
+        sendError(new StreamErrorException(
             StreamErrorException.Condition.INVALID_NAMESPACE
         ));
         return;
@@ -294,7 +294,7 @@ public class NettyTcpSession extends Session {
           protected void channelRead0(ChannelHandlerContext ctx, XmlDocumentStart msg)
               throws Exception {
             if (!"UTF-8".equalsIgnoreCase(msg.encoding())) {
-              send(new StreamErrorException(
+              sendError(new StreamErrorException(
                   StreamErrorException.Condition.UNSUPPORTED_ENCODING,
                   "Only UTF-8 is supported in XMPP stream."
               ));
@@ -311,7 +311,7 @@ public class NettyTcpSession extends Session {
             try {
               feedXmlPipeline(preprocessInboundXml(msg));
             } catch (SAXException ex) {
-              send(new StreamErrorException(
+              sendError(new StreamErrorException(
                   StreamErrorException.Condition.BAD_FORMAT
               ));
             }
@@ -328,7 +328,7 @@ public class NettyTcpSession extends Session {
     return Completable.fromFuture(channelFuture).andThen(Completable.fromAction(() -> {
       this.nettyChannel = (SocketChannel) channelFuture.channel();
       this.nettyChannel.closeFuture().addListener(it -> {
-        triggerEvent(new ConnectionTerminatedEvent(this));
+        triggerEvent(new ConnectionTerminatedEvent());
       });
     }).andThen(Completable.fromAction(() ->
         getXmlPipelineOutboundStream().subscribe(it ->  {
@@ -360,7 +360,7 @@ public class NettyTcpSession extends Session {
   }
 
   @Override
-  protected void onStreamCompression(Compression compression) {
+  protected void onStreamCompression(@Nonnull final Compression compression) {
     throw new UnsupportedOperationException(
         "This class does not support stream compression."
     );

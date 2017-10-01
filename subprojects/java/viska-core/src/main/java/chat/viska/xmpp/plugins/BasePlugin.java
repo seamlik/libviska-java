@@ -27,8 +27,6 @@ import chat.viska.xmpp.Stanza;
 import io.reactivex.Completable;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Collection;
@@ -38,13 +36,16 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 /**
- * Provides the most fundamental features of an XMPP session.. This plugin is
- * built-in and needs be applied manually.
+ * Provides the most fundamental features of an XMPP session. This plugin is
+ * built-in and needs to be applied manually.
  *
  * <h1>Supported XMPP Extensions</h1>
  * <ul>
@@ -76,8 +77,7 @@ public class BasePlugin implements Plugin {
   private final MutableReactiveObject<String> softwareVersion = new MutableReactiveObject<>("");
   private final MutableReactiveObject<String> operatingSystem = new MutableReactiveObject<>("");
   private final MutableReactiveObject<String> softwareType = new MutableReactiveObject<>("");
-
-  private Session session;
+  private Session.PluginContext context;
 
   @Nullable
   private static List<DiscoItem> convertToDiscoItems(@Nonnull final Document xml) {
@@ -181,13 +181,8 @@ public class BasePlugin implements Plugin {
   }
 
   @Nonnull
-  private Document getSoftwareVersionResult(@Nonnull final Jid recipient,
-                                            @Nonnull final String id) {
-    final Document result = Stanza.getIqTemplate(
-        Stanza.IqType.RESULT,
-        id,
-        recipient
-    );
+  private Document getSoftwareVersionResult(@Nonnull final Stanza query) {
+    final Document result = query.getResultTemplate();
     final Node queryElement = result.appendChild(result.createElementNS(
         CommonXmlns.SOFTWARE_VERSION,
         "query"
@@ -205,13 +200,8 @@ public class BasePlugin implements Plugin {
   }
 
   @Nonnull
-  private Document getDiscoInfoResult(@Nonnull final Jid recipient,
-                                      @Nonnull final String id) {
-    final Document result = Stanza.getIqTemplate(
-        Stanza.IqType.RESULT,
-        id,
-        recipient
-    );
+  private Document getDiscoInfoResult(@Nonnull final Stanza query) {
+    final Document result = query.getResultTemplate();
     final Node queryElement = result.appendChild(result.createElementNS(
         CommonXmlns.SERVICE_DISCOVERY + "#info",
         "query"
@@ -278,7 +268,7 @@ public class BasePlugin implements Plugin {
 
   @Nonnull
   public Maybe<DiscoInfo> queryDiscoInfo(@Nonnull final Jid jid) {
-    return getSession().sendIqQuery(
+    return this.context.sendIq(
         CommonXmlns.SERVICE_DISCOVERY + "#info",
         jid,
         null
@@ -293,7 +283,7 @@ public class BasePlugin implements Plugin {
                                                 @Nullable final String node) {
     final Map<String, String> param = new HashMap<>(1);
     param.put("node", node);
-    return getSession().sendIqQuery(
+    return this.context.sendIq(
         CommonXmlns.SERVICE_DISCOVERY + "#items",
         jid,
         param
@@ -305,7 +295,7 @@ public class BasePlugin implements Plugin {
    */
   @Nonnull
   public Maybe<SoftwareInfo> querySoftwareInfo(@Nonnull final Jid jid) {
-    return getSession().sendIqQuery(
+    return this.context.sendIq(
         CommonXmlns.SOFTWARE_VERSION, jid,
         null
     ).getResponse().map(BasePlugin::convertToSoftwareInfo);
@@ -313,8 +303,9 @@ public class BasePlugin implements Plugin {
 
   @Nonnull
   public Maybe<List<RosterItem>> queryRoster() {
-    return getSession()
-        .sendIqQuery(CommonXmlns.ROSTER, null, null)
+    return this
+        .context
+        .sendIq(CommonXmlns.ROSTER, null, null)
         .getResponse()
         .map(Stanza::getXml)
         .map(BasePlugin::convertToRosterItems);
@@ -338,12 +329,13 @@ public class BasePlugin implements Plugin {
    */
   @Nonnull
   public Completable ping(@Nullable Jid jid) {
-    if (getSession() == null) {
-      throw new IllegalStateException();
-    }
-    return getSession().sendIqQuery(
-        CommonXmlns.PING, jid, null
-    ).getResponse().toSingle().toCompletable();
+    final Document iq = Stanza.getIqTemplate(
+        Stanza.IqType.GET,
+        UUID.randomUUID().toString(),
+        jid
+    );
+    iq.getDocumentElement().appendChild(iq.createElementNS(CommonXmlns.PING, "ping"));
+    return this.context.sendIq(new Stanza(iq)).getResponse().toSingle().toCompletable();
   }
 
   @Override
@@ -359,48 +351,49 @@ public class BasePlugin implements Plugin {
   }
 
   @Override
-  public void onApplied(@Nonnull final Session session) {
-    this.session = session;
+  public void onApplying(@Nonnull final Session.PluginContext context) {
+    this.context = context;
 
     // Software Version
-    session
+    context
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(CommonXmlns.SOFTWARE_VERSION))
-        .subscribe(it -> session.send(getSoftwareVersionResult(it.getSender(), it.getId())));
+        .subscribe(it -> context.sendIq(new Stanza(getSoftwareVersionResult(it))));
 
     // disco#info
-    session
+    context
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(CommonXmlns.SERVICE_DISCOVERY + "#info"))
-        .subscribe(it -> session.send(getDiscoInfoResult(it.getSender(), it.getId())));
+        .subscribe(it -> context.sendIq(new Stanza(getDiscoInfoResult(it))));
 
     // disco#items
-    session
+    context
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
-        .filter(it -> it.getIqNamespace().equals(
-            CommonXmlns.SERVICE_DISCOVERY + "#items"
-        ))
-        .subscribe(it -> session.send(getDiscoItemsResult(it)));
+        .filter(it -> it.getIqNamespace().equals(CommonXmlns.SERVICE_DISCOVERY + "#items"))
+        .subscribe(it -> context.sendIq(new Stanza(getDiscoItemsResult(it))));
 
     // Ping
-    session
+    context
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> "query".equals(it.getIqName()))
+        .filter(it -> "ping".equals(it.getIqName()))
         .filter(it -> CommonXmlns.PING.equals(it.getIqNamespace()))
-        .subscribe(it -> session.send(it.getResultTemplate()));
+        .subscribe(it -> context.sendIq(new Stanza(it.getResultTemplate())));
   }
 
-  @Nullable
+  @Nonnull
   @Override
   public Session getSession() {
-    return session;
+    if (context == null) {
+      throw new IllegalStateException();
+    }
+    return context.getSession();
   }
 
   @Nonnull

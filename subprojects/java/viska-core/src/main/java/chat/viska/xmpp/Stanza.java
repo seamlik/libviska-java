@@ -39,6 +39,9 @@ public class Stanza {
     PRESENCE
   }
 
+  /**
+   * Type of an {@code <iq/>}
+   */
   public enum IqType {
     ERROR,
     GET,
@@ -48,6 +51,9 @@ public class Stanza {
 
   private final Document xml;
 
+  /**
+   * Checks if a {@link Document} is a stanza.
+   */
   public static boolean isStanza(@Nullable final Document document) {
     if (document == null) {
       return false;
@@ -58,8 +64,12 @@ public class Stanza {
         || "presence".equals(rootName);
   }
 
-  public static Document getIqTemplate(final IqType type,
-                                       final String id,
+  /**
+   * Generates a {@link Document} template for an {@code <iq/>}.
+   */
+  @Nonnull
+  public static Document getIqTemplate(@Nonnull final IqType type,
+                                       @Nonnull final String id,
                                        @Nullable final Jid recipient) {
     final String iq = String.format(
         "<iq type=\"%1s\" id=\"%2s\"></iq>",
@@ -82,7 +92,6 @@ public class Stanza {
    * Default constructor.
    */
   public Stanza(@Nonnull final Document xml) {
-    Objects.requireNonNull(xml, "`xml` is absent.");
     this.xml = xml;
   }
 
@@ -94,22 +103,35 @@ public class Stanza {
     return xml;
   }
 
+  /**
+   * Gets the ID.
+   */
   @Nonnull
   public String getId() {
     return xml.getDocumentElement().getAttribute("id");
   }
 
-  @Nullable
+
+  /**
+   * Gets the recipient.
+   */
+  @Nonnull
   public Jid getRecipient() {
     return new Jid(xml.getDocumentElement().getAttribute("to"));
   }
 
-  @Nullable
+  /**
+   * Gets the sender.
+   */
+  @Nonnull
   public Jid getSender() {
     return new Jid(xml.getDocumentElement().getAttribute("from"));
   }
 
-  @Nonnull
+  /**
+   * Gets the type.
+   */
+  @Nullable
   public Type getType() {
     return EnumUtils.fromXmlValue(
         Type.class,
@@ -117,6 +139,9 @@ public class Stanza {
     );
   }
 
+  /**
+   * Gets the type of the {@code <iq/>}.
+   */
   @Nullable
   public IqType getIqType() {
     return EnumUtils.fromXmlValue(
@@ -125,6 +150,9 @@ public class Stanza {
     );
   }
 
+  /**
+   * Gets the local name of the sub-element of this {@code <iq/>}.
+   */
   @Nonnull
   public String getIqName() {
     final Element iqElement = (Element) this.xml
@@ -137,6 +165,9 @@ public class Stanza {
     }
   }
 
+  /**
+   * Gets the namespace URI of te sub-element of this {@code <iq/>}.
+   */
   @Nonnull
   public String getIqNamespace() {
     final Element iqElement = (Element) this.xml
@@ -150,7 +181,10 @@ public class Stanza {
     }
   }
 
-  @Nullable
+  /**
+   * Generates a template of a result to this {@code <iq/>}.
+   */
+  @Nonnull
   public Document getResultTemplate() {
     if (getType() != Type.IQ) {
       throw new IllegalStateException("This stanza is not an <iq/>.");
@@ -160,7 +194,7 @@ public class Stanza {
     }
     return getIqTemplate(
         IqType.RESULT,
-        UUID.randomUUID().toString(),
+        getId(),
         getSender()
     );
   }

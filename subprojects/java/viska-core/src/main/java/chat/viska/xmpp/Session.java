@@ -16,34 +16,22 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.DomUtils;
 import chat.viska.commons.ExceptionCaughtEvent;
-import chat.viska.commons.pipelines.BlankPipe;
-import chat.viska.commons.pipelines.Pipe;
-import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.commons.reactive.MutableReactiveObject;
 import chat.viska.commons.reactive.ReactiveObject;
-import chat.viska.sasl.CredentialRetriever;
 import chat.viska.xmpp.plugins.BasePlugin;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
-import io.reactivex.Single;
-import io.reactivex.exceptions.OnErrorNotImplementedException;
-import io.reactivex.functions.Action;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
-import java.security.NoSuchProviderException;
-import java.util.ArrayList;
-import java.util.Collection;
+import io.reactivex.schedulers.Schedulers;
 import java.util.Collections;
 import java.util.EventObject;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -52,40 +40,14 @@ import javax.annotation.CheckReturnValue;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.WillCloseWhenClosed;
+import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
-import javax.net.ssl.SSLSession;
-import javax.xml.transform.TransformerException;
-import org.apache.commons.lang3.Validate;
+import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 /**
- * XMPP session responsible for connecting to an XMPP server, exchanging XMPP
- * stanzas and all other heavy work. This is the main entry point for an XMPP
- * client developer.
- *
- * <p>Different implementations of this type differ in the connection methods
- * they use and how they are implemented, e.g. WebSocket vs. plain TCP and
- * <a href="https://netty.io">Netty</a> vs. {@link java.nio}.</p>
- *
- * <h1>Usage</h1>
- *
- * <p>The following is a brief workflow of using a {@link Session}:</p>
- *
- * <ol>
- *   <li>Initialize a {@link Session}.</li>
- *   <li>Set a {@link Jid} for login.</li>
- *   <li>
- *     Obtain a {@link Connection} based on the domain name of an XMPP server.
- *   </li>
- *   <li>
- *     Apply some {@link Plugin}s in order to support more XMPP extensions.
- *   </li>
- *   <li>Login or register using {@code login()}.</li>
- *   <li>Shutdown the {@link Session} using {@link #disconnect()}.</li>
- * </ol>
- *
- * <p>This class does not support stream level compression.</p>
+ * XMPP session defining abstract concept for all implementations.
  */
 @ThreadSafe
 public abstract class Session implements AutoCloseable {
@@ -184,7 +146,8 @@ public abstract class Session implements AutoCloseable {
   @ThreadSafe
   public class PluginManager implements SessionAware {
 
-    private final Set<Plugin> plugins = new HashSet<>();
+    @GuardedBy("itself")
+    private final Set<PluginContext> contexts = new HashSet<>();
 
     private PluginManager() {}
 
@@ -193,31 +156,29 @@ public abstract class Session implements AutoCloseable {
      * has already been applied.
      * @throws IllegalArgumentException If it fails to apply the {@link Plugin}.
      */
-    public synchronized void apply(final @Nonnull Class<? extends Plugin> type)
-        throws IllegalArgumentException {
-      Objects.requireNonNull(type);
+    public void apply(@Nonnull final Class<? extends Plugin> type) {
       if (getPlugin(type) != null) {
         return;
       }
-      final Plugin plugin;
-      try {
-        plugin = type.getConstructor().newInstance();
-      } catch (Exception ex) {
-        throw new IllegalArgumentException(
-            "Unable to instantiate plugin " + type.getCanonicalName(),
-            ex
-        );
+      synchronized (this.contexts) {
+        if (getPlugin(type) != null) {
+          return;
+        }
+        final Plugin plugin;
+        try {
+          plugin = type.getConstructor().newInstance();
+        } catch (Exception ex) {
+          throw new IllegalArgumentException(
+              ex
+          );
+        }
+        for (Class<? extends Plugin> it : plugin.getDependencies()) {
+          apply(it);
+        }
+        final PluginContext context = new PluginContext(plugin);
+        this.contexts.add(context);
+        plugin.onApplying(context);
       }
-      try {
-        Observable.fromIterable(plugin.getDependencies()).forEach(this::apply);
-      } catch (OnErrorNotImplementedException ex) {
-        throw new IllegalArgumentException(
-            "Unable to apply dependencies of plugin " + type.getCanonicalName(),
-            ex.getCause()
-        );
-      }
-      this.plugins.add(plugin);
-      plugin.onApplied(getSession());
     }
 
     /**
@@ -225,10 +186,12 @@ public abstract class Session implements AutoCloseable {
      * @return {@code null} if the plugin cannot be found.
      */
     @Nullable
-    public synchronized Plugin getPlugin(Class<? extends Plugin> type) {
-      for (Plugin plugin : plugins) {
-        if (type.isInstance(plugin)) {
-          return plugin;
+    public <T extends Plugin> T getPlugin(@Nonnull final Class<T> type) {
+      synchronized (this.contexts) {
+        for (PluginContext it : this.contexts) {
+          if (type.isInstance(it.plugin)) {
+            return (T) it.plugin;
+          }
         }
       }
       return null;
@@ -236,7 +199,32 @@ public abstract class Session implements AutoCloseable {
 
     @Nonnull
     public Set<Plugin> getPlugins() {
-      return Collections.unmodifiableSet(plugins);
+      final Set<Plugin> results = new HashSet<>();
+      Observable.fromIterable(this.contexts).map(it -> it.plugin).subscribe(results::add);
+      return Collections.unmodifiableSet(results);
+    }
+
+    public void setEnabled(@Nonnull final Class<? extends Plugin> type, final boolean enabled) {
+      synchronized (this.contexts) {
+        for (PluginContext it : this.contexts) {
+          if (type.isInstance(it.plugin)) {
+            it.enabled.setValue(false);
+          }
+        }
+      }
+    }
+
+    public void remove(@Nonnull final Class<? extends Plugin> type) {
+      final Set<PluginContext> toRemove = new HashSet<>();
+      synchronized (this.contexts) {
+        for (PluginContext it : this.contexts) {
+          if (type.isInstance(it.plugin)) {
+            it.onDestroying();
+            toRemove.add(it);
+          }
+        }
+        this.contexts.removeAll(toRemove);
+      }
     }
 
     @Override
@@ -247,65 +235,172 @@ public abstract class Session implements AutoCloseable {
   }
 
   /**
-   * Indicates the connection is terminated.
+   * Represents a processing window offered by a {@link Session} to a {@link Plugin}. When the
+   * {@link Plugin} is disabled or the {@link Session} is not online, the context will become
+   * unavailable during which no {@link Stanza} may be sent or received. The context will however
+   * buffer all pending outbound {@link Stanza}s and send them all once it becomes available. When
+   * the {@link Plugin} is removed from the {@link Session}, the context is destroyed and all its
+   * stream properties will signal a completion.
    */
-  public static class ConnectionTerminatedEvent extends EventObject {
+  public class PluginContext implements SessionAware {
 
-    public ConnectionTerminatedEvent(@Nonnull final Session source) {
-      super(source);
+    @GuardedBy("itself")
+    private final MutableReactiveObject<Boolean> enabled = new MutableReactiveObject<>(true);
+    private final MutableReactiveObject<Boolean> available = new MutableReactiveObject<>(
+        enabled.getValue() && getState().getValue() == State.ONLINE
+    );
+    private final Plugin plugin;
+    private final FlowableProcessor<Stanza> inboundStanzaStream = PublishProcessor.create();
+    private final Disposable stanzaSubscription;
+
+    private PluginContext(@Nonnull final Plugin plugin) {
+      this.plugin = plugin;
+      Flowable.combineLatest(
+          this.enabled.getStream(),
+          getState().getStream(),
+          (enabled, state) -> enabled && state == State.ONLINE
+      ).subscribe(this.available::setValue);
+      this.stanzaSubscription = Session.this.getInboundStanzaStream().filter(
+          it -> this.enabled.getValue()
+      ).subscribe(
+          this.inboundStanzaStream::onNext
+      );
+      getState().getStream().filter(it -> it == State.DISPOSED).firstOrError().subscribe( it -> {
+        onDestroying();
+      });
+    }
+
+    private void onDestroying() {
+      this.stanzaSubscription.dispose();
+      this.inboundStanzaStream.onComplete();
+      synchronized (this.enabled) {
+        this.enabled.complete();
+      }
+      this.available.complete();
+    }
+
+    /**
+     * Sends a stanza.
+     */
+    @Nonnull
+    public StanzaReceipt sendStanza(@Nonnull final Stanza stanza) {
+      this.available.getStream().filter(it -> it).firstElement().subscribe(
+          it -> Session.this.sendStanza(stanza)
+      );
+      return new StanzaReceipt(Session.this, Maybe.empty());
+    }
+
+    /**
+     * Sends an {@code <iq/>}.
+     * @return {@link IqReceipt} whose {@link IqReceipt#getResponse()} will signal a completion
+     *         immediately if the provided {@code iq} is a result or error.
+     */
+    @Nonnull
+    public IqReceipt sendIq(@Nonnull final Stanza iq) {
+      if (StringUtils.isBlank(iq.getId())) {
+        throw new IllegalArgumentException("No ID");
+      }
+      final Maybe<Stanza> response;
+      if (iq.getType() != Stanza.Type.IQ) {
+        throw new IllegalArgumentException("Not an <iq/>.");
+      } else if (iq.getIqType() == Stanza.IqType.GET || iq.getIqType() == Stanza.IqType.SET) {
+        response = getInboundStanzaStream().filter(
+            it -> iq.getId().equals(it.getId())
+        ).firstElement().doOnSuccess(it -> {
+          if (it.getIqType() == Stanza.IqType.ERROR) {
+            final StanzaErrorException error;
+            try {
+              error = StanzaErrorException.fromXml(it.getXml());
+              throw error;
+            } catch (StreamErrorException ex) {
+              sendError(ex);
+            }
+          }
+        });
+      } else if (iq.getIqType() == null) {
+        throw new IllegalArgumentException("<iq/> has no type.");
+      } else {
+        response = Maybe.empty();
+      }
+      return new IqReceipt(Session.this, sendStanza(iq).getServerAcknowledment(), response);
+    }
+
+    /**
+     * Sends a simple query. This query will look like:
+     * <p>{@code <iq id="..." to="target"><query xmlns="namespace" (more params) />}</p>
+     */
+    @Nonnull
+    public IqReceipt sendIq(@Nonnull final String namespace,
+                            @Nullable final Jid recipient,
+                            @Nullable final Map<String, String> attributes) {
+      final String id = UUID.randomUUID().toString();
+      final Document iq =  Stanza.getIqTemplate(
+          Stanza.IqType.GET,
+          id,
+          recipient
+      );
+      final Element element = (Element) iq.getDocumentElement().appendChild(
+          iq.createElementNS(namespace, "query")
+      );
+      if (attributes != null) {
+        for (Map.Entry<String, String> it : attributes.entrySet()) {
+          element.setAttribute(it.getKey(), it.getValue());
+        }
+      }
+      return sendIq(new Stanza(iq));
+    }
+
+    /**
+     * Sends a stanza error.
+     */
+    @Nonnull
+    public StanzaReceipt sendError(@Nonnull final StanzaErrorException error) {
+      return sendStanza(new Stanza(error.toXml()));
+    }
+
+    public void sendError(@Nonnull final StreamErrorException error) {
+      isAvailable().getStream().filter(it -> it).firstElement().subscribe(
+          it -> Session.this.sendError(error)
+      );
+    }
+
+    /**
+     * Gets a stream of inbound {@link Stanza}s.
+     */
+    @Nonnull
+    public Flowable<Stanza> getInboundStanzaStream() {
+      return inboundStanzaStream;
+    }
+
+    public ReactiveObject<Boolean> isAvailable() {
+      return available;
+    }
+
+    @Nonnull
+    @Override
+    public Session getSession() {
+      return Session.this;
     }
   }
 
-  /**
-   * Indicates a StartTLS handshake has completed. It is usually subscribed by a
-   * {@link HandshakerPipe} so that it restarts the XML stream immediately.
-   */
-  public static class StartTlsHandshakeCompletedEvent extends EventObject {
-
-    public StartTlsHandshakeCompletedEvent(Session o) {
-      super(o);
-    }
-  }
-
-  private static final String PIPE_HANDSHAKER = "handshaker";
-  private static final String PIPE_VALIDATOR = "validator";
-  private static final String PIPE_UNSUPPORTED_STANZAS_BLOCKER = "unsupported-stanzas-blocker";
-
+  private final MutableReactiveObject<State> state = new MutableReactiveObject<>(State.DISCONNECTED);
   private final FlowableProcessor<EventObject> eventStream;
-  private final MutableReactiveObject<State> state = new MutableReactiveObject<>(
-      State.DISCONNECTED
-  );
   private final PluginManager pluginManager = new PluginManager();
-  private final Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
-  private final Flowable<Stanza> inboundStanzaStream;
-  private final Logger logger = Logger.getLogger(this.getClass().getCanonicalName());
-  private final List<String> saslMechanisms = new ArrayList<>();
-  private Jid jid = Jid.EMPTY;
+  private final Logger logger = Logger.getAnonymousLogger();
+  private Jid loginJid = Jid.EMPTY;
   private Jid authzId = Jid.EMPTY;
-  private Connection connection;
   private boolean neverOnline = true;
 
-  /**
-   * Gets an instance of {@link Session} which supports all {@link Connection.Protocol}s specified.
-   */
-  @Nonnull
-  public static Session getInstance(@Nullable Collection<Connection.Protocol> protocols)
-      throws NoSuchProviderException {
-    for (Session it : ServiceLoader.load(Session.class)) {
-      if (protocols == null) {
-        return it;
-      } else if (it.getSupportedProtocols().containsAll(protocols)) {
-        return it;
-      }
-    }
-    throw new NoSuchProviderException();
+  private void onDisposing() {
+    this.eventStream.onComplete();
+    this.state.complete();
   }
 
-  private void log(final EventObject event) {
+  protected void log(final EventObject event) {
     logger.log(Level.FINE, event.toString());
   }
 
-  private void log(final ExceptionCaughtEvent event) {
+  protected void log(final ExceptionCaughtEvent event) {
     logger.log(Level.WARNING, event.toString(), event.getCause());
   }
 
@@ -313,123 +408,21 @@ public abstract class Session implements AutoCloseable {
     // Event stream
     final FlowableProcessor<EventObject> unsafeEventStream = PublishProcessor.create();
     this.eventStream = unsafeEventStream.toSerialized();
-    this.eventStream.ofType(ConnectionTerminatedEvent.class).subscribe(event -> {
-      synchronized (this.state) {
-        this.state.setValue(State.DISCONNECTED);
-      }
-    });
-    this.state.getStream().filter(it -> it == State.ONLINE).firstElement().subscribe(
+    getState().getStream().filter(it -> it == State.ONLINE).firstElement().subscribe(
         it -> neverOnline = false
     );
-
-    // XML Pipeline
-    this.xmlPipeline.getInboundExceptionStream().subscribe(
-        cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
+    getState().getStream().filter(
+        it -> it == State.DISPOSED
+    ).firstOrError().observeOn(Schedulers.io()).subscribe(
+        it -> onDisposing()
     );
-    this.xmlPipeline.getOutboundExceptionStream().subscribe(
-        cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
-    );
-    this.xmlPipeline
-        .getOutboundStream()
-        .filter(it -> getLogger().getLevel().intValue() <= Level.FINE.intValue())
-        .subscribe(it -> getLogger().fine("[XML sent] " + DomUtils.writeString(it)));
-    this.xmlPipeline.addAtInboundEnd(
-        PIPE_UNSUPPORTED_STANZAS_BLOCKER,
-        new UnsupportedStanzasBlockerPipe()
-    );
-    this.xmlPipeline.addAtInboundEnd(PIPE_VALIDATOR, new XmlValidatorPipe());
-    this.xmlPipeline.addAtInboundEnd(PIPE_HANDSHAKER, BlankPipe.getInstance());
-    getState()
-        .getStream()
-        .filter(it -> it == State.CONNECTED)
-        .subscribe(it -> this.xmlPipeline.start());
-    getState()
-        .getStream()
-        .filter(it -> it == State.DISPOSED)
-        .firstOrError()
-        .subscribe(it -> this.xmlPipeline.dispose());
-    this.eventStream
-        .ofType(ConnectionTerminatedEvent.class)
-        .subscribe(it -> this.xmlPipeline.stopNow());
-    this.inboundStanzaStream = xmlPipeline
-        .getInboundStream()
-        .filter(Stanza::isStanza)
-        .map(Stanza::new);
-    this.xmlPipeline
-        .getInboundExceptionStream()
-        .ofType(XmlValidatorPipe.ValidationException.class)
-        .subscribe(it -> send((StreamErrorException) it.getCause()));
 
     // Logging
     this.eventStream.subscribe(this::log);
-    this.getState().getStream().subscribe(it -> this.logger.fine(
+    getState().getStream().subscribe(it -> this.logger.fine(
         "Session is now " + it.name())
     );
-
-    getPluginManager().apply(BasePlugin.class);
   }
-
-  /**
-   * Invoked when it is about to establish a network connection to the server.
-   *
-   * <p>This method is supposed to perform the following tasks:</p>
-   *
-   * <ul>
-   *   <li>Setting up a network connection to the server.</li>
-   *   <li>
-   *     Wiring the network data stream and the XML {@link Pipeline}
-   *     <ul>
-   *       <li>
-   *         Fetch outbound XML data using
-   *         {@link #getXmlPipelineOutboundStream()} and then send them to the
-   *         server.
-   *       </li>
-   *       <li>
-   *         Fetch inbound XML data sent by the server and feed it to
-   *         {@link Session} using {@link #feedXmlPipeline(Document)}.
-   *       </li>
-   *     </ul>
-   *   </li>
-   *   <li>
-   *     Setting up event handlers for connection errors or connection closing
-   *     from the server.
-   *   </li>
-   * </ul>
-   */
-  @Nonnull
-  @CheckReturnValue
-  protected abstract Completable
-  onOpeningConnection(@Nullable Compression connectionCompression,
-                      @Nullable Compression tlsCompression);
-
-  /**
-   * Invoked when the user is actively closing the connection.
-   */
-  @Nonnull
-  @CheckReturnValue
-  protected abstract Completable onClosingConnection();
-
-  /**
-   * Invoked when {@link HandshakerPipe} has completed the StartTLS negotiation
-   * and the client is supposed to start a TLS handshake.
-   * @return Token that notifies when the TLS handshake completes.
-   */
-  @Nonnull
-  @CheckReturnValue
-  protected abstract Completable onStartTls();
-
-  /**
-   * Invoked when the client and server have decided to compress the XML stream.
-   * Always invoked right after a stream negotiation and before a stream
-   * restart.
-   */
-  protected abstract void onStreamCompression(@Nonnull Compression compression);
-
-  /**
-   * Invoked when this class is being disposed of. This method should clean
-   * system resources and return immediately.
-   */
-  protected abstract void onDisposing();
 
   /**
    * Triggers an {@link EventObject}.
@@ -441,209 +434,42 @@ public abstract class Session implements AutoCloseable {
     }
   }
 
-  protected Flowable<Document> getXmlPipelineOutboundStream() {
-    return xmlPipeline.getOutboundStream();
-  }
+  /**
+   * Gets a stream of inbound {@link Stanza}s. It is usually subscribed by {@link PluginContext}s.
+   */
+  @Nonnull
+  protected abstract Flowable<Stanza> getInboundStanzaStream();
 
-  protected void feedXmlPipeline(@Nonnull final Document xml) {
-    if (getLogger().getLevel().intValue() <= Level.FINE.intValue()) {
-      try {
-        getLogger().fine("[XML received] " + DomUtils.writeString(xml));
-      } catch (TransformerException ex) {
-        throw new RuntimeException(ex);
-      }
+  /**
+   * Sends a {@link Stanza} into the XMPP stream. Usually invoked by {@link PluginContext}s.
+   */
+  protected abstract void sendStanza(@Nonnull final Stanza stanza);
+
+  /**
+   * Sends a stream error and then disconnects.
+   * @throws IllegalStateException If this {@link Session} is not connected or
+   *         online.
+   */
+  protected abstract void sendError(@Nonnull final StreamErrorException error);
+
+  /**
+   * Sets the {@link Session.State}. May also set {@link Session.State#DISPOSED} resulting in
+   * calling {@link #dispose()}.
+   * @throws IllegalStateException If trying to set to another {@link Session.State} when this class
+   *         is already disposed of.
+   */
+  protected void setState(@Nonnull final State state) {
+    if (this.state.getValue() == State.DISPOSED && state != State.DISPOSED) {
+      throw new IllegalStateException();
     }
-    xmlPipeline.read(xml);
+    this.state.setValue(state);
   }
 
   /**
-   * Starts logging in.
-   * @return Token to track the completion.
-   * @throws IllegalStateException If this {@link Session} is not disconnected.
-   */
-  @CheckReturnValue
-  @Nonnull
-  public Completable login(@Nonnull final String password) {
-    Validate.notBlank(password, "password");
-    final CredentialRetriever retriever = (authnId, mechanism, key) -> {
-      if (this.jid.getLocalPart().equals(authnId) && "password".equals(key)) {
-        return password;
-      } else {
-        return null;
-      }
-    };
-    return login(
-        retriever,
-        null,
-        false,
-        this.connection.getProtocol() == Connection.Protocol.TCP ? null : Compression.AUTO,
-        null,
-        this.connection.getProtocol() == Connection.Protocol.TCP ? Compression.AUTO : null
-    );
-  }
-
-  /**
-   * Starts logging in anonymously.
-   * @throws IllegalStateException If this {@link Session} is not disconnected.
+   * Gets the negotiated {@link StreamFeature}s.
    */
   @Nonnull
-  @CheckReturnValue
-  public Completable login() {
-    return login(
-        null,
-        null,
-        false,
-        this.connection.getProtocol() == Connection.Protocol.TCP ? null : Compression.AUTO,
-        null,
-        this.connection.getProtocol() == Connection.Protocol.TCP ? Compression.AUTO : null
-    );
-  }
-
-  /**
-   * Starts logging in.
-   * @return Token to track the completion.
-   * @throws IllegalStateException If it is disposed of or not disconnected.
-   */
-  @Nonnull
-  @CheckReturnValue
-  public Completable login(@Nullable final CredentialRetriever retriever,
-                           @Nullable final String resource,
-                           final boolean registering,
-                           @Nullable Compression connectionCompression,
-                           @Nullable Compression tlsCompression,
-                           @Nullable Compression streamCompression) {
-    if (!this.jid.isEmpty()) {
-      Objects.requireNonNull(retriever, "retriever");
-    }
-    if (registering) {
-      Objects.requireNonNull(this.jid, "jid");
-      Objects.requireNonNull(retriever, "retriever");
-    }
-    Objects.requireNonNull(this.connection, "connection");
-
-    synchronized (this.state) {
-      switch (this.state.getValue()) {
-        case DISPOSED:
-          throw new IllegalStateException("Session disposed.");
-        case DISCONNECTED:
-          break;
-        default:
-          throw new IllegalStateException();
-      }
-      this.state.setValue(State.CONNECTING);
-    }
-
-    final HandshakerPipe handshakerPipe = new HandshakerPipe(
-        this,
-        this.jid,
-        this.authzId,
-        retriever,
-        this.saslMechanisms,
-        resource,
-        registering
-    );
-    handshakerPipe.getState().getStream().subscribe(it -> {
-      this.logger.fine("HandshakerPipe is now " + it.name());
-    });
-    handshakerPipe.getState().getStream()
-        .filter(it -> it == HandshakerPipe.State.STREAM_CLOSED)
-        .subscribe(it -> this.xmlPipeline.stopNow());
-    handshakerPipe.getEventStream().ofType(
-        HandshakerPipe.FeatureNegotiatedEvent.class
-    ).filter(
-        it -> it.getFeature() == StreamFeature.STARTTLS
-    ).subscribe(it -> onStartTls().subscribe(
-        () -> this.eventStream.onNext(new StartTlsHandshakeCompletedEvent(this)),
-        ex ->  {
-          send(new StreamErrorException(
-              StreamErrorException.Condition.RESET,
-              "Client-side StartTLS initialization failed."
-          ));
-          this.eventStream.onNext(new ExceptionCaughtEvent(this, ex));
-        }
-    ));
-    final Single<HandshakerPipe.State> handshakeFinalState = handshakerPipe
-        .getState()
-        .getStream()
-        .filter(it -> {
-          final boolean isCompleted = it == HandshakerPipe.State.COMPLETED;
-          final boolean isClosed = it == HandshakerPipe.State.STREAM_CLOSED;
-          return isCompleted || isClosed;
-        })
-        .firstOrError();
-    this.xmlPipeline.replace("handshaker", handshakerPipe);
-    final Single<HandshakerPipe.State> result = onOpeningConnection(
-        connectionCompression,
-        tlsCompression
-    ).doOnComplete(() -> {
-      synchronized (this.state) {
-        this.state.setValue(State.CONNECTED);
-        this.state.setValue(State.HANDSHAKING);
-      }
-      this.xmlPipeline.start();
-    }).andThen(handshakeFinalState).doOnSuccess(state -> {
-      if (state == HandshakerPipe.State.COMPLETED) {
-        this.state.setValue(State.ONLINE);
-        if (!getStreamFeatures().contains(StreamFeature.STREAM_MANAGEMENT)) {
-          getState()
-              .getStream()
-              .filter(it -> it == State.DISCONNECTED)
-              .firstOrError()
-              .subscribe(it -> this.dispose().subscribe());
-        }
-      } else if (handshakerPipe.getHandshakeError().getValue() != null) {
-        throw handshakerPipe.getHandshakeError().getValue();
-      } else if (handshakerPipe.getServerStreamError().getValue() != null) {
-        throw handshakerPipe.getServerStreamError().getValue();
-      } else if (handshakerPipe.getClientStreamError().getValue() != null) {
-        throw handshakerPipe.getClientStreamError().getValue();
-      } else {
-        throw new ConnectionException(
-            "Connection unexpectedly terminated."
-        );
-      }
-    });
-    return Completable
-        .fromSingle(result)
-        .doOnError(it -> disconnect().subscribe());
-  }
-
-  /**
-   * Starts closing the XMPP stream and the network connection.
-   */
-  @Nonnull
-  @CheckReturnValue
-  public Completable disconnect() {
-    synchronized (this.state) {
-      switch (this.state.getValue()) {
-        case DISCONNECTING:
-          return getState()
-              .getStream()
-              .filter(it -> it == State.DISCONNECTED)
-              .firstOrError()
-              .toCompletable();
-        case DISCONNECTED:
-          return Completable.complete();
-        case DISPOSED:
-          return Completable.complete();
-        default:
-          break;
-      }
-      final Pipe handshakerPipe = xmlPipeline.get("handshaker");
-      final Completable action = Completable.fromAction(() -> {
-        synchronized (this.state) {
-          this.state.setValue(State.DISCONNECTING);
-        }
-      });
-      if (handshakerPipe instanceof HandshakerPipe) {
-        return action.andThen(
-            ((HandshakerPipe) handshakerPipe).closeStream()
-        ).andThen(onClosingConnection());
-      } else {
-        return action.andThen(onClosingConnection());
-      }
-    }
-  }
+  public abstract Set<StreamFeature> getStreamFeatures();
 
   /**
    * Starts shutting down the Session and releasing all system resources.
@@ -651,116 +477,34 @@ public abstract class Session implements AutoCloseable {
   @Nonnull
   @CheckReturnValue
   @WillCloseWhenClosed
-  public Completable dispose() {
-    final Action action = () -> {
-      synchronized (this.state) {
-        onDisposing();
-        this.state.setValue(State.DISPOSED);
-        this.state.complete();
-      }
-      this.eventStream.onComplete();
-    };
-    synchronized (this.state) {
-      switch (this.state.getValue()) {
-        case DISPOSED:
-          return Completable.complete();
-        case DISCONNECTING:
-          return getState()
-              .getStream()
-              .filter(it -> it == State.DISCONNECTED)
-              .firstOrError()
-              .toCompletable()
-              .andThen(Completable.fromAction(action));
-        case DISCONNECTED:
-          return Completable.fromAction(action);
-        default:
-          return disconnect().andThen(Completable.fromAction(action));
-      }
-    }
-  }
+  public abstract Completable dispose();
+
+  /**
+   * Gets the negotiated {@link Jid} after handshake.
+   * @return {@link Jid#EMPTY} if the handshake has not completed yet or it is an anonymous login.
+   */
+  @Nonnull
+  public abstract Jid getNegotiatedJid();
 
   @Override
-  public void close() throws Exception {
+  public void close() {
     dispose().blockingAwait();
   }
 
   /**
-   * Sends an XML stanza to the server. The stanza will not be validated by any
-   * means, so beware that the server may close the connection once any policy
-   * is violated.
-   * @throws IllegalStateException If this class is disposed of.
+   * Gets a stream of emitted {@link EventObject}s. It never emits any errors
+   * but will emit a completion signal once this class enters
+   * {@link State#DISPOSED}.
+   *
+   * <p>This class emits the following types of {@link EventObject}:</p>
+   *
+   * <ul>
+   *   <li>{@link chat.viska.commons.ExceptionCaughtEvent}</li>
+   * </ul>
    */
   @Nonnull
-  public StanzaReceipt send(final Document xml) {
-    xmlPipeline.write(xml);
-    return new StanzaReceipt(this, Maybe.empty());
-  }
-
-  /**
-   * Sends a stream error and then disconnects.
-   * @throws IllegalStateException If this {@link Session} is not connected or
-   *         online.
-   */
-  public void send(StreamErrorException error) {
-    synchronized (this.state) {
-      switch (this.state.getValue()) {
-        case CONNECTED:
-          break;
-        case ONLINE:
-          break;
-        case HANDSHAKING:
-          break;
-        default:
-          throw new IllegalStateException("Cannot send stream errors right now.");
-      }
-      triggerEvent(new ExceptionCaughtEvent(this, error));
-      final HandshakerPipe handshakerPipe = (HandshakerPipe)
-          this.xmlPipeline.get(PIPE_HANDSHAKER);
-      handshakerPipe.sendStreamError(error);
-    }
-  }
-
-  @Nonnull
-  public IqReceipt sendIqQuery(final String namespace,
-                               @Nullable final Jid target,
-                               @Nullable final Map<String, String> params) {
-    synchronized (this.state) {
-      if (this.state.getValue() == Session.State.DISPOSED) {
-        throw new IllegalStateException("Session disposed.");
-      }
-      final String id = UUID.randomUUID().toString();
-      final Document iq =  Stanza.getIqTemplate(
-          Stanza.IqType.GET,
-          id,
-          target
-      );
-      final Element element = (Element) iq.getDocumentElement().appendChild(
-          iq.createElementNS(namespace, "query")
-      );
-      if (params != null) {
-        for (Map.Entry<String, String> it : params.entrySet()) {
-          element.setAttribute(it.getKey(), it.getValue());
-        }
-      }
-      final Maybe<Stanza> response = getInboundStanzaStream()
-          .filter(stanza -> id.equals(stanza.getId()))
-          .firstElement()
-          .doOnSuccess(stanza -> {
-            if (stanza.getIqType() == Stanza.IqType.ERROR) {
-              StanzaErrorException error = null;
-              try {
-                error = StanzaErrorException.fromXml(stanza.getXml());
-              } catch (StreamErrorException ex) {
-                send(ex);
-              }
-              if (error != null) {
-                throw error;
-              }
-            }
-          });
-      return new IqReceipt(this, send(iq).getServerAcknowledment(), response);
-    }
-
+  public Flowable<EventObject> getEventStream() {
+    return eventStream;
   }
 
   /**
@@ -772,36 +516,11 @@ public abstract class Session implements AutoCloseable {
   }
 
   /**
-   * Gets the {@link Connection} that is currently using or will be used.
-   */
-  @Nullable
-  public Connection getConnection() {
-    return connection;
-  }
-
-  /**
-   * Sets the {@link Connection}.
-   * @throws IllegalStateException If it is not disconnected.
-   * @throws IllegalArgumentException If the {@link Connection.Protocol} is unsupported.
-   */
-  public void setConnection(final Connection connection) {
-    if (!getSupportedProtocols().contains(connection.getProtocol())) {
-      throw new IllegalArgumentException();
-    }
-    if (getState().getValue() == State.DISCONNECTED) {
-      this.connection = connection;
-    } else {
-      throw new IllegalStateException();
-    }
-  }
-
-  /**
-   * Gets a stream of inbound XMPP stanzas. The stream will not emits
-   * any errors but will emit a completion after this class is disposed of.
+   * Gets the current {@link State}.
    */
   @Nonnull
-  public Flowable<Stanza> getInboundStanzaStream() {
-    return inboundStanzaStream;
+  public ReactiveObject<State> getState() {
+    return state;
   }
 
   /**
@@ -813,123 +532,33 @@ public abstract class Session implements AutoCloseable {
   }
 
   /**
-   * Gets the current {@link State}.
-   */
-  @Nonnull
-  public ReactiveObject<State> getState() {
-    return state;
-  }
-
-  /**
-   * Gets a stream of emitted {@link EventObject}s. It never emits any errors
-   * but will emit a completion signal once this class enters
-   * {@link State#DISPOSED}.
-   *
-   * <p>This class emits only the following types of {@link EventObject}:</p>
-   *
-   * <ul>
-   *   <li>{@link chat.viska.commons.ExceptionCaughtEvent}</li>
-   *   <li>{@link ConnectionTerminatedEvent}</li>
-   * </ul>
-   */
-  @Nonnull
-  public Flowable<EventObject> getEventStream() {
-    return eventStream;
-  }
-
-  @Nonnull
-  public Set<StreamFeature> getStreamFeatures() {
-    final Pipe handshaker = this.xmlPipeline.get(PIPE_HANDSHAKER);
-    if (handshaker instanceof HandshakerPipe) {
-      return ((HandshakerPipe) handshaker).getStreamFeatures();
-    } else {
-      return Collections.emptySet();
-    }
-  }
-
-  /**
-   * Gets the connection level {@link Compression}.
-   * @return {@code null} is no {@link Compression} is used, always {@code null}
-   *         if it is not implemented.
-   */
-  @Nullable
-  public abstract Compression getConnectionCompression();
-
-  @Nonnull
-  public abstract Set<Compression> getSupportedConnectionCompression();
-
-  /**
-   * Gets the
-   * <a href="https://datatracker.ietf.org/doc/rfc3749">TLS level
-   * compression</a>. It is not recommended to use because of security reason.
-   * @return {@code null} if no {@link Compression} is used, always {@code null}
-   *         if it is not implemented.
-   */
-  @Nullable
-  public abstract Compression getTlsCompression();
-
-  @Nonnull
-  public abstract Set<Compression> getSupportedTlsCompression();
-
-  /**
-   * Gets the stream level {@link Compression} which is defined in
-   * <a href="https://xmpp.org/extensions/xep-0138.html">XEP-0138: Stream
-   * Compression</a>.
-   */
-  @Nullable
-  public abstract Compression getStreamCompression();
-
-  @Nonnull
-  public abstract Set<Compression> getSupportedStreamCompression();
-
-  /**
-   * Gets the
-   * <a href="https://en.wikipedia.org/wiki/Transport_Layer_Security">TLS</a>
-   * information of the server connection.
-   * @return {@code null} if the connection is not using TLS.
-   */
-  @Nullable
-  public abstract SSLSession getTlsSession();
-
-  /**
-   * Gets all supported {@link chat.viska.xmpp.Connection.Protocol}s.
-   */
-  @Nonnull
-  public abstract Set<Connection.Protocol> getSupportedProtocols();
-
-  /**
-   * Gets the negotiated {@link Jid} after handshake.
-   * @return {@link Jid#EMPTY} if the handshake has not completed yet or it is an anonymous login.
-   */
-  @Nonnull
-  public Jid getNegotiatedJid() {
-    final Pipe handshaker = this.xmlPipeline.get(PIPE_HANDSHAKER);
-    if (handshaker instanceof HandshakerPipe) {
-      return ((HandshakerPipe) handshaker).getNegotiatedJid();
-    } else {
-      return Jid.EMPTY;
-    }
-  }
-
-  /**
-   * Sets the {@link Jid} used for login. Use {@link Jid#EMPTY} for anonymous login.
-   * @throws IllegalStateException If this {@link Session} has already been online before.
+   * Sets the {@link Jid} used for login. It is by default set to {@link Jid#EMPTY} which means
+   * anonymous login. This property can only be changed while disconnected and before going online
+   * the first time.
    */
   public void setLoginJid(@Nullable final Jid jid) {
     if (!neverOnline || getState().getValue() != State.DISCONNECTED) {
       throw new IllegalStateException();
     }
-    this.jid = Jid.isEmpty(jid) ? Jid.EMPTY : jid;
+    this.loginJid = Jid.isEmpty(jid) ? Jid.EMPTY : jid;
   }
 
   /**
-   * Sets the authorization identity for login.
-   * @throws IllegalStateException If this {@link Session} has already been online before.
+   * Sets the authorization identity. It is by default set to {@link Jid#EMPTY}. This property
+   * can only be changed while disconnected and before going online the first time.
    */
-  public void setLoginAuthorizationId(@Nullable final Jid jid) {
+  public void setAuthorizationId(@Nullable final Jid jid) {
     if (!neverOnline || getState().getValue() != State.DISCONNECTED) {
       throw new IllegalStateException();
     }
     this.authzId = jid;
+  }
+
+  public Jid getLoginJid() {
+    return loginJid;
+  }
+
+  public Jid getAutorizationId() {
+    return authzId;
   }
 }

@@ -21,6 +21,6 @@ mainClassName = 'chat.viska.cmd.Cmd'
 dependencies {
   compile 'com.beust:jcommander:1.71'
   compile project(':java:viska-core')
-  runtime project(':java:viska-impl-jdk')
+  runtime project(':java:viska-impl-javase')
   runtime project(':java:viska-impl-netty')
 }

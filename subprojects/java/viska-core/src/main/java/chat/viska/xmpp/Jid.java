@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.Immutable;
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -40,7 +39,6 @@ import org.apache.commons.lang3.StringUtils;
  * created.</p>
  * @see <a href="https://tools.ietf.org/html/rfc7622">RFC 7622</a>
  */
-@Immutable
 public class Jid {
 
   public static final Jid EMPTY = new Jid("", "", "");
@@ -119,6 +117,9 @@ public class Jid {
   @Override
   @Nonnull
   public String toString() {
+    if (isEmpty()) {
+      return "";
+    }
     StringBuilder result = new StringBuilder(domainPart);
     if (!localPart.isEmpty()) {
       result.insert(0, '@').insert(0, localPart);

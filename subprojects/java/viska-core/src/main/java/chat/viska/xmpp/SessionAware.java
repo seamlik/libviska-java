@@ -16,7 +16,7 @@
 
 package chat.viska.xmpp;
 
-import javax.annotation.Nullable;
+import javax.annotation.Nonnull;
 
 /**
  * Indicates this class is associated to an {@link Session}. Once the
@@ -28,6 +28,6 @@ public interface SessionAware {
   /**
    * Gets the associated XMPP session.
    */
-  @Nullable
+  @Nonnull
   Session getSession();
 }

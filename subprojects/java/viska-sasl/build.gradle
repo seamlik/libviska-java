@@ -1,4 +1,5 @@
 dependencies {
   compile 'com.google.code.findbugs:jsr305:3.0.2'
   compile project(':java:viska-commons')
+  testRuntime project(':java:viska-impl-javase')
 }

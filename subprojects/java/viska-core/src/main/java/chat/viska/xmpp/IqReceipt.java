@@ -20,16 +20,29 @@ import io.reactivex.Maybe;
 import java.util.Objects;
 import javax.annotation.Nonnull;
 
+/**
+ * Receipt of sending an {@code <iq/>}.
+ */
 public class IqReceipt extends StanzaReceipt {
 
   private final Maybe<Stanza> response;
 
-  public IqReceipt(Session session, Maybe<Boolean> serverAck, Maybe<Stanza> response) {
+  /**
+   * Default constructor.
+   */
+  public IqReceipt(@Nonnull Session session,
+                   @Nonnull Maybe<?> serverAck,
+                   @Nonnull Maybe<Stanza> response) {
     super(session, serverAck);
-    Objects.requireNonNull(response);
     this.response = response;
   }
 
+  /**
+   * Gets a token of response to the sent {@link <iq/>}. For an {@code <iq/>} of
+   * {@link chat.viska.xmpp.Stanza.IqType#RESULT} or {@link chat.viska.xmpp.Stanza.IqType#ERROR} it
+   * signals a completion immediately. Signals a completion if no result is ever received before the
+   * {@link Session} is disposed of. Signals an error if a stanza error is received.
+   */
   @Nonnull
   public Maybe<Stanza> getResponse() {
     return response;

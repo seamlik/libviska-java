@@ -25,9 +25,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Result of an information sendIqQuery defined in
- * <a href="https://xmpp.org/extensions/xep-0030.html">Service
- * Discovery</a>.
+ * Result of an {@code #info} query defined in
+ * <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>.
  */
 public class DiscoInfo {
 

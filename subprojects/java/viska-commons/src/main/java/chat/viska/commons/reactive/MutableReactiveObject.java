@@ -17,38 +17,51 @@
 package chat.viska.commons.reactive;
 
 import io.reactivex.Flowable;
+import io.reactivex.functions.Consumer;
+import io.reactivex.functions.Function;
+import io.reactivex.processors.BehaviorProcessor;
 import javax.annotation.Nonnull;
-import io.reactivex.processors.PublishProcessor;
-import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 
-@NotThreadSafe
+@ThreadSafe
 public class MutableReactiveObject<T> implements ReactiveObject<T> {
 
-  private final PublishProcessor<T> stream = PublishProcessor.create();
+  private final BehaviorProcessor<T> stream;
   private T value;
 
-  public MutableReactiveObject() {}
-
   public MutableReactiveObject(@Nonnull final T initial) {
-    this.value = initial;
-    this.stream.onNext(initial);
+    stream = BehaviorProcessor.createDefault(initial);
+    value = initial;
   }
 
+  /**
+   * Sets the value. Does nothing if the new value equals to the current value.
+   */
   public void setValue(@Nonnull final T value) {
-    this.value = value;
-    stream.onNext(value);
+    synchronized (this.stream) {
+      if (this.stream.hasComplete()) {
+        throw new IllegalStateException();
+      } else if (!this.value.equals(value)) {
+        this.value = value;
+        this.stream.onNext(value);
+      }
+    }
   }
 
   public void complete() {
-    stream.onComplete();
+    synchronized (this.stream) {
+      this.stream.onComplete();
+    }
   }
 
   @Override
+  @Nonnull
   public T getValue() {
     return value;
   }
 
   @Override
+  @Nonnull
   public Flowable<T> getStream() {
     return stream;
   }
@@ -56,5 +69,19 @@ public class MutableReactiveObject<T> implements ReactiveObject<T> {
   @Override
   public String toString() {
     return value.toString();
+  }
+
+  @Override
+  public void getAndDo(@Nonnull final Consumer<T> consumer) throws Exception {
+    synchronized (this.stream) {
+      consumer.accept(value);
+    }
+  }
+
+  @Override
+  public <R> R getAndDo(@Nonnull Function<T, R> function) throws Exception {
+    synchronized (this.stream) {
+      return function.apply(value);
+    }
   }
 }

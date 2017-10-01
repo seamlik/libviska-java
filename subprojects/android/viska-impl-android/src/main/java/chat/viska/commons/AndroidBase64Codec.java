@@ -16,18 +16,21 @@
 
 package chat.viska.commons;
 
-import chat.viska.commons.Base64Codec;
+import android.util.Base64;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 public class AndroidBase64Codec extends Base64Codec {
 
   @Override
-  public String encode(@Nonnull final byte[] data) {
-    return android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP);
+  @Nonnull
+  public String encode(@Nullable final byte[] data) {
+    return data == null ? "" : Base64.encodeToString(data, Base64.NO_WRAP);
   }
 
   @Override
-  public byte[] decode(@Nonnull final String base64) {
-    return android.util.Base64.decode(base64, android.util.Base64.NO_WRAP);
+  @Nonnull
+  public byte[] decode(@Nullable final String base64) {
+    return base64 == null ? new byte[0] : Base64.decode(base64, Base64.NO_WRAP);
   }
 }

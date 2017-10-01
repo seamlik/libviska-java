@@ -20,6 +20,7 @@ import chat.viska.commons.EnumUtils;
 import chat.viska.xmpp.Connection;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Session;
+import chat.viska.xmpp.StandardSession;
 import chat.viska.xmpp.plugins.BasePlugin;
 import chat.viska.xmpp.plugins.DiscoInfo;
 import chat.viska.xmpp.plugins.DiscoItem;
@@ -46,9 +47,7 @@ public class Cmd {
     private List<Jid> entities;
 
     public void run() throws Throwable {
-      final BasePlugin basePlugin = (BasePlugin) session
-          .getPluginManager()
-          .getPlugin(BasePlugin.class);
+      final BasePlugin basePlugin = session.getPluginManager().getPlugin(BasePlugin.class);
       for (Jid it : entities) {
         System.out.println("<" + it + ">");
         final DiscoInfo discoInfo = basePlugin.queryDiscoInfo(it).blockingGet();
@@ -91,8 +90,7 @@ public class Cmd {
   private class RosterCommand {
 
     public void run() throws Exception {
-      final BasePlugin plugin = (BasePlugin)
-          session.getPluginManager().getPlugin(BasePlugin.class);
+      final BasePlugin plugin = session.getPluginManager().getPlugin(BasePlugin.class);
       List<RosterItem> roster = plugin.queryRoster().blockingGet();
       roster.forEach(it -> {
         System.out.println("Jid: " + it.getJid());
@@ -122,7 +120,7 @@ public class Cmd {
       for (String domain : domains) {
         System.out.println('<' + domain + '>');
         final List<Connection> connections = Connection
-            .queryAll(domain, null)
+            .queryAll(domain, null, null)
             .blockingGet();
         for (Connection it : connections) {
           System.out.print(it.getProtocol());
@@ -169,7 +167,7 @@ public class Cmd {
   @Parameter(names = { "-h", "--help", "help" }, description = "Display help", help = true)
   private boolean help;
 
-  private Session session;
+  private StandardSession session;
 
   public static void main(String[] args) throws Throwable {
     new Cmd().run(args);
@@ -182,7 +180,7 @@ public class Cmd {
     } else {
       try {
         connection = Observable
-            .fromIterable(Connection.queryAll(jid.getDomainPart(), null).blockingGet())
+            .fromIterable(Connection.queryAll(jid.getDomainPart(), null, null).blockingGet())
             .filter(Connection::isTlsEnabled)
             .blockingFirst();
       } catch (Exception ex) {
@@ -193,13 +191,14 @@ public class Cmd {
       }
     }
     try {
-      this.session = Session.getInstance(Collections.singleton(connection.getProtocol()));
+      this.session = StandardSession.getInstance(Collections.singleton(connection.getProtocol()));
     } catch (Exception ex) {
       throw new RuntimeException("No XMPP Session implementation is installed.");
     }
 
     this.session.setLoginJid(this.jid);
     this.session.setConnection(connection);
+    this.session.getPluginManager().apply(BasePlugin.class);
 
     this.session.getLogger().setUseParentHandlers(false);
     final Handler handler = new ConsoleHandler();

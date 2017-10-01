@@ -17,14 +17,34 @@
 package chat.viska.commons.reactive;
 
 import io.reactivex.Flowable;
+import io.reactivex.functions.Consumer;
+import io.reactivex.functions.Function;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
+/**
+ * Object whose changes can be monitored.
+ * @param <T> Type of the values.
+ */
 public interface ReactiveObject<T> {
 
-  @Nullable
+  /**
+   * Gets the current value;
+   */
+  @Nonnull
   T getValue();
 
+  /**
+   * Gets a stream of the emitted values. Subscribers will also receive the most recently emitted
+   * value plus all subsequent ones.
+   */
   @Nonnull
   Flowable<T> getStream();
+
+  /**
+   * Atomically gets and does something.
+   * @throws Exception If {@code consumer} throws an {@link Exception}.
+   */
+  void getAndDo(@Nonnull Consumer<T> consumer) throws Exception;
+
+  <R> R getAndDo(@Nonnull Function<T, R> function) throws Exception;
 }

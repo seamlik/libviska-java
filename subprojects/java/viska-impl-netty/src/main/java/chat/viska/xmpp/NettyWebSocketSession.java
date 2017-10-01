@@ -82,7 +82,7 @@ import org.xml.sax.SAXException;
  * </table>
  */
 @ThreadSafe
-public class NettyWebSocketSession extends Session {
+public class NettyWebSocketSession extends StandardSession {
 
   private class ConsumerHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
 
@@ -92,7 +92,7 @@ public class NettyWebSocketSession extends Session {
       try {
         feedXmlPipeline(DomUtils.readDocument(msg.text()));
       } catch (SAXException ex) {
-        send(new StreamErrorException(
+        sendError(new StreamErrorException(
             StreamErrorException.Condition.BAD_FORMAT
         ));
       }
@@ -215,11 +215,11 @@ public class NettyWebSocketSession extends Session {
       this.nettyChannel = (SocketChannel) channelFuture.channel();
       this.nettyChannel.closeFuture().addListener(it -> {
         if (!wsHandshakeCompleted.hasComplete()) {
-          wsHandshakeCompleted.onError(new ConnectionException(
+          wsHandshakeCompleted.onError(new Exception(
               "[Netty] Connection terminated before WebSocket handshake completes."
           ));
         }
-        triggerEvent(new ConnectionTerminatedEvent(this));
+        triggerEvent(new ConnectionTerminatedEvent());
       });
     }).andThen(wsHandshakeCompleted).andThen(Completable.fromAction(() -> {
       getXmlPipelineOutboundStream()
