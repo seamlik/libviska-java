@@ -332,6 +332,7 @@ public class BasePlugin implements Plugin {
     final Document iq = Stanza.getIqTemplate(
         Stanza.IqType.GET,
         UUID.randomUUID().toString(),
+        this.context.getSession().getNegotiatedJid(),
         jid
     );
     iq.getDocumentElement().appendChild(iq.createElementNS(CommonXmlns.PING, "ping"));

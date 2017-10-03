@@ -18,8 +18,6 @@ package chat.viska.xmpp;
 
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
-import java.util.Objects;
-import java.util.UUID;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.w3c.dom.Document;
@@ -70,6 +68,7 @@ public class Stanza {
   @Nonnull
   public static Document getIqTemplate(@Nonnull final IqType type,
                                        @Nonnull final String id,
+                                       @Nullable final Jid sender,
                                        @Nullable final Jid recipient) {
     final String iq = String.format(
         "<iq type=\"%1s\" id=\"%2s\"></iq>",
@@ -82,7 +81,10 @@ public class Stanza {
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
-    if (recipient != null) {
+    if (!Jid.isEmpty(sender)) {
+      xml.getDocumentElement().setAttribute("from", sender.toString());
+    }
+    if (!Jid.isEmpty(recipient)) {
       xml.getDocumentElement().setAttribute("to", recipient.toString());
     }
     return xml;
@@ -195,6 +197,7 @@ public class Stanza {
     return getIqTemplate(
         IqType.RESULT,
         getId(),
+        getRecipient(),
         getSender()
     );
   }

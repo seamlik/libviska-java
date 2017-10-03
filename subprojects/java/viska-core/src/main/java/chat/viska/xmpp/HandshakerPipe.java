@@ -368,6 +368,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     final Document iq = Stanza.getIqTemplate(
         Stanza.IqType.SET,
         resourceBindingIqId,
+        null,
         null
     );
     final Element bind = (Element) iq.getDocumentElement().appendChild(iq.createElementNS(

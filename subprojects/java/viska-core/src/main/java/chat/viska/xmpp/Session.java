@@ -337,6 +337,7 @@ public abstract class Session implements AutoCloseable {
       final Document iq =  Stanza.getIqTemplate(
           Stanza.IqType.GET,
           id,
+          getNegotiatedJid(),
           recipient
       );
       final Element element = (Element) iq.getDocumentElement().appendChild(
