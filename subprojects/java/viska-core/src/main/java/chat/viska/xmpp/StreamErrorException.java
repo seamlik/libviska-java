@@ -116,15 +116,12 @@ public class StreamErrorException extends Exception {
   public StreamErrorException(@Nonnull final Condition condition) {
     super("[" + EnumUtils.toXmlValue(condition) + "]");
     this.text = "";
-    Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
 
   public StreamErrorException(@Nonnull final Condition condition,
                               @Nonnull final String text) {
-    super("[" + EnumUtils.toXmlValue(condition) + "] " + text);
-    Objects.requireNonNull(condition, "`condition` is absent.");
-    Objects.requireNonNull(text, "`text` is absent.");
+    super(text);
     this.condition = condition;
     this.text = text;
   }
