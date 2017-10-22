@@ -457,9 +457,8 @@ public abstract class Session implements AutoCloseable {
   protected abstract void sendStanza(@Nonnull final Stanza stanza);
 
   /**
-   * Sends a stream error and then disconnects.
-   * @throws IllegalStateException If this {@link Session} is not connected or
-   *         online.
+   * Sends a stream error and then disconnects. Since a {@link Session} with a stream error is quite
+   * fragile, this method won't complain even if it is disconnected already.
    */
   protected abstract void sendError(@Nonnull final StreamErrorException error);
 

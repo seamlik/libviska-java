@@ -238,16 +238,6 @@ public abstract class StandardSession extends Session {
 
   @Override
   protected void sendError(@Nonnull final StreamErrorException error) {
-    switch (getState().getValue()) {
-      case CONNECTED:
-        break;
-      case ONLINE:
-        break;
-      case HANDSHAKING:
-        break;
-      default:
-        throw new IllegalStateException();
-    }
     triggerEvent(new ExceptionCaughtEvent(this, error));
     final HandshakerPipe handshakerPipe = (HandshakerPipe)
         this.xmlPipeline.get(PIPE_HANDSHAKER);

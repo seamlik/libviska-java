@@ -628,7 +628,10 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   }
 
   public void sendStreamError(@Nonnull final StreamErrorException error) {
-    pipeline.write(error.toXml());
+    if (session.getState().getValue() == Session.State.ONLINE
+        || session.getState().getValue() == Session.State.HANDSHAKING) {
+      pipeline.write(error.toXml());
+    }
     this.clientStreamError = error;
     closeStream();
   }
