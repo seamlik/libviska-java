@@ -246,7 +246,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         default:
           break;
       }
-      state.setValue(State.RUNNING);
+      state.changeValue(State.RUNNING);
     }
     this.readTask = this.threadpool.submit(() -> {
       while (true) {
@@ -307,7 +307,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         case DISPOSED:
           return ConcurrentUtils.constantFuture(null);
         default:
-          state.setValue(State.STOPPING);
+          state.changeValue(State.STOPPING);
       }
     }
     return threadpool.submit(() -> {
@@ -321,7 +321,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
       } else {
         writeTask.cancel(true);
       }
-      state.setValue(State.STOPPED);
+      state.changeValue(State.STOPPED);
       return null;
     });
   }
@@ -348,7 +348,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     if (!writeTask.isDone()) {
       writeTask.cancel(true);
     }
-    state.setValue(State.STOPPED);
+    state.changeValue(State.STOPPED);
   }
 
   /**
@@ -363,7 +363,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         case DISPOSED:
           return;
         default:
-          state.setValue(State.DISPOSED);
+          state.changeValue(State.DISPOSED);
           break;
       }
     }

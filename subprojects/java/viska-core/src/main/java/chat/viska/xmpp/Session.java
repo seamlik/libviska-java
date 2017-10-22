@@ -208,7 +208,7 @@ public abstract class Session implements AutoCloseable {
       synchronized (this.contexts) {
         for (PluginContext it : this.contexts) {
           if (type.isInstance(it.plugin)) {
-            it.enabled.setValue(false);
+            it.enabled.changeValue(false);
           }
         }
       }
@@ -259,7 +259,7 @@ public abstract class Session implements AutoCloseable {
           this.enabled.getStream(),
           getState().getStream(),
           (enabled, state) -> enabled && state == State.ONLINE
-      ).subscribe(this.available::setValue);
+      ).subscribe(this.available::changeValue);
       this.stanzaSubscription = Session.this.getInboundStanzaStream().filter(
           it -> this.enabled.getValue()
       ).subscribe(
@@ -459,11 +459,11 @@ public abstract class Session implements AutoCloseable {
    * @throws IllegalStateException If trying to set to another {@link Session.State} when this class
    *         is already disposed of.
    */
-  protected void setState(@Nonnull final State state) {
+  protected void changeState(@Nonnull final State state) {
     if (this.state.getValue() == State.DISPOSED && state != State.DISPOSED) {
       throw new IllegalStateException();
     }
-    this.state.setValue(state);
+    this.state.changeValue(state);
   }
 
   /**

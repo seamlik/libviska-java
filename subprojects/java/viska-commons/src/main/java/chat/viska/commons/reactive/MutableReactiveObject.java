@@ -35,15 +35,23 @@ public class MutableReactiveObject<T> implements ReactiveObject<T> {
   }
 
   /**
-   * Sets the value. Does nothing if the new value equals to the current value.
+   * Sets the value.
    */
   public void setValue(@Nonnull final T value) {
+    synchronized (stream) {
+      this.value = value;
+      stream.onNext(value);
+    }
+  }
+
+  /**
+   * Changes the value. Unlike {@link #setValue(Object)}, it does nothing if the new value equals to
+   * the current value.
+   */
+  public void changeValue(@Nonnull final T value) {
     synchronized (this.stream) {
-      if (this.stream.hasComplete()) {
-        throw new IllegalStateException();
-      } else if (!this.value.equals(value)) {
-        this.value = value;
-        this.stream.onNext(value);
+      if (!this.value.equals(value)) {
+        setValue(value);
       }
     }
   }

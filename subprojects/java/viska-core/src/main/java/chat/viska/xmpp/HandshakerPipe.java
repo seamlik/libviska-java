@@ -543,7 +543,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
             "Must not start handshaking if the HandshakerPipe is not just initialized."
         );
       }
-      this.state.setValue(State.STARTED);
+      this.state.changeValue(State.STARTED);
       sendStreamOpening();
     }
   }
@@ -605,7 +605,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     synchronized (this.state) {
       switch (state.getValue()) {
         case INITIALIZED:
-          state.setValue(State.STREAM_CLOSED);
+          state.changeValue(State.STREAM_CLOSED);
           return Completable.complete();
         case STREAM_CLOSING:
           break;
@@ -617,7 +617,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
           break;
       }
       //TODO: Timeout
-      this.state.setValue(State.STREAM_CLOSING);
+      this.state.changeValue(State.STREAM_CLOSING);
       sendStreamClosing();
     }
     return this.state
@@ -726,7 +726,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         switch (this.state.getValue()) {
           case STARTED:
             consumeStreamOpening(document);
-            this.state.setValue(State.NEGOTIATING);
+            this.state.changeValue(State.NEGOTIATING);
             break;
           case NEGOTIATING:
             consumeStreamOpening(document);
@@ -749,14 +749,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
             sendStreamClosing();
             break;
         }
-        this.state.setValue(State.STREAM_CLOSED);
+        this.state.changeValue(State.STREAM_CLOSED);
       } else if ("features".equals(rootName)
           && CommonXmlns.STREAM_HEADER.equals(rootNs)) {
         if (this.state.getValue() == State.NEGOTIATING) {
           final Element selectedFeature = consumeStreamFeatures(document);
           if (selectedFeature == null) {
             if (checkIfAllMandatoryFeaturesNegotiated()) {
-              this.state.setValue(State.COMPLETED);
+              this.state.changeValue(State.COMPLETED);
             } else {
               sendStreamError(new StreamErrorException(
                   StreamErrorException.Condition.UNSUPPORTED_FEATURE,
@@ -852,7 +852,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     ).filter(
         it -> checkIfAllMandatoryFeaturesNegotiated()
     ).observeOn(Schedulers.io()).subscribe(it ->
-        this.state.setValue(State.COMPLETED)
+        this.state.changeValue(State.COMPLETED)
     );
 
     if (this.session.getConnection().getTlsMethod() == Connection.TlsMethod.STARTTLS) {
@@ -872,7 +872,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         .getEventStream()
         .ofType(StandardSession.ConnectionTerminatedEvent.class)
         .observeOn(Schedulers.io())
-        .subscribe(it -> this.state.setValue(State.STREAM_CLOSED));
+        .subscribe(it -> this.state.changeValue(State.STREAM_CLOSED));
 
     this.pipeline = pipeline;
     if (pipeline.getState().getValue() == Pipeline.State.STOPPED) {
@@ -889,7 +889,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   @Override
   public void onRemovedFromPipeline(final Pipeline<?, ?> pipeline) {
     synchronized (this.state) {
-      this.state.setValue(State.DISPOSED);
+      this.state.changeValue(State.DISPOSED);
     }
     pipelineStartedSubscription.dispose();
   }

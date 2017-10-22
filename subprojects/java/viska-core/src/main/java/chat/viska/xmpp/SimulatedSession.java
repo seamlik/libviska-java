@@ -39,7 +39,7 @@ public class SimulatedSession extends Session {
   @Override
   protected void sendError(@Nonnull final StreamErrorException error) {
     outboundStream.onNext(new Stanza(error.toXml()));
-    setState(State.DISCONNECTED);
+    changeState(State.DISCONNECTED);
   }
 
   public SimulatedSession() {
@@ -63,8 +63,8 @@ public class SimulatedSession extends Session {
 
 
   @Override
-  public void setState(@Nonnull final State state) {
-    super.setState(state);
+  public void changeState(@Nonnull final State state) {
+    super.changeState(state);
   }
 
   /**
@@ -81,7 +81,7 @@ public class SimulatedSession extends Session {
   @Override
   @CheckReturnValue
   public Completable dispose() {
-    return Completable.fromAction(() -> setState(State.DISPOSED));
+    return Completable.fromAction(() -> changeState(State.DISPOSED));
   }
 
   @Nonnull

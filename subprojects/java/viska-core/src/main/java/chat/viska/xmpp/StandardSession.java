@@ -124,7 +124,7 @@ public abstract class StandardSession extends Session {
 
   protected StandardSession() {
     getEventStream().ofType(ConnectionTerminatedEvent.class).subscribe(event -> {
-      setState(State.DISCONNECTED);
+      changeState(State.DISCONNECTED);
       this.xmlPipeline.stopNow();
     });
 
@@ -377,7 +377,7 @@ public abstract class StandardSession extends Session {
       getState().getAndDo(state -> {
         switch (state) {
           case DISCONNECTED:
-            setState(State.CONNECTING);
+            changeState(State.CONNECTING);
             return;
           default:
             throw new IllegalStateException();
@@ -402,9 +402,9 @@ public abstract class StandardSession extends Session {
     ).filter(
         it -> getState().getValue() == State.ONLINE
     ).subscribe(it -> {
-      setState(State.DISCONNECTING);
+      changeState(State.DISCONNECTING);
       onClosingConnection().andThen(
-          Completable.fromAction(() -> setState(State.DISCONNECTED))
+          Completable.fromAction(() -> changeState(State.DISCONNECTED))
       ).subscribe();
     });
     handshakerPipe.getEventStream().ofType(
@@ -436,16 +436,16 @@ public abstract class StandardSession extends Session {
         onOpeningConnection(connectionCompression, tlsCompression)
     ).doOnComplete(() -> {
       getState().getAndDo(state -> {
-        setState(State.CONNECTED);
+        changeState(State.CONNECTED);
         if (getConnection().getTlsMethod() == Connection.TlsMethod.DIRECT
             && !verifyCertificate(getNegotiatedJid(), getTlsSession())) {
           throw new SSLPeerUnverifiedException("Certificate does not match the JID domain.");
         }
-        setState(State.HANDSHAKING);
+        changeState(State.HANDSHAKING);
       });
     }).andThen(handshakeFinalState).doOnSuccess(state -> {
       if (state == HandshakerPipe.State.COMPLETED) {
-        setState(State.ONLINE);
+        changeState(State.ONLINE);
       } else if (handshakerPipe.getHandshakeError() != null) {
         throw handshakerPipe.getHandshakeError();
       } else if (handshakerPipe.getServerStreamError() != null) {
@@ -480,7 +480,7 @@ public abstract class StandardSession extends Session {
         break;
     }
     final Pipe handshakerPipe = this.xmlPipeline.get("handshaker");
-    final Completable action = Completable.fromAction(() -> setState(State.DISCONNECTING));
+    final Completable action = Completable.fromAction(() -> changeState(State.DISCONNECTING));
     if (handshakerPipe instanceof HandshakerPipe) {
       return action.andThen(
           ((HandshakerPipe) handshakerPipe).closeStream()
@@ -522,7 +522,7 @@ public abstract class StandardSession extends Session {
   @Override
   public Completable dispose() {
     final Action action = () -> {
-      setState(State.DISPOSED);
+      changeState(State.DISPOSED);
       onDisposing();
     };
     switch (getState().getValue()) {
