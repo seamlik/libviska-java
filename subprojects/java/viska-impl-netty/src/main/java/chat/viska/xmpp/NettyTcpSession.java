@@ -141,6 +141,9 @@ public class NettyTcpSession extends StandardSession {
   private static final String PIPE_COMPRESSOR = "compressor";
   private static final String PIPE_TLS = "tls";
   private static final String PIPE_DECODER_XML = "xml-decoder";
+  private static final SslContextBuilder TLS_CONTEXT_BUILDER = SslContextBuilder
+      .forClient()
+      .protocols("TLSv1.2");
 
   private final EventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup();
   private SocketChannel nettyChannel;
@@ -268,10 +271,7 @@ public class NettyTcpSession extends StandardSession {
       @Override
       protected void initChannel(SocketChannel channel) throws Exception {
         if (getConnection().getTlsMethod() == Connection.TlsMethod.DIRECT) {
-          tlsHandler = SslContextBuilder
-              .forClient()
-              .build()
-              .newHandler(channel.alloc());
+          tlsHandler = TLS_CONTEXT_BUILDER.build().newHandler(channel.alloc());
           channel.pipeline().addLast(PIPE_TLS, tlsHandler);
         } else {
           channel.pipeline().addLast(PIPE_TLS, new ChannelDuplexHandler());
@@ -318,6 +318,16 @@ public class NettyTcpSession extends StandardSession {
           }
         });
         channel.pipeline().addLast(new StringEncoder(StandardCharsets.UTF_8));
+        channel.pipeline().addLast(new SimpleChannelInboundHandler<Object>() {
+
+          @Override
+          protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {}
+
+          @Override
+          public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+            triggerEvent(new ExceptionCaughtEvent(NettyTcpSession.this, cause));
+          }
+        });
       }
     });
 
@@ -370,10 +380,7 @@ public class NettyTcpSession extends StandardSession {
   @Override
   protected Completable onStartTls() {
     try {
-      this.tlsHandler = SslContextBuilder
-          .forClient()
-          .build()
-          .newHandler(nettyChannel.alloc());
+      this.tlsHandler = TLS_CONTEXT_BUILDER.build().newHandler(nettyChannel.alloc());
     } catch (SSLException ex) {
       return Completable.error(ex);
     }

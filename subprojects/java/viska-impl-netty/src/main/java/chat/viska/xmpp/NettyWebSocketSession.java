@@ -176,7 +176,7 @@ public class NettyWebSocketSession extends StandardSession {
     final SslContext sslContext;
     try {
       sslContext = getConnection().isTlsEnabled()
-          ? SslContextBuilder.forClient().startTls(false).build()
+          ? SslContextBuilder.forClient().protocols("TLSv1.2").build()
           : null;
     } catch (SSLException ex) {
       return Completable.error(ex);
