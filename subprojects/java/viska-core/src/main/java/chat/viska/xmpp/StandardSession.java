@@ -10,6 +10,7 @@ import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Single;
 import io.reactivex.functions.Action;
+import io.reactivex.schedulers.Schedulers;
 import java.security.NoSuchProviderException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -453,10 +454,11 @@ public abstract class StandardSession extends Session {
       } else if (handshakerPipe.getClientStreamError() != null) {
         throw handshakerPipe.getClientStreamError();
       } else {
-        throw new Exception("Connection unexpectedly terminated.");
+        throw new Exception("Connection terminated.");
       }
     });
-    return result.toCompletable().doOnError(it -> disconnect().subscribe());
+    final Action cancelling = () -> this.disconnect().subscribeOn(Schedulers.io()).subscribe();
+    return result.toCompletable().doOnError(it -> cancelling.run()).doOnDispose(cancelling);
   }
 
   /**

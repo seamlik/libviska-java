@@ -16,6 +16,7 @@
 
 package chat.viska.commons;
 
+import io.reactivex.Observable;
 import java.io.InputStream;
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -24,6 +25,7 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -33,7 +35,9 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
@@ -97,7 +101,7 @@ public class DomUtils {
   }
 
   /**
-   * Reads a {@link Document} from a {@link String}.
+   * Reads a {@link Document}.
    */
   @Nonnull
   public static Document readDocument(final String xml)
@@ -114,6 +118,9 @@ public class DomUtils {
     return document;
   }
 
+  /**
+   * Reads a {@link Document}.
+   */
   @Nonnull
   public static Document readDocument(final InputStream xml)
       throws SAXException, IOException {

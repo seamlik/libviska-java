@@ -131,30 +131,6 @@ public class Jid {
   }
 
   /**
-   * Returns if this JID equals the specified JID.
-   * @return {@code true} if all parts of the JIDs are identical, {@code false}
-   *         otherwise.
-   */
-  @Override
-  public boolean equals(Object obj) {
-    if (this == obj) {
-      return true;
-    }
-    if (obj == null || getClass() != obj.getClass()) {
-      return false;
-    }
-    Jid that = (Jid)obj;
-    return Objects.equals(localPart, that.localPart)
-        && Objects.equals(domainPart, that.domainPart)
-        && Objects.equals(resourcePart, that.resourcePart);
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(localPart, domainPart, resourcePart);
-  }
-
-  /**
    * Returns the localPart part of this JID.
    * @return never {@code null}.
    */
@@ -188,5 +164,24 @@ public class Jid {
 
   public boolean isEmpty() {
     return localPart.isEmpty() && domainPart.isEmpty() && resourcePart.isEmpty();
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) {
+      return true;
+    }
+    if (obj == null || getClass() != obj.getClass()) {
+      return false;
+    }
+    Jid that = (Jid)obj;
+    return Objects.equals(localPart, that.localPart)
+        && Objects.equals(domainPart, that.domainPart)
+        && Objects.equals(resourcePart, that.resourcePart);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(localPart, domainPart, resourcePart);
   }
 }

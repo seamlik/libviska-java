@@ -191,7 +191,10 @@ public class StanzaErrorException extends Exception {
         stanza.getId(),
         stanza.getSender(),
         stanza.getRecipient(),
-        condition, type, text, errorGenerator,
+        condition,
+        type,
+        text,
+        errorGenerator,
         redirect,
         appCondition,
         null

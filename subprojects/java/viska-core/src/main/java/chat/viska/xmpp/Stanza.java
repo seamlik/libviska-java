@@ -157,9 +157,7 @@ public class Stanza {
    */
   @Nonnull
   public String getIqName() {
-    final Element iqElement = (Element) this.xml
-        .getDocumentElement()
-        .getFirstChild();
+    final Element iqElement = (Element) this.xml.getDocumentElement().getFirstChild();
     if (iqElement == null) {
       return "";
     } else {

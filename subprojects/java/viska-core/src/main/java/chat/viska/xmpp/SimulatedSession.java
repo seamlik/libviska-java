@@ -49,15 +49,21 @@ public class SimulatedSession extends Session {
     this.outboundStream = unsafeOutboundStream.toSerialized();
   }
 
+  @Nonnull
   public Flowable<Stanza> getOutboundStream() {
     return outboundStream;
+  }
+
+  @Nonnull
+  public Flowable<Stanza> getInboundStream() {
+    return inboundStream;
   }
 
   public void readStanza(@Nonnull final Stanza stanza) {
     inboundStream.onNext(stanza);
   }
 
-  public void setJid(@Nullable final Jid jid) {
+  public void setNegotiatedJid(@Nullable final Jid jid) {
     this.jid = Jid.isEmpty(jid) ? Jid.EMPTY : jid;
   }
 

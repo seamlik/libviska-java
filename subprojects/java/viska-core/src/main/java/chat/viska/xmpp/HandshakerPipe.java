@@ -413,7 +413,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
       ));
     }
 
-    switch (document.getDocumentElement().getLocalName()) {
+    switch (document.getDocumentElement().getTagName()) {
       case "failure":
         this.negotiatedFeatures.remove(this.negotiatingFeature);
         this.negotiatingFeature = null;

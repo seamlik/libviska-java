@@ -19,7 +19,6 @@ package chat.viska.xmpp;
 import chat.viska.commons.ExceptionCaughtEvent;
 import chat.viska.commons.reactive.MutableReactiveObject;
 import chat.viska.commons.reactive.ReactiveObject;
-import chat.viska.xmpp.plugins.BasePlugin;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
@@ -31,6 +30,7 @@ import io.reactivex.schedulers.Schedulers;
 import java.util.Collections;
 import java.util.EventObject;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -225,6 +225,16 @@ public abstract class Session implements AutoCloseable {
         }
         this.contexts.removeAll(toRemove);
       }
+    }
+
+    public Set<String> getAllFeatures() {
+      final Set<String> features = new LinkedHashSet<>();
+      synchronized (contexts) {
+        for (PluginContext it : contexts) {
+          features.addAll(it.plugin.getFeatures());
+        }
+      }
+      return features;
     }
 
     @Override

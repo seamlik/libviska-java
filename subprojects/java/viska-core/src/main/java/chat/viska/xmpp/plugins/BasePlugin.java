@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.UUID;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -81,71 +82,38 @@ public class BasePlugin implements Plugin {
 
   @Nullable
   private static List<DiscoItem> convertToDiscoItems(@Nonnull final Document xml) {
-    final String xmlns = CommonXmlns.SERVICE_DISCOVERY + "#items";
-    final Element queryElement = (Element) xml
-        .getDocumentElement()
-        .getElementsByTagNameNS(xmlns, "query")
-        .item(0);
-    if (queryElement == null) {
-      throw new IllegalArgumentException("Not an <iq/>.");
-    }
-    return Observable
-        .fromIterable(DomUtils.convertToList(
-            queryElement.getElementsByTagNameNS(xmlns, "item")
-        ))
-        .cast(Element.class)
-        .map(it -> new DiscoItem(
-            new Jid(it.getAttribute("jid")),
-            it.getAttribute("name"),
-            it.getAttribute("node")
-        ))
-        .toList()
-        .blockingGet();
+    final Element queryElement = (Element) xml.getDocumentElement().getFirstChild();
+    return Observable.fromIterable(DomUtils.convertToList(
+        queryElement.getElementsByTagName("item")
+    )).filter(it -> it.getParentNode() == queryElement).cast(Element.class).map(it -> new DiscoItem(
+        new Jid(it.getAttribute("jid")),
+        it.getAttribute("name"),
+        it.getAttribute("node")
+    )).toList().blockingGet();
   }
 
   @Nonnull
   private static DiscoInfo convertToDiscoInfo(@Nonnull final Document xml) {
-    final String xmlns = CommonXmlns.SERVICE_DISCOVERY + "#info";
-    final Element queryElement = (Element) xml
-        .getDocumentElement()
-        .getElementsByTagNameNS(xmlns, "query")
-        .item(0);
-    if (queryElement == null) {
-      throw new IllegalArgumentException("Not an <iq/>.");
-    }
-    final List<DiscoInfo.Identity> identities = Observable
-        .fromIterable(DomUtils.convertToList(
-            queryElement.getElementsByTagNameNS(xmlns, "identity"))
-        )
-        .cast(Element.class)
-        .map(it -> new DiscoInfo.Identity(
+    final Element queryElement = (Element) xml.getDocumentElement().getFirstChild();
+    final List<DiscoInfo.Identity> identities = Observable.fromIterable(
+        DomUtils.convertToList(queryElement.getElementsByTagName("identity"))
+    ).cast(Element.class).filter(it -> it.getParentNode() == queryElement).map(
+        it -> new DiscoInfo.Identity(
             it.getAttribute("category"),
             it.getAttribute("name"),
             it.getAttribute("type")
-        ))
-        .toList()
-        .blockingGet();
-    final List<String> features = Observable
-        .fromIterable(DomUtils.convertToList(
-            queryElement.getElementsByTagNameNS(xmlns, "feature")
-        ))
-        .cast(Element.class)
-        .map(it -> it.getAttribute("var"))
-        .toList()
-        .blockingGet();
+    )).toList().blockingGet();
+    final List<String> features = Observable.fromIterable(
+        DomUtils.convertToList(queryElement.getElementsByTagName("feature"))
+    ).cast(Element.class).filter(it -> it.getParentNode() == queryElement).map(
+        it -> it.getAttribute("var")
+    ).toList().blockingGet();
     return new DiscoInfo(identities, features);
   }
 
   @Nonnull
   private static SoftwareInfo convertToSoftwareInfo(@Nonnull final Stanza stanza) {
-    final Element queryElement = (Element) stanza
-        .getXml()
-        .getDocumentElement()
-        .getElementsByTagNameNS(CommonXmlns.SOFTWARE_VERSION, "query")
-        .item(0);
-    if (queryElement == null) {
-      throw new IllegalArgumentException("Not an <iq/>.");
-    }
+    final Element queryElement = (Element) stanza.getXml().getDocumentElement().getFirstChild();
     final Element nameElement = (Element)
         queryElement.getElementsByTagName("name").item(0);
     final Element versionElement = (Element)
@@ -159,6 +127,7 @@ public class BasePlugin implements Plugin {
     );
   }
 
+  @Nonnull
   private static List<RosterItem> convertToRosterItems(@Nonnull final Document xml) {
     final Element queryElement = (Element) xml
         .getDocumentElement()
@@ -166,7 +135,7 @@ public class BasePlugin implements Plugin {
         .item(0);
     return Observable.fromIterable(
         DomUtils.convertToList(queryElement.getElementsByTagName("item"))
-    ).cast(Element.class).map(it -> new RosterItem(
+    ).filter(it -> it.getParentNode() == queryElement).cast(Element.class).map(it -> new RosterItem(
         new Jid(it.getAttribute("jid")),
         EnumUtils.fromXmlValue(
             RosterItem.Subscription.class,
@@ -183,7 +152,7 @@ public class BasePlugin implements Plugin {
   @Nonnull
   private Document getSoftwareVersionResult(@Nonnull final Stanza query) {
     final Document result = query.getResultTemplate();
-    final Node queryElement = result.appendChild(result.createElementNS(
+    final Node queryElement = result.getDocumentElement().appendChild(result.createElementNS(
         CommonXmlns.SOFTWARE_VERSION,
         "query"
     ));
@@ -202,7 +171,7 @@ public class BasePlugin implements Plugin {
   @Nonnull
   private Document getDiscoInfoResult(@Nonnull final Stanza query) {
     final Document result = query.getResultTemplate();
-    final Node queryElement = result.appendChild(result.createElementNS(
+    final Node queryElement = result.getDocumentElement().appendChild(result.createElementNS(
         CommonXmlns.SERVICE_DISCOVERY + "#info",
         "query"
     ));
@@ -213,10 +182,8 @@ public class BasePlugin implements Plugin {
     identityElement.setAttribute("type", this.softwareType.getValue());
     identityElement.setAttribute("name", this.softwareName.getValue());
     Observable.fromIterable(
-        getSession().getPluginManager().getPlugins()
-    ).flatMap(
-        it -> Observable.fromIterable(it.getFeatures())
-    ).forEach(it -> {
+        getSession().getPluginManager().getAllFeatures()
+    ).subscribe(it -> {
       final Element featureElement = (Element)
           queryElement.appendChild(result.createElement("feature"));
       featureElement.setAttribute("var", it);
@@ -281,8 +248,14 @@ public class BasePlugin implements Plugin {
   @Nonnull
   public Maybe<List<DiscoItem>> queryDiscoItems(@Nonnull final Jid jid,
                                                 @Nullable final String node) {
-    final Map<String, String> param = new HashMap<>(1);
-    param.put("node", node);
+    final Map<String, String> param;
+    if (StringUtils.isBlank(node)) {
+      param = null;
+    } else {
+      param = new HashMap<>(1);
+      param.put("node", node);
+    }
+
     return this.context.sendIq(
         CommonXmlns.SERVICE_DISCOVERY + "#items",
         jid,

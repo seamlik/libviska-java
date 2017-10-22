@@ -32,9 +32,9 @@ public class DiscoItem {
   private final String node;
 
   public DiscoItem(@Nullable final Jid jid,
-                   @Nonnull final String name,
-                   @Nonnull final String node) {
-    this.jid = jid;
+                   @Nullable final String name,
+                   @Nullable final String node) {
+    this.jid = jid == null ? Jid.EMPTY : jid;
     this.name = name == null ? "" : name;
     this.node = node == null ? "" : node;
   }
