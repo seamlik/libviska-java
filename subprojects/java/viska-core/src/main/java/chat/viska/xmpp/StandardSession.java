@@ -141,10 +141,12 @@ public abstract class StandardSession extends Session {
     this.xmlPipeline.getOutboundExceptionStream().subscribe(
         cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
     );
-    this.xmlPipeline
-        .getOutboundStream()
-        .filter(it -> getLogger().getLevel().intValue() <= Level.FINE.intValue())
-        .subscribe(it -> getLogger().fine("[XML sent] " + DomUtils.writeString(it)));
+    this.xmlPipeline.getOutboundStream().filter(
+        it -> getLogger().getLevel().intValue() <= Level.FINE.intValue()
+    ).subscribe(
+        it -> getLogger().fine("[XML sent] " + DomUtils.writeString(it)),
+        ex -> triggerEvent(new ExceptionCaughtEvent(this, ex))
+    );
     this.xmlPipeline.addAtInboundEnd(
         PIPE_UNSUPPORTED_STANZAS_BLOCKER,
         new UnsupportedStanzasBlockerPipe()
