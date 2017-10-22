@@ -21,8 +21,8 @@ buildscript {
     google()
   }
   dependencies {
-    classpath 'com.android.tools.build:gradle:3.0.0-beta6'
-    classpath 'gradle.plugin.com.github.spotbugs:gradlePlugin:1.4'
+    classpath 'com.android.tools.build:gradle:3.0.0-rc2'
+    classpath 'gradle.plugin.com.github.spotbugs:gradlePlugin:1.5'
     classpath 'org.junit.platform:junit-platform-gradle-plugin:1.0.0'
   }
 }
@@ -52,7 +52,7 @@ project(':android').subprojects {
 }
 
 wrapper {
-  gradleVersion = '4.2'
+  gradleVersion = '4.2.1'
 }
 
 task javadocAll(type: Javadoc) {
