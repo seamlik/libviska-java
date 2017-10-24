@@ -24,6 +24,7 @@ import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
 import chat.viska.xmpp.Stanza;
+import chat.viska.xmpp.XmlWrapperStanza;
 import io.reactivex.Completable;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
@@ -309,7 +310,7 @@ public class BasePlugin implements Plugin {
         jid
     );
     iq.getDocumentElement().appendChild(iq.createElementNS(CommonXmlns.PING, "ping"));
-    return this.context.sendIq(new Stanza(iq)).getResponse().toSingle().toCompletable();
+    return this.context.sendIq(new XmlWrapperStanza(iq)).getResponse().toSingle().toCompletable();
   }
 
   @Override
@@ -334,7 +335,7 @@ public class BasePlugin implements Plugin {
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(CommonXmlns.SOFTWARE_VERSION))
-        .subscribe(it -> context.sendIq(new Stanza(getSoftwareVersionResult(it))));
+        .subscribe(it -> context.sendIq(new XmlWrapperStanza(getSoftwareVersionResult(it))));
 
     // disco#info
     context
@@ -342,7 +343,7 @@ public class BasePlugin implements Plugin {
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(CommonXmlns.SERVICE_DISCOVERY + "#info"))
-        .subscribe(it -> context.sendIq(new Stanza(getDiscoInfoResult(it))));
+        .subscribe(it -> context.sendIq(new XmlWrapperStanza(getDiscoInfoResult(it))));
 
     // disco#items
     context
@@ -350,7 +351,7 @@ public class BasePlugin implements Plugin {
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(CommonXmlns.SERVICE_DISCOVERY + "#items"))
-        .subscribe(it -> context.sendIq(new Stanza(getDiscoItemsResult(it))));
+        .subscribe(it -> context.sendIq(new XmlWrapperStanza(getDiscoItemsResult(it))));
 
     // Ping
     context
@@ -358,7 +359,7 @@ public class BasePlugin implements Plugin {
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> "ping".equals(it.getIqName()))
         .filter(it -> CommonXmlns.PING.equals(it.getIqNamespace()))
-        .subscribe(it -> context.sendIq(new Stanza(it.getResultTemplate())));
+        .subscribe(it -> context.sendIq(new XmlWrapperStanza(it.getResultTemplate())));
   }
 
   @Nonnull

@@ -21,12 +21,8 @@ import chat.viska.commons.EnumUtils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.w3c.dom.Document;
-import org.w3c.dom.Element;
 
-/**
- * Wraps a stanza and provides utility methods.
- */
-public class Stanza {
+public abstract class Stanza {
 
   /**
    * Stanza type.
@@ -45,21 +41,6 @@ public class Stanza {
     GET,
     RESULT,
     SET
-  }
-
-  private final Document xml;
-
-  /**
-   * Checks if a {@link Document} is a stanza.
-   */
-  public static boolean isStanza(@Nullable final Document document) {
-    if (document == null) {
-      return false;
-    }
-    final String rootName = document.getDocumentElement().getLocalName();
-    return "iq".equals(rootName)
-        || "message".equals(rootName)
-        || "presence".equals(rootName);
   }
 
   /**
@@ -91,95 +72,52 @@ public class Stanza {
   }
 
   /**
-   * Default constructor.
-   */
-  public Stanza(@Nonnull final Document xml) {
-    this.xml = xml;
-  }
-
-  /**
    * Gets the XML data.
    */
   @Nonnull
-  public Document getXml() {
-    return xml;
-  }
+  public abstract Document getXml();
 
   /**
    * Gets the ID.
    */
   @Nonnull
-  public String getId() {
-    return xml.getDocumentElement().getAttribute("id");
-  }
-
+  public abstract String getId();
 
   /**
    * Gets the recipient.
    */
   @Nonnull
-  public Jid getRecipient() {
-    return new Jid(xml.getDocumentElement().getAttribute("to"));
-  }
+  public abstract Jid getRecipient();
 
   /**
    * Gets the sender.
    */
   @Nonnull
-  public Jid getSender() {
-    return new Jid(xml.getDocumentElement().getAttribute("from"));
-  }
+  public abstract Jid getSender();
 
   /**
    * Gets the type.
    */
-  @Nullable
-  public Type getType() {
-    return EnumUtils.fromXmlValue(
-        Type.class,
-        xml.getDocumentElement().getLocalName()
-    );
-  }
+  @Nonnull
+  public abstract Type getType();
 
   /**
    * Gets the type of the {@code <iq/>}.
    */
   @Nullable
-  public IqType getIqType() {
-    return EnumUtils.fromXmlValue(
-        IqType.class,
-        xml.getDocumentElement().getAttribute("type")
-    );
-  }
+  public abstract IqType getIqType();
 
   /**
    * Gets the local name of the sub-element of this {@code <iq/>}.
    */
   @Nonnull
-  public String getIqName() {
-    final Element iqElement = (Element) this.xml.getDocumentElement().getFirstChild();
-    if (iqElement == null) {
-      return "";
-    } else {
-      return iqElement.getLocalName();
-    }
-  }
+  public abstract String getIqName();
 
   /**
    * Gets the namespace URI of te sub-element of this {@code <iq/>}.
    */
   @Nonnull
-  public String getIqNamespace() {
-    final Element iqElement = (Element) this.xml
-        .getDocumentElement()
-        .getFirstChild();
-    if (iqElement == null) {
-      return "";
-    } else {
-      final String namespace = iqElement.getNamespaceURI();
-      return namespace == null ? "" : namespace;
-    }
-  }
+  public abstract String getIqNamespace();
 
   /**
    * Generates a template of a result to this {@code <iq/>}.

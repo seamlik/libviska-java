@@ -93,7 +93,7 @@ public abstract class StandardSession extends Session {
   private final List<String> saslMechanisms = new ArrayList<>();
   private final Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
   private final Flowable<Stanza> inboundStanzaStream = xmlPipeline.getInboundStream().map(
-      Stanza::new
+      XmlWrapperStanza::new
   );
   private Connection connection;
 

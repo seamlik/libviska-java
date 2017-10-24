@@ -358,7 +358,7 @@ public abstract class Session implements AutoCloseable {
           element.setAttribute(it.getKey(), it.getValue());
         }
       }
-      return sendIq(new Stanza(iq));
+      return sendIq(new XmlWrapperStanza(iq));
     }
 
     /**
@@ -366,7 +366,7 @@ public abstract class Session implements AutoCloseable {
      */
     @Nonnull
     public StanzaReceipt sendError(@Nonnull final StanzaErrorException error) {
-      return sendStanza(new Stanza(error.toXml()));
+      return sendStanza(new XmlWrapperStanza(error.toXml()));
     }
 
     public void sendError(@Nonnull final StreamErrorException error) {

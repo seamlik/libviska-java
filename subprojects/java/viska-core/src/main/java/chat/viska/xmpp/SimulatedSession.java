@@ -38,7 +38,7 @@ public class SimulatedSession extends Session {
 
   @Override
   protected void sendError(@Nonnull final StreamErrorException error) {
-    outboundStream.onNext(new Stanza(error.toXml()));
+    outboundStream.onNext(new XmlWrapperStanza(error.toXml()));
     changeState(State.DISCONNECTED);
   }
 
