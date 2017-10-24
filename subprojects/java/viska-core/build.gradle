@@ -17,8 +17,8 @@
 dependencies {
   compile 'com.google.code.gson:gson:2.8.1'
   compile 'dnsjava:dnsjava:2.1.8'
-  compile 'io.netty:netty-resolver-dns:4.1.15.Final'
-  compile 'io.netty:netty-transport:4.1.15.Final'
+  compile 'io.netty:netty-resolver-dns:4.1.16.Final'
+  compile 'io.netty:netty-transport:4.1.16.Final'
   compile project(':java:viska-commons')
   compile project(':java:viska-sasl')
 }
