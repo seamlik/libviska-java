@@ -41,10 +41,14 @@ public interface ReactiveObject<T> {
   Flowable<T> getStream();
 
   /**
-   * Atomically gets and does something.
+   * Atomically gets and does something with the current value.
    * @throws Exception If {@code consumer} throws an {@link Exception}.
    */
   void getAndDo(@Nonnull Consumer<T> consumer) throws Exception;
 
+  /**
+   * Atomically gets and does something the current value.
+   * @throws Exception If {@code consumer} throws an {@link Exception}.
+   */
   <R> R getAndDo(@Nonnull Function<T, R> function) throws Exception;
 }
