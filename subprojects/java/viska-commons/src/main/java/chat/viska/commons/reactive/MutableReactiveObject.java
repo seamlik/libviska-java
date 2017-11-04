@@ -39,8 +39,8 @@ public class MutableReactiveObject<T> implements ReactiveObject<T> {
    */
   public void setValue(@Nonnull final T value) {
     synchronized (stream) {
-      this.value = value;
       stream.onNext(value);
+      this.value = value;
     }
   }
 
@@ -91,5 +91,10 @@ public class MutableReactiveObject<T> implements ReactiveObject<T> {
     synchronized (this.stream) {
       return function.apply(value);
     }
+  }
+
+  @Override
+  public boolean hasCompleted() {
+    return stream.hasComplete();
   }
 }

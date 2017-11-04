@@ -51,4 +51,6 @@ public interface ReactiveObject<T> {
    * @throws Exception If {@code consumer} throws an {@link Exception}.
    */
   <R> R getAndDo(@Nonnull Function<T, R> function) throws Exception;
+
+  boolean hasCompleted();
 }
