@@ -20,8 +20,6 @@ import chat.viska.commons.Base64Codec;
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipeline;
-import chat.viska.commons.reactive.MutableReactiveObject;
-import chat.viska.commons.reactive.ReactiveObject;
 import chat.viska.sasl.AuthenticationException;
 import chat.viska.sasl.Client;
 import chat.viska.sasl.ClientFactory;
@@ -30,6 +28,7 @@ import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.processors.BehaviorProcessor;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
@@ -46,6 +45,7 @@ import java.util.Set;
 import java.util.UUID;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
@@ -64,8 +64,7 @@ import org.xml.sax.SAXException;
  * get notified once the handshake/login completes, subscribe to a
  * {@link PropertyChangeEvent} in which {@code State} has changed to
  * {@link State#COMPLETED}. In order to check the cause of a failed handshake
- * or an abnormally closed XMPP stream, check {@link #getHandshakeError()},
- * {@link #getClientStreamError()} and {@link #getServerStreamError()}.</p>
+ * or an abnormally closed XMPP stream, check {@link #getError()}.</p>
  *
  * <h2>Notes on Behavior</h2>
  *
@@ -189,7 +188,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
           .blockingGet()
   );
 
-  private final MutableReactiveObject<State> state = new MutableReactiveObject<>(State.INITIALIZED);
+  @GuardedBy("itself")
+  private final BehaviorProcessor<State> state = BehaviorProcessor.createDefault(State.INITIALIZED);
   private final StandardSession session;
   private final Set<StreamFeature> negotiatedFeatures = new HashSet<>();
   private final Jid loginJid;
@@ -199,15 +199,21 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   private final String presetResource;
   private final List<String> saslMechanisms = new ArrayList<>();
   private final FlowableProcessor<EventObject> eventStream;
-  private StreamErrorException serverStreamError;
-  private StreamErrorException clientStreamError;
-  private Exception handshakeError;
+  private Exception error;
   private Pipeline<?, ?> pipeline;
   private Client saslClient;
   private StreamFeature negotiatingFeature;
   private Disposable pipelineStartedSubscription;
   private Jid negotiatedJid = Jid.EMPTY;
   private String resourceBindingIqId = "";
+
+  private void changeState(@Nonnull final State state) {
+    synchronized (this.state) {
+      if (this.state.getValue() != state) {
+        this.state.onNext(state);
+      }
+    }
+  }
 
   private boolean checkIfAllMandatoryFeaturesNegotiated() {
     final Set<StreamFeature> notNegotiated = new HashSet<>(FEATURES_ORDER);
@@ -394,7 +400,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         this.negotiatingFeature = null;
         break;
       case "failure":
-        this.handshakeError = new Exception("Server failed to proceed StartTLS.");
+        this.error = new Exception("Server failed to proceed StartTLS.");
         break;
       default:
         sendStreamError(new StreamErrorException(
@@ -418,7 +424,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         this.negotiatedFeatures.remove(this.negotiatingFeature);
         this.negotiatingFeature = null;
         closeStream();
-        this.handshakeError = new AuthenticationException(
+        this.error = new AuthenticationException(
             AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED
         );
         break;
@@ -486,7 +492,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
       ));
     } else if ("error".equals(document.getDocumentElement().getAttribute("type"))) {
       try {
-        this.handshakeError = StanzaErrorException.fromXml(document);
+        this.error = StanzaErrorException.fromXml(document);
       } catch (StreamErrorException ex) {
         sendStreamError(ex);
       }
@@ -537,15 +543,11 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   }
 
   private void start() {
-    synchronized (this.state) {
-      if (this.state.getValue() != State.INITIALIZED) {
-        throw new IllegalStateException(
-            "Must not start handshaking if the HandshakerPipe is not just initialized."
-        );
-      }
-      this.state.changeValue(State.STARTED);
-      sendStreamOpening();
+    if (this.state.getValue() != State.INITIALIZED) {
+      throw new IllegalStateException();
     }
+    changeState(State.STARTED);
+    sendStreamOpening();
   }
 
   /**
@@ -580,7 +582,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     }
     this.session = session;
     this.loginJid = Jid.isEmpty(loginJid) ? Jid.EMPTY : loginJid;
-    this.authzId = Jid.isEmpty(authzId) ? Jid.EMPTY : authzId;;
+    this.authzId = Jid.isEmpty(authzId) ? Jid.EMPTY : authzId;
     this.retriever = retriever;
     if (saslMechanisms == null || saslMechanisms.isEmpty()) {
       this.saslMechanisms.add("SCRAM-SHA-1");
@@ -602,10 +604,10 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    * Closes the XMPP stream.
    */
   public Completable closeStream() {
-    synchronized (this.state) {
+    synchronized (state) {
       switch (state.getValue()) {
         case INITIALIZED:
-          state.changeValue(State.STREAM_CLOSED);
+          changeState(State.STREAM_CLOSED);
           return Completable.complete();
         case STREAM_CLOSING:
           break;
@@ -614,17 +616,13 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         case DISPOSED:
           return Completable.complete();
         default:
+          //TODO: Timeout
+          sendStreamClosing();
+          changeState(State.STREAM_CLOSING);
           break;
       }
-      //TODO: Timeout
-      this.state.changeValue(State.STREAM_CLOSING);
-      sendStreamClosing();
     }
-    return this.state
-        .getStream()
-        .filter(it -> it == State.STREAM_CLOSED)
-        .first(State.STREAM_CLOSED)
-        .toCompletable();
+    return state.filter(it -> it == State.STREAM_CLOSED).first(State.STREAM_CLOSED).toCompletable();
   }
 
   public void sendStreamError(@Nonnull final StreamErrorException error) {
@@ -632,7 +630,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         || session.getState().getValue() == Session.State.HANDSHAKING) {
       pipeline.write(error.toXml());
     }
-    this.clientStreamError = error;
+    this.error = error;
     closeStream();
   }
 
@@ -649,26 +647,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    * Gets the current {@link State} of this class.
    */
   @Nonnull
-  public ReactiveObject<State> getState() {
+  public FlowableProcessor<State> getState() {
     return state;
-  }
-
-  /**
-   * Gets the stream error sent by the server.
-   * @return {@code null} if the XMPP stream is still running, or if the server
-   *         did not send any stream error during the last stream.
-   */
-  public StreamErrorException getServerStreamError() {
-    return serverStreamError;
-  }
-
-  /**
-   * Gets the stream error sent by this class to the server.
-   * @return {@code null} if the XMPP stream is still running, or if this class
-   *         did not send any stream error during the last stream.
-   */
-  public StreamErrorException getClientStreamError() {
-    return clientStreamError;
   }
 
   /**
@@ -676,8 +656,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
    * @return {@code null} if the handshake is not completed yet or it was
    *         successful.
    */
-  public Exception getHandshakeError() {
-    return handshakeError;
+  public Exception getError() {
+    return error;
   }
 
   @Nonnull
@@ -729,7 +709,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         switch (this.state.getValue()) {
           case STARTED:
             consumeStreamOpening(document);
-            this.state.changeValue(State.NEGOTIATING);
+            changeState(State.NEGOTIATING);
             break;
           case NEGOTIATING:
             consumeStreamOpening(document);
@@ -752,14 +732,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
             sendStreamClosing();
             break;
         }
-        this.state.changeValue(State.STREAM_CLOSED);
+        changeState(State.STREAM_CLOSED);
       } else if ("features".equals(rootName)
           && CommonXmlns.STREAM_HEADER.equals(rootNs)) {
         if (this.state.getValue() == State.NEGOTIATING) {
           final Element selectedFeature = consumeStreamFeatures(document);
           if (selectedFeature == null) {
             if (checkIfAllMandatoryFeaturesNegotiated()) {
-              this.state.changeValue(State.COMPLETED);
+              changeState(State.COMPLETED);
             } else {
               sendStreamError(new StreamErrorException(
                   StreamErrorException.Condition.UNSUPPORTED_FEATURE,
@@ -827,7 +807,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         }
       } else if ("error".equals(rootName)
           && CommonXmlns.STREAM_HEADER.equals(rootNs)) {
-        this.serverStreamError = StreamErrorException.fromXml(document);
+        this.error = StreamErrorException.fromXml(document);
         closeStream();
       } else {
         sendStreamError(new StreamErrorException(
@@ -835,7 +815,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         ));
       }
     }
-    if (this.handshakeError != null) {
+    if (this.error != null) {
       closeStream();
     }
   }
@@ -844,7 +824,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   public void onAddedToPipeline(final Pipeline<?, ?> pipeline) {
     // TODO: Support for stream resumption
     if (this.state.getValue() != State.INITIALIZED) {
-      throw new IllegalStateException("Used HandshakerPipes cannot be re-added.");
+      throw new IllegalStateException();
     }
 
     /* Resource Binding implicitly means completion of negotiation. See
@@ -854,28 +834,18 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
             || it.getFeature() == StreamFeature.RESOURCE_BINDING_2
     ).filter(
         it -> checkIfAllMandatoryFeaturesNegotiated()
-    ).observeOn(Schedulers.io()).subscribe(it ->
-        this.state.changeValue(State.COMPLETED)
-    );
+    ).observeOn(Schedulers.io()).subscribe(it -> changeState(State.COMPLETED));
 
     if (this.session.getConnection().getTlsMethod() == Connection.TlsMethod.STARTTLS) {
       this.session.getEventStream().ofType(
           StandardSession.StartTlsDeployedEvent.class
       ).observeOn(Schedulers.io()).subscribe( it -> {
-        if (StandardSession.verifyCertificate(loginJid, this.session.getTlsSession())) {
-          sendStreamOpening();
-        } else {
-          this.handshakeError = new SSLPeerUnverifiedException(
-              "Certificate does not match the JID domain."
-          );
-        }
+        sendStreamOpening();
       });
     }
-    this.session
-        .getEventStream()
-        .ofType(StandardSession.ConnectionTerminatedEvent.class)
-        .observeOn(Schedulers.io())
-        .subscribe(it -> this.state.changeValue(State.STREAM_CLOSED));
+    this.session.getEventStream().ofType(
+        StandardSession.ConnectionTerminatedEvent.class
+    ).observeOn(Schedulers.io()).subscribe(it -> changeState(State.STREAM_CLOSED));
 
     this.pipeline = pipeline;
     if (pipeline.getState().getValue() == Pipeline.State.STOPPED) {
@@ -891,9 +861,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
 
   @Override
   public void onRemovedFromPipeline(final Pipeline<?, ?> pipeline) {
-    synchronized (this.state) {
-      this.state.changeValue(State.DISPOSED);
-    }
+    changeState(State.DISPOSED);
     pipelineStartedSubscription.dispose();
   }
 
@@ -902,7 +870,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
                         Object toWrite,
                         List<Object> toForward) throws Exception {
     if (this.state.getValue() == State.DISPOSED) {
-      throw new IllegalStateException("Pipe disposed.");
+      throw new IllegalStateException();
     }
     if (!(toWrite instanceof Document)) {
       super.onWriting(pipeline, toWrite, toForward);

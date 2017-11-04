@@ -8,9 +8,9 @@ import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
-import io.reactivex.Single;
 import io.reactivex.functions.Action;
 import io.reactivex.schedulers.Schedulers;
+import io.reactivex.subjects.CompletableSubject;
 import java.security.NoSuchProviderException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -114,12 +114,13 @@ public abstract class StandardSession extends Session {
     throw new NoSuchProviderException();
   }
 
-  public static boolean verifyCertificate(@Nonnull final Jid jid,
-                                          @Nullable final SSLSession tlsSession) {
+  public static void verifyCertificate(@Nonnull final Jid jid,
+                                       @Nullable final SSLSession tlsSession)
+      throws SSLPeerUnverifiedException{
     if (tlsSession == null) {
-      return true;
+      return;
     } else {
-      return true; //TODO: Verify CN and domainpart of JID.
+      return; //TODO: Verify CN and domainpart of JID.
     }
   }
 
@@ -184,15 +185,15 @@ public abstract class StandardSession extends Session {
   @Nonnull
   @CheckReturnValue
   protected abstract Completable
-  onOpeningConnection(@Nullable Compression connectionCompression,
-                      @Nullable Compression tlsCompression);
+  openConnection(@Nullable Compression connectionCompression,
+                 @Nullable Compression tlsCompression);
 
   /**
-   * Invoked when the user is actively closing the connection.
+   * Closes the network connection.
    */
   @Nonnull
   @CheckReturnValue
-  protected abstract Completable onClosingConnection();
+  protected abstract Completable closeConnection();
 
   /**
    * Invoked when {@link HandshakerPipe} has completed the StartTLS negotiation
@@ -201,14 +202,14 @@ public abstract class StandardSession extends Session {
    */
   @Nonnull
   @CheckReturnValue
-  protected abstract Completable onStartTls();
+  protected abstract Completable deployTls();
 
   /**
    * Invoked when the client and server have decided to compress the XML stream.
    * Always invoked right after a stream negotiation and before a stream
    * restart.
    */
-  protected abstract void onStreamCompression(@Nonnull Compression compression);
+  protected abstract void deployStreamCompression(@Nonnull Compression compression);
 
   /**
    * Invoked when this class is being disposed of. This method should clean up
@@ -387,70 +388,59 @@ public abstract class StandardSession extends Session {
         resource,
         registering
     );
-    handshakerPipe.getState().getStream().subscribe(it -> {
-      getLogger().fine("HandshakerPipe is now " + it.name());
-    });
-    handshakerPipe.getState().getStream().filter(
-        it -> it == HandshakerPipe.State.STREAM_CLOSED
-    ).filter(
-        it -> getState().getValue() == State.ONLINE
-    ).subscribe(it -> {
-      changeState(State.DISCONNECTING);
-      onClosingConnection().andThen(
-          Completable.fromAction(() -> changeState(State.DISCONNECTED))
-      ).subscribe();
-    });
-    handshakerPipe.getEventStream().ofType(
-        HandshakerPipe.FeatureNegotiatedEvent.class
-    ).filter(
-        it -> it.getFeature() == StreamFeature.STARTTLS
-    ).subscribe(it -> onStartTls().subscribe(
-        () -> triggerEvent(new StartTlsDeployedEvent()),
-        ex ->  {
-          sendError(new StreamErrorException(
-              StreamErrorException.Condition.RESET,
-              "Client-side StartTLS initialization failed."
-          ));
-          triggerEvent(new ExceptionCaughtEvent(this, ex));
-        }
+    handshakerPipe.getState().subscribe(it -> getLogger().fine(
+        "HandshakerPipe is now " + it.name()
     ));
-    final Single<HandshakerPipe.State> handshakeFinalState = handshakerPipe
-        .getState()
-        .getStream()
-        .filter(it -> {
-          final boolean isCompleted = it == HandshakerPipe.State.COMPLETED;
-          final boolean isClosed = it == HandshakerPipe.State.STREAM_CLOSED;
-          return isCompleted || isClosed;
-        })
-        .firstOrError();
+
+    final CompletableSubject handshakeResult = CompletableSubject.create();
+    handshakerPipe.getState()
+        .filter(it -> it == HandshakerPipe.State.COMPLETED)
+        .firstElement()
+        .subscribe(it -> handshakeResult.onComplete());
+    handshakerPipe.getState()
+        .filter(it -> it == HandshakerPipe.State.STREAM_CLOSED)
+        .filter(it -> handshakerPipe.getError() != null)
+        .firstElement()
+        .subscribe(it -> {
+          if (!(handshakeResult.hasComplete() || handshakeResult.hasThrowable())) {
+            handshakeResult.onError(handshakerPipe.getError());
+          }
+        });
+    handshakerPipe.getState()
+        .filter(it -> it == HandshakerPipe.State.STREAM_CLOSED)
+        .filter(it -> handshakerPipe.getError() == null)
+        .firstElement()
+        .subscribe(it -> {
+          if (!(handshakeResult.hasComplete() || handshakeResult.hasThrowable())) {
+            handshakeResult.onError(new RuntimeException());
+          }
+        });
+
+    handshakerPipe.getEventStream()
+        .ofType(HandshakerPipe.FeatureNegotiatedEvent.class)
+        .filter(it -> it.getFeature() == StreamFeature.STARTTLS)
+        .doOnComplete(() -> verifyCertificate(getLoginJid(), getTlsSession()))
+        .subscribe(it -> deployTls().subscribe(
+            () -> triggerEvent(new StartTlsDeployedEvent()),
+            handshakeResult::onError
+        ));
     this.xmlPipeline.replace("handshaker", handshakerPipe);
 
-    final Single<HandshakerPipe.State> result = Completable.fromAction(preAction).andThen(
-        onOpeningConnection(connectionCompression, tlsCompression)
+    final Completable result = Completable.fromAction(preAction).andThen(
+        openConnection(connectionCompression, tlsCompression)
     ).doOnComplete(() -> {
       getState().getAndDo(state -> {
         changeState(State.CONNECTED);
-        if (getConnection().getTlsMethod() == Connection.TlsMethod.DIRECT
-            && !verifyCertificate(getNegotiatedJid(), getTlsSession())) {
-          throw new SSLPeerUnverifiedException("Certificate does not match the JID domain.");
+        if (getConnection().getTlsMethod() == Connection.TlsMethod.DIRECT) {
+          verifyCertificate(getLoginJid(), getTlsSession());
         }
         changeState(State.HANDSHAKING);
       });
-    }).andThen(handshakeFinalState).doOnSuccess(state -> {
-      if (state == HandshakerPipe.State.COMPLETED) {
-        changeState(State.ONLINE);
-      } else if (handshakerPipe.getHandshakeError() != null) {
-        throw handshakerPipe.getHandshakeError();
-      } else if (handshakerPipe.getServerStreamError() != null) {
-        throw handshakerPipe.getServerStreamError();
-      } else if (handshakerPipe.getClientStreamError() != null) {
-        throw handshakerPipe.getClientStreamError();
-      } else {
-        throw new Exception("Connection terminated.");
-      }
+    }).andThen(handshakeResult).doOnComplete(() -> {
+      changeState(State.ONLINE);
     });
-    final Action cancelling = () -> this.disconnect().subscribeOn(Schedulers.io()).subscribe();
-    return result.toCompletable().doOnError(it -> cancelling.run()).doOnDispose(cancelling);
+    final Action cancelling = () -> closeConnection().subscribeOn(Schedulers.io()).subscribe();
+    return result.doOnError(it -> cancelling.run()).doOnDispose(cancelling);
   }
 
   /**
@@ -478,13 +468,11 @@ public abstract class StandardSession extends Session {
     if (handshakerPipe instanceof HandshakerPipe) {
       return action.andThen(
           ((HandshakerPipe) handshakerPipe).closeStream()
-      ).andThen(onClosingConnection());
+      ).andThen(closeConnection());
     } else {
-      return action.andThen(onClosingConnection());
+      return action.andThen(closeConnection());
     }
   }
-
-
 
   /**
    * Gets the {@link Connection} that is currently using or will be used.

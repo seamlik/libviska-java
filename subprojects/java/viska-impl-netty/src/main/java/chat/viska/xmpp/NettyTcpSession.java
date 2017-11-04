@@ -261,8 +261,8 @@ public class NettyTcpSession extends StandardSession {
   @Nonnull
   @Override
   protected Completable
-  onOpeningConnection(@Nullable final Compression connectionCompression,
-                      @Nullable final Compression tlsCompression) {
+  openConnection(@Nullable final Compression connectionCompression,
+                 @Nullable final Compression tlsCompression) {
     final Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(nettyEventLoopGroup);
     bootstrap.channel(NioSocketChannel.class);
@@ -361,7 +361,7 @@ public class NettyTcpSession extends StandardSession {
   @Nonnull
   @CheckReturnValue
   @Override
-  protected Completable onClosingConnection() {
+  protected Completable closeConnection() {
     if (this.nettyChannel != null) {
       return Completable.fromFuture(this.nettyChannel.close());
     } else {
@@ -370,7 +370,7 @@ public class NettyTcpSession extends StandardSession {
   }
 
   @Override
-  protected void onStreamCompression(@Nonnull final Compression compression) {
+  protected void deployStreamCompression(@Nonnull final Compression compression) {
     throw new UnsupportedOperationException(
         "This class does not support stream compression."
     );
@@ -378,7 +378,7 @@ public class NettyTcpSession extends StandardSession {
 
   @Nonnull
   @Override
-  protected Completable onStartTls() {
+  protected Completable deployTls() {
     try {
       this.tlsHandler = TLS_CONTEXT_BUILDER.build().newHandler(nettyChannel.alloc());
     } catch (SSLException ex) {

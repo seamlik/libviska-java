@@ -140,7 +140,7 @@ public class NettyWebSocketSession extends StandardSession {
       result.insert(rootName.length() + 2, String.format(
           "%1s=\"%2s\" ",
           prefix == null ? "xmlns" : "xmlns:" + prefix,
-          Stanza.isStanza(document)
+          XmlWrapperStanza.isStanza(document)
               ? CommonXmlns.STANZA_CLIENT
               : CommonXmlns.STREAM_HEADER
       ));
@@ -151,8 +151,8 @@ public class NettyWebSocketSession extends StandardSession {
   @CheckReturnValue
   @Nonnull
   @Override
-  protected Completable onOpeningConnection(Compression connectionCompression,
-                                            Compression tlsCompression) {
+  protected Completable openConnection(Compression connectionCompression,
+                                       Compression tlsCompression) {
     if (connectionCompression == Compression.AUTO) {
       this.connectionCompression = DEFAULT_CONNECTION_COMPRESSION;
     } else if (SUPPORTED_CONNECTION_COMPRESSION.contains(connectionCompression)) {
@@ -234,7 +234,7 @@ public class NettyWebSocketSession extends StandardSession {
   @Nonnull
   @CheckReturnValue
   @Override
-  protected Completable onClosingConnection() {
+  protected Completable closeConnection() {
     if (nettyChannel != null) {
       if (websocketHandler != null && nettyChannel.isActive()) {
         return Completable.fromFuture(websocketHandler.handshaker().close(
@@ -251,14 +251,14 @@ public class NettyWebSocketSession extends StandardSession {
 
   @Nonnull
   @Override
-  protected Completable onStartTls() {
+  protected Completable deployTls() {
     throw new UnsupportedOperationException(
         "WebSocket session does not allow StartTLS."
     );
   }
 
   @Override
-  protected void onStreamCompression(Compression compression) {
+  protected void deployStreamCompression(@Nonnull final Compression compression) {
     throw new UnsupportedOperationException(
         "This class does not support stream compression."
     );
