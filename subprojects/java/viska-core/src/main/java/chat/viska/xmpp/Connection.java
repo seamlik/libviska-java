@@ -264,6 +264,8 @@ public class Connection {
       if (records == null) {
         if ("host not found".equals(lookup.getErrorString())) {
           return Collections.emptyList();
+        } else if ("type not found".equals(lookup.getErrorString())) {
+          return Collections.emptyList();
         } else {
           throw new DnsQueryException(lookup.getErrorString());
         }
