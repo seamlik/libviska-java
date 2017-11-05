@@ -234,7 +234,7 @@ public class NettyWebSocketSession extends StandardSession {
   @Nonnull
   @CheckReturnValue
   @Override
-  protected Completable closeConnection() {
+  public Completable killConnection() {
     if (nettyChannel != null) {
       if (websocketHandler != null && nettyChannel.isActive()) {
         return Completable.fromFuture(websocketHandler.handshaker().close(

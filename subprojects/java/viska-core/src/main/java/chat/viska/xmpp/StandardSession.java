@@ -189,11 +189,11 @@ public abstract class StandardSession extends Session {
                  @Nullable Compression tlsCompression);
 
   /**
-   * Closes the network connection.
+   * Kills the network connection.
    */
   @Nonnull
   @CheckReturnValue
-  protected abstract Completable closeConnection();
+  public abstract Completable killConnection();
 
   /**
    * Invoked when {@link HandshakerPipe} has completed the StartTLS negotiation
@@ -439,7 +439,7 @@ public abstract class StandardSession extends Session {
     }).andThen(handshakeResult).doOnComplete(() -> {
       changeState(State.ONLINE);
     });
-    final Action cancelling = () -> closeConnection().subscribeOn(Schedulers.io()).subscribe();
+    final Action cancelling = () -> killConnection().subscribeOn(Schedulers.io()).subscribe();
     return result.doOnError(it -> cancelling.run()).doOnDispose(cancelling);
   }
 
@@ -468,9 +468,9 @@ public abstract class StandardSession extends Session {
     if (handshakerPipe instanceof HandshakerPipe) {
       return action.andThen(
           ((HandshakerPipe) handshakerPipe).closeStream()
-      ).andThen(closeConnection());
+      ).andThen(killConnection());
     } else {
-      return action.andThen(closeConnection());
+      return action.andThen(killConnection());
     }
   }
 

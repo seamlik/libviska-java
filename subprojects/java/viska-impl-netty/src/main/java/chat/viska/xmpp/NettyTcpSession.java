@@ -361,7 +361,7 @@ public class NettyTcpSession extends StandardSession {
   @Nonnull
   @CheckReturnValue
   @Override
-  protected Completable closeConnection() {
+  public Completable killConnection() {
     if (this.nettyChannel != null) {
       return Completable.fromFuture(this.nettyChannel.close());
     } else {
