@@ -61,6 +61,8 @@ import org.xml.sax.SAXException;
  * <a href="https://datatracker.ietf.org/doc/rfc7395">WebSocket</a> connections
  * implemented using Netty.
  *
+ * <p>This class is not maintained at the moment, hence the {@link Deprecated} mark.</p>
+ *
  * <table>
  *   <caption>Compression Support</caption>
  *   <tr>
@@ -82,6 +84,7 @@ import org.xml.sax.SAXException;
  * </table>
  */
 @ThreadSafe
+@Deprecated
 public class NettyWebSocketSession extends StandardSession {
 
   private class ConsumerHandler extends SimpleChannelInboundHandler<TextWebSocketFrame> {
