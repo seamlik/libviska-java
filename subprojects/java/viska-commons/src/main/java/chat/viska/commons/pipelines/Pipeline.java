@@ -375,6 +375,10 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     outboundExceptionStream.onComplete();
     readingObject = null;
     writingObject = null;
+    for (Map.Entry<String, Pipe> entry : pipes) {
+      entry.getValue().onRemovedFromPipeline(this);
+    }
+    pipes.clear();
   }
 
   @Nonnull

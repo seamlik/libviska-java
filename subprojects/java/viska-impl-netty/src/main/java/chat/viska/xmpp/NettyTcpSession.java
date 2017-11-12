@@ -151,6 +151,22 @@ public class NettyTcpSession extends StandardSession {
   private ByteBuf serverStreamClosing;
   private String serverStreamPrefix = "";
 
+  public NettyTcpSession() {
+    getXmlPipelineOutboundStream().subscribe(it ->  {
+      final String data = preprocessOutboundXml(it);
+      nettyChannel.writeAndFlush(data);
+      final String rootName = it.getDocumentElement().getLocalName();
+      final String rootNs = it.getDocumentElement().getNamespaceURI();
+      if (CommonXmlns.STREAM_OPENING_WEBSOCKET.equals(rootNs) && "open".equals(rootName)) {
+        nettyChannel.pipeline().replace(
+            PIPE_DECODER_XML,
+            PIPE_DECODER_XML,
+            new XmlDecoder()
+        );
+      }
+    });
+  }
+
   private Document preprocessInboundXml(@Nonnull final String xml)
       throws SAXException {
     final StringBuilder builder = new StringBuilder(xml);
@@ -340,22 +356,7 @@ public class NettyTcpSession extends StandardSession {
       this.nettyChannel.closeFuture().addListener(it -> {
         triggerEvent(new ConnectionTerminatedEvent());
       });
-    }).andThen(Completable.fromAction(() ->
-        getXmlPipelineOutboundStream().subscribe(it ->  {
-          final String data = preprocessOutboundXml(it);
-          nettyChannel.writeAndFlush(data);
-          final String rootName = it.getDocumentElement().getLocalName();
-          final String rootNs = it.getDocumentElement().getNamespaceURI();
-          if (CommonXmlns.STREAM_OPENING_WEBSOCKET.equals(rootNs)
-              && "open".equals(rootName)) {
-            nettyChannel.pipeline().replace(
-                PIPE_DECODER_XML,
-                PIPE_DECODER_XML,
-                new XmlDecoder()
-            );
-          }
-        })
-    )));
+    }));
   }
 
   @Nonnull

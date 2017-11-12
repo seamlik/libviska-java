@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.logging.Level;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nonnull;
@@ -76,13 +77,25 @@ public abstract class StandardSession extends Session {
    * Indicates a TLS session has finished setting up after a StartTLS request. It is usually
    * subscribed by a {@link HandshakerPipe} so that it restarts the XMPP stream immediately.
    */
-  public class StartTlsDeployedEvent extends EventObject {
+  public class TlsDeployedEvent extends EventObject {
+
+    private final Throwable error;
 
     /**
      * Default constructor.
      */
-    public StartTlsDeployedEvent() {
+    public TlsDeployedEvent(@Nullable final Throwable error) {
       super(StandardSession.this);
+      this.error = error;
+    }
+
+    /**
+     * Gets the error when deploying TLS into the network connection.
+     * @return {@code null} if TLS is successfully deployed.
+     */
+    @Nullable
+    public Throwable getError() {
+      return error;
     }
   }
 
@@ -351,7 +364,6 @@ public abstract class StandardSession extends Session {
    * @return Token to track the completion.
    */
   @Nonnull
-  @CheckReturnValue
   public Completable login(@Nullable final CredentialRetriever retriever,
                            @Nullable final String resource,
                            final boolean registering,
@@ -369,12 +381,10 @@ public abstract class StandardSession extends Session {
 
     final Action preAction = () -> {
       getState().getAndDo(state -> {
-        switch (state) {
-          case DISCONNECTED:
-            changeState(State.CONNECTING);
-            return;
-          default:
-            throw new IllegalStateException();
+        if (state == State.DISCONNECTED) {
+          changeState(State.CONNECTING);
+        } else {
+          throw new IllegalStateException();
         }
       });
     };
@@ -388,41 +398,19 @@ public abstract class StandardSession extends Session {
         resource,
         registering
     );
-    handshakerPipe.getState().subscribe(it -> getLogger().fine(
+    handshakerPipe.getState().getStream().subscribe(it -> getLogger().fine(
         "HandshakerPipe is now " + it.name()
     ));
-
-    final CompletableSubject handshakeResult = CompletableSubject.create();
-    handshakerPipe.getState()
-        .filter(it -> it == HandshakerPipe.State.COMPLETED)
-        .firstElement()
-        .subscribe(it -> handshakeResult.onComplete());
-    handshakerPipe.getState()
-        .filter(it -> it == HandshakerPipe.State.STREAM_CLOSED)
-        .filter(it -> handshakerPipe.getError() != null)
-        .firstElement()
-        .subscribe(it -> {
-          if (!(handshakeResult.hasComplete() || handshakeResult.hasThrowable())) {
-            handshakeResult.onError(handshakerPipe.getError());
-          }
-        });
-    handshakerPipe.getState()
-        .filter(it -> it == HandshakerPipe.State.STREAM_CLOSED)
-        .filter(it -> handshakerPipe.getError() == null)
-        .firstElement()
-        .subscribe(it -> {
-          if (!(handshakeResult.hasComplete() || handshakeResult.hasThrowable())) {
-            handshakeResult.onError(new RuntimeException());
-          }
-        });
 
     handshakerPipe.getEventStream()
         .ofType(HandshakerPipe.FeatureNegotiatedEvent.class)
         .filter(it -> it.getFeature() == StreamFeature.STARTTLS)
-        .doOnComplete(() -> verifyCertificate(getLoginJid(), getTlsSession()))
         .subscribe(it -> deployTls().subscribe(
-            () -> triggerEvent(new StartTlsDeployedEvent()),
-            handshakeResult::onError
+            () -> {
+              triggerEvent(new TlsDeployedEvent(null));
+              verifyCertificate(getLoginJid(), getTlsSession());
+            },
+            ex -> triggerEvent(new TlsDeployedEvent(ex))
         ));
     this.xmlPipeline.replace("handshaker", handshakerPipe);
 
@@ -436,7 +424,7 @@ public abstract class StandardSession extends Session {
         }
         changeState(State.HANDSHAKING);
       });
-    }).andThen(handshakeResult).doOnComplete(() -> {
+    }).andThen(handshakerPipe.getHandshakeResult()).doOnComplete(() -> {
       changeState(State.ONLINE);
     });
     final Action cancelling = () -> killConnection().subscribeOn(Schedulers.io()).subscribe();
@@ -504,8 +492,9 @@ public abstract class StandardSession extends Session {
   @Override
   public Completable dispose() {
     final Action action = () -> {
-      changeState(State.DISPOSED);
       onDisposing();
+      xmlPipeline.dispose();
+      changeState(State.DISPOSED);
     };
     switch (getState().getValue()) {
       case DISPOSED:
@@ -519,8 +508,10 @@ public abstract class StandardSession extends Session {
             .andThen(Completable.fromAction(action));
       case DISCONNECTED:
         return Completable.fromAction(action);
-      default:
+      case ONLINE:
         return disconnect().andThen(Completable.fromAction(action));
+      default:
+        return killConnection().andThen(Completable.fromAction(action));
     }
   }
 
