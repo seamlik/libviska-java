@@ -408,7 +408,7 @@ public abstract class Session implements AutoCloseable {
   }
 
   protected void log(final EventObject event) {
-    logger.log(Level.FINE, event.toString());
+    logger.log(Level.INFO, event.toString());
   }
 
   protected void log(final ExceptionCaughtEvent event) {
