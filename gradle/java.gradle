@@ -31,12 +31,12 @@ dependencies {
 checkstyle {
   def version = '8.7'
   toolVersion = version
-  File styleFile = file("${rootDir}/config/checkstyle/checkstyle.xml")
+  File styleFile = file("${rootProject.buildDir}/checkstyle.xml")
   if (!styleFile.exists()) {
     mkdir styleFile.parent
     styleFile.createNewFile()
     styleFile.write(new URL(
-        "https://github.com/checkstyle/checkstyle/blob/checkstyle-${version}/src/main/resources/google_checks.xml"
+        "https://raw.githubusercontent.com/checkstyle/checkstyle/checkstyle-${version}/src/main/resources/google_checks.xml"
     ).text)
   }
   config = resources.text.fromFile(styleFile)
