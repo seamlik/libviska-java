@@ -15,8 +15,8 @@
  */
 
 dependencies {
-  compile 'io.netty:netty-codec-http:4.1.16.Final'
-  compile 'io.netty:netty-codec-xml:4.1.16.Final'
-  compile 'io.netty:netty-handler:4.1.16.Final'
+  compile 'io.netty:netty-codec-http:4.1.19.Final'
+  compile 'io.netty:netty-codec-xml:4.1.19.Final'
+  compile 'io.netty:netty-handler:4.1.19.Final'
   compile project(':java:viska-core')
 }
