@@ -234,21 +234,17 @@ public class NettyWebSocketSession extends StandardSession {
     })));
   }
 
-  @Nonnull
-  @CheckReturnValue
   @Override
-  public Completable killConnection() {
+  public void killConnection() {
     if (nettyChannel != null) {
       if (websocketHandler != null && nettyChannel.isActive()) {
-        return Completable.fromFuture(websocketHandler.handshaker().close(
+        websocketHandler.handshaker().close(
             nettyChannel,
             new CloseWebSocketFrame(1000, null)
-        )).andThen(Completable.fromFuture(this.nettyChannel.closeFuture()));
+        );
       } else {
-        return Completable.fromFuture(this.nettyChannel.close());
+        nettyChannel.close();
       }
-    } else {
-      return Completable.complete();
     }
   }
 

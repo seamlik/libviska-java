@@ -204,9 +204,7 @@ public abstract class StandardSession extends Session {
   /**
    * Kills the network connection.
    */
-  @Nonnull
-  @CheckReturnValue
-  public abstract Completable killConnection();
+  public abstract void killConnection();
 
   /**
    * Invoked when {@link HandshakerPipe} has completed the StartTLS negotiation
@@ -427,7 +425,7 @@ public abstract class StandardSession extends Session {
     }).andThen(handshakerPipe.getHandshakeResult()).doOnComplete(() -> {
       changeState(State.ONLINE);
     });
-    final Action cancelling = () -> killConnection().subscribeOn(Schedulers.io()).subscribe();
+    final Action cancelling = this::killConnection;
     return result.doOnError(it -> cancelling.run()).doOnDispose(cancelling);
   }
 
@@ -453,12 +451,13 @@ public abstract class StandardSession extends Session {
     }
     final Pipe handshakerPipe = this.xmlPipeline.get("handshaker");
     final Completable action = Completable.fromAction(() -> changeState(State.DISCONNECTING));
+    final Completable finalAct = Completable.fromAction(this::killConnection);
     if (handshakerPipe instanceof HandshakerPipe) {
       return action.andThen(
           ((HandshakerPipe) handshakerPipe).closeStream()
-      ).andThen(killConnection());
+      ).andThen(finalAct);
     } else {
-      return action.andThen(killConnection());
+      return action.andThen(finalAct);
     }
   }
 
@@ -511,7 +510,7 @@ public abstract class StandardSession extends Session {
       case ONLINE:
         return disconnect().andThen(Completable.fromAction(action));
       default:
-        return killConnection().andThen(Completable.fromAction(action));
+        return Completable.fromAction(this::killConnection).andThen(Completable.fromAction(action));
     }
   }
 
