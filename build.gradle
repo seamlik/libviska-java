@@ -51,10 +51,6 @@ project(':android').subprojects {
   apply from: "${rootDir}/gradle/android.gradle"
 }
 
-wrapper {
-  gradleVersion = '4.3'
-}
-
 task javadocAll(type: Javadoc) {
   def outputDir = file("${buildDir}/javadocAll")
   def overviewPath = 'doc/javadoc-overview.html'
