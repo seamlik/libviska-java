@@ -1,11 +1,9 @@
-*.class
 *.iml
+.gradle/
 .idea/
-/.gradle/
-/config/checkstyle/checkstyle.xml
 /gradle/wrapper/
 /gradlew
 /gradlew.bat
+/local.properties
 build/
-local.properties
 out/
