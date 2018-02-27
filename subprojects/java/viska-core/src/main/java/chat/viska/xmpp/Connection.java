@@ -299,7 +299,7 @@ public class Connection {
   }
 
   /**
-   * Queries {@literal host-meta.json} for {@link Connection}s.
+   * Queries {@literal host-meta.json} for {@link Connection}s. Signals {@link DnsQueryException}.
    */
   @Nonnull
   public static List<Connection> queryHostMetaJson(final Reader hostMeta)
@@ -316,7 +316,7 @@ public class Connection {
   /**
    * Queries {@literal host-meta.json} for XMPP connections. Signals
    * {@link InvalidHostMetaException} if the JSON is invalid. Signals
-   * {@link MalformedURLException} if {@code domain} is invalid.
+   * {@link MalformedURLException} if {@code domain} is invalid. Signals {@link DnsQueryException}.
    */
   public static Maybe<List<Connection>>
   queryHostMetaJson(@Nonnull final String domain, @Nullable final Proxy proxy) {
@@ -325,7 +325,7 @@ public class Connection {
 
   /**
    * Queries DNS records for {@link Connection}s. Signals {@link Exception} if
-   * DNS queries could not be made.
+   * DNS queries could not be made. Signals {@link DnsQueryException}.
    * @throws IllegalArgumentException If {@code domain} is invalid.
    */
   @Nonnull
@@ -432,7 +432,7 @@ public class Connection {
 
   /**
    * Queries {@link Connection}s from a server using all methods. The token
-   * silently ignores all signaled {@link Exception}s.
+   * silently ignores all signaled {@link Exception}s. Signals {@link DnsQueryException}.
    */
   public static Single<List<Connection>>
   queryAll(final String domain, @Nullable final Proxy proxy, @Nullable List<InetAddress> dns) {

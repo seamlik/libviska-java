@@ -38,7 +38,7 @@ public class IqReceipt extends StanzaReceipt {
   }
 
   /**
-   * Gets a token of response to the sent {@link <iq/>}. For an {@code <iq/>} of
+   * Gets a token of response to the sent {@code <iq/>}. For an {@code <iq/>} of
    * {@link chat.viska.xmpp.Stanza.IqType#RESULT} or {@link chat.viska.xmpp.Stanza.IqType#ERROR} it
    * signals a completion immediately. Signals a completion if no result is ever received before the
    * {@link Session} is disposed of. Signals an error if a stanza error is received.

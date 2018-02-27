@@ -67,8 +67,7 @@ import org.xml.sax.SAXException;
  * already running when this Pipe is added to a Pipeline. In order to get
  * get notified once the handshake/login completes, subscribe to a
  * {@link PropertyChangeEvent} in which {@code State} has changed to
- * {@link State#COMPLETED}. In order to check the cause of a failed handshake
- * or an abnormally closed XMPP stream, check {@link #getError()}.</p>
+ * {@link State#COMPLETED}.</p>
  *
  * <h2>Notes on Behavior</h2>
  *
