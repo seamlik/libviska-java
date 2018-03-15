@@ -16,7 +16,6 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.DisposablesBin;
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.ExceptionCaughtEvent;
 import chat.viska.commons.pipelines.BlankPipe;
@@ -30,6 +29,7 @@ import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
+import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
@@ -202,7 +202,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   private final String presetResource;
   private final List<String> saslMechanisms = new ArrayList<>();
   private final FlowableProcessor<EventObject> eventStream;
-  private final DisposablesBin bin = new DisposablesBin();
+  private final CompositeDisposable bin = new CompositeDisposable();
   private final CompletableSubject handshakeResult = CompletableSubject.create();
   private Pipeline<?, ?> pipeline;
   private Client saslClient;
@@ -894,7 +894,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   public void onRemovedFromPipeline(final Pipeline<?, ?> pipeline) {
     state.changeValue(State.DISPOSED);
     state.complete();
-    bin.clear();
+    bin.dispose();
   }
 
   @Override
