@@ -15,8 +15,9 @@
  */
 
 dependencies {
-  compile 'io.netty:netty-codec-http:4.1.19.Final'
-  compile 'io.netty:netty-codec-xml:4.1.19.Final'
-  compile 'io.netty:netty-handler:4.1.19.Final'
-  compile project(':java:viska-core')
+  api project(':java:viska-core')
+  implementation "io.netty:netty-codec-http:${rootProject.libraryVersions.NETTY}"
+  implementation "io.netty:netty-codec-xml:${rootProject.libraryVersions.NETTY}"
+  implementation "io.netty:netty-handler:${rootProject.libraryVersions.NETTY}"
+  implementation rootProject.libraries.COMMONS_LANG
 }

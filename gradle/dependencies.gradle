@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Kai-Chung Yan (殷啟聰)
+ * Copyright (C) 2018 Kai-Chung Yan (殷啟聰)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-apply plugin: 'application'
-
-mainClassName = 'chat.viska.cmd.Cmd'
-
-dependencies {
-  implementation 'com.beust:jcommander:1.71'
-  implementation project(':java:viska-core')
-  runtimeOnly project(':java:viska-impl-netty')
+ext {
+  libraries = [:]
+  libraryVersions = [:]
 }
+
+libraries.COMMONS_LANG = 'org.apache.commons:commons-lang3:3.6'
+
+libraryVersions.NETTY = '4.1.22.Final'

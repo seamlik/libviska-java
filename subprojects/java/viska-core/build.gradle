@@ -15,10 +15,11 @@
  */
 
 dependencies {
-  compile 'com.google.code.gson:gson:2.8.1'
-  compile 'dnsjava:dnsjava:2.1.8'
-  compile 'io.netty:netty-resolver-dns:4.1.16.Final'
-  compile 'io.netty:netty-transport:4.1.16.Final'
-  compile project(':java:viska-commons')
-  compile project(':java:viska-sasl')
+  api project(':java:viska-commons')
+  implementation 'com.google.code.gson:gson:2.8.1'
+  implementation 'dnsjava:dnsjava:2.1.8'
+  implementation "io.netty:netty-resolver-dns:${rootProject.libraryVersions.NETTY}"
+  implementation "io.netty:netty-transport:${rootProject.libraryVersions.NETTY}"
+  implementation project(':java:viska-sasl')
+  implementation rootProject.libraries.COMMONS_LANG
 }
