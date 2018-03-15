@@ -22,13 +22,13 @@ tasks.withType(AbstractPublishToMaven) {
 }
 
 android {
-  compileSdkVersion 26
+  compileSdkVersion 27
   compileOptions {
     sourceCompatibility 8
     targetCompatibility sourceCompatibility
   }
   defaultConfig {
-    minSdkVersion 21
+    minSdkVersion 26
   }
 }
 
