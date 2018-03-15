@@ -57,12 +57,12 @@ import rxbeans.StandardProperty;
  *   <li><a href="https://xmpp.org/extensions/xep-0199.html">XEP-0199: XMPP Ping</a></li>
  * </ul>
  */
+@Plugin.Features({
+    CommonXmlns.PING,
+    CommonXmlns.SOFTWARE_VERSION
+})
 public class BasePlugin implements Plugin {
 
-  private static final Set<String> features = new HashSet<>(Arrays.asList(
-      CommonXmlns.PING,
-      CommonXmlns.SOFTWARE_VERSION
-  ));
   private static final Set<Map.Entry<String, String>> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
       new AbstractMap.SimpleImmutableEntry<>(
           CommonXmlns.SERVICE_DISCOVERY + "#info", "query"
@@ -316,12 +316,6 @@ public class BasePlugin implements Plugin {
 
   @Override
   @Nonnull
-  public Set<String> getFeatures() {
-    return Collections.unmodifiableSet(features);
-  }
-
-  @Override
-  @Nonnull
   public Set<Map.Entry<String, String>> getSupportedIqs() {
     return Collections.unmodifiableSet(SUPPORTED_IQS);
   }
@@ -370,11 +364,5 @@ public class BasePlugin implements Plugin {
       throw new IllegalStateException();
     }
     return context.getSession();
-  }
-
-  @Nonnull
-  @Override
-  public Set<Class<? extends Plugin>> getDependencies() {
-    return Collections.emptySet();
   }
 }

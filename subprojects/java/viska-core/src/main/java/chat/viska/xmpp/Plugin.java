@@ -16,6 +16,13 @@
 
 package chat.viska.xmpp;
 
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
@@ -28,23 +35,65 @@ import javax.annotation.concurrent.ThreadSafe;
 public interface Plugin extends SessionAware {
 
   /**
-   * Gets the dependencies. When this plugin is being applied, all dependencies
-   * will also be applied automatically as well.
+   * Specifies the dependencies of a {@link Plugin}.
    */
-  @Nonnull
-  Set<Class<? extends Plugin>> getDependencies();
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.TYPE)
+  @interface DependsOn {
+    Class<? extends Plugin>[] value();
+  }
+
+  /**
+   * Specifies what features the plugin provides by default.
+   *
+   * <p>This API is part of
+   * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
+   * Discovery</a></p>
+   */
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.TYPE)
+  @interface Features {
+    String[] value();
+  }
+
+  /**
+   * Gets all transitive and direct dependencies. When this plugin is being applied, all
+   * dependencies will also be applied automatically.
+   */
+  default Set<Class<? extends Plugin>> getDependencies() {
+    final Set<Class<? extends Plugin>> dependencies = new LinkedHashSet<>();
+    Class<?> clazz = getClass();
+    while (clazz != null) {
+      if (clazz.isAnnotationPresent(DependsOn.class)) {
+        dependencies.addAll(Arrays.asList(clazz.getAnnotation(DependsOn.class).value()));
+      }
+      clazz = clazz.getSuperclass();
+    }
+    return dependencies;
+  }
 
   /**
    * Gets the features currently enabled by the plugin. Results of this method
    * are served when another peer entity is querying service info on this XMPP
    * client.
    *
-   * <p>This method is part of
+   * <p>This API is part of
    * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
    * Discovery</a></p>
    */
-  @Nonnull
-  Set<String> getFeatures();
+  default Set<String> getFeatures() {
+    final Set<String> features = new LinkedHashSet<>();
+    Class<?> clazz = getClass();
+    while (clazz != null) {
+      if (clazz.isAnnotationPresent(Features.class)) {
+        features.addAll(Arrays.asList(clazz.getAnnotation(Features.class).value()));
+      }
+      clazz = clazz.getSuperclass();
+    }
+    return features;
+  }
 
   /**
    * Gets the {@code <iq/>} sub-element types currently supported by the plugin.

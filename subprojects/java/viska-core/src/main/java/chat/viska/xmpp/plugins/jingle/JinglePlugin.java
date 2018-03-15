@@ -26,8 +26,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
+@Plugin.DependsOn(BasePlugin.class)
+@Plugin.Features(CommonXmlns.JINGLE)
 public class JinglePlugin implements Plugin {
 
   private final Set<JingleSession> sessions = new HashSet<>();
@@ -35,12 +36,6 @@ public class JinglePlugin implements Plugin {
 
   public Set<JingleSession> getJingleSessions() {
     return Collections.unmodifiableSet(sessions);
-  }
-
-  @Override
-  @Nonnull
-  public Set<String> getFeatures() {
-    return Collections.singleton(CommonXmlns.JINGLE);
   }
 
   @Override
@@ -60,11 +55,5 @@ public class JinglePlugin implements Plugin {
   @Override
   public Session getSession() {
     return context.getSession();
-  }
-
-  @Nonnull
-  @Override
-  public Set<Class<? extends Plugin>> getDependencies() {
-    return Collections.singleton(BasePlugin.class);
   }
 }
