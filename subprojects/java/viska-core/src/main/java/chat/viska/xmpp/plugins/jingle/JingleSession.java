@@ -16,8 +16,6 @@
 
 package chat.viska.xmpp.plugins.jingle;
 
-import chat.viska.commons.reactive.MutableReactiveObject;
-import chat.viska.commons.reactive.ReactiveObject;
 import chat.viska.xmpp.Session;
 import chat.viska.xmpp.SessionAware;
 import javax.annotation.Nonnull;

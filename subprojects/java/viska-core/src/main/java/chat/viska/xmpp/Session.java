@@ -17,8 +17,6 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.ExceptionCaughtEvent;
-import chat.viska.commons.reactive.MutableReactiveObject;
-import chat.viska.commons.reactive.ReactiveObject;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
@@ -45,12 +43,22 @@ import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import rxbeans.MutableProperty;
+import rxbeans.Property;
+import rxbeans.StandardObject;
+import rxbeans.StandardProperty;
 
 /**
  * XMPP session defining abstract concept for all implementations.
+ *
+ * <p>This type emits the following types of {@link EventObject}:</p>
+ *
+ * <ul>
+ *   <li>{@link chat.viska.commons.ExceptionCaughtEvent}</li>
+ * </ul>
  */
 @ThreadSafe
-public abstract class Session implements AutoCloseable {
+public abstract class Session extends StandardObject implements AutoCloseable {
 
   /**
    * State of a {@link Session}.
@@ -208,7 +216,7 @@ public abstract class Session implements AutoCloseable {
       synchronized (this.contexts) {
         for (PluginContext it : this.contexts) {
           if (type.isInstance(it.plugin)) {
-            it.enabled.changeValue(false);
+            it.enabled.change(false);
           }
         }
       }
@@ -255,9 +263,9 @@ public abstract class Session implements AutoCloseable {
   public class PluginContext implements SessionAware {
 
     @GuardedBy("itself")
-    private final MutableReactiveObject<Boolean> enabled = new MutableReactiveObject<>(true);
-    private final MutableReactiveObject<Boolean> available = new MutableReactiveObject<>(
-        enabled.getValue() && getState().getValue() == State.ONLINE
+    private final MutableProperty<Boolean> enabled = new StandardProperty<>(true);
+    private final MutableProperty<Boolean> available = new StandardProperty<>(
+        enabled.get() && stateProperty().get() == State.ONLINE
     );
     private final Plugin plugin;
     private final FlowableProcessor<Stanza> inboundStanzaStream = PublishProcessor.create();
@@ -267,15 +275,15 @@ public abstract class Session implements AutoCloseable {
       this.plugin = plugin;
       Flowable.combineLatest(
           this.enabled.getStream(),
-          getState().getStream(),
+          stateProperty().getStream(),
           (enabled, state) -> enabled && state == State.ONLINE
-      ).subscribe(this.available::changeValue);
+      ).subscribe(this.available::change);
       this.stanzaSubscription = Session.this.getInboundStanzaStream().filter(
-          it -> this.enabled.getValue()
+          it -> this.enabled.get()
       ).subscribe(
           this.inboundStanzaStream::onNext
       );
-      getState().getStream().filter(it -> it == State.DISPOSED).firstOrError().subscribe( it -> {
+      stateProperty().getStream().filter(it -> it == State.DISPOSED).firstOrError().subscribe(it -> {
         onDestroying();
       });
     }
@@ -283,10 +291,6 @@ public abstract class Session implements AutoCloseable {
     private void onDestroying() {
       this.stanzaSubscription.dispose();
       this.inboundStanzaStream.onComplete();
-      synchronized (this.enabled) {
-        this.enabled.complete();
-      }
-      this.available.complete();
     }
 
     /**
@@ -370,7 +374,7 @@ public abstract class Session implements AutoCloseable {
     }
 
     public void sendError(@Nonnull final StreamErrorException error) {
-      isAvailable().getStream().filter(it -> it).firstElement().subscribe(
+      availableProperty().getStream().filter(it -> it).firstElement().subscribe(
           it -> Session.this.sendError(error)
       );
     }
@@ -383,7 +387,7 @@ public abstract class Session implements AutoCloseable {
       return inboundStanzaStream;
     }
 
-    public ReactiveObject<Boolean> isAvailable() {
+    public Property<Boolean> availableProperty() {
       return available;
     }
 
@@ -394,7 +398,7 @@ public abstract class Session implements AutoCloseable {
     }
   }
 
-  private final MutableReactiveObject<State> state = new MutableReactiveObject<>(State.DISCONNECTED);
+  private final MutableProperty<State> state = new StandardProperty<>(State.DISCONNECTED);
   private final FlowableProcessor<EventObject> eventStream;
   private final PluginManager pluginManager = new PluginManager();
   private final Logger logger = Logger.getAnonymousLogger();
@@ -404,7 +408,6 @@ public abstract class Session implements AutoCloseable {
 
   private void onDisposing() {
     this.eventStream.onComplete();
-    this.state.complete();
   }
 
   protected void log(final EventObject event) {
@@ -419,10 +422,10 @@ public abstract class Session implements AutoCloseable {
     // Event stream
     final FlowableProcessor<EventObject> unsafeEventStream = PublishProcessor.create();
     this.eventStream = unsafeEventStream.toSerialized();
-    getState().getStream().filter(it -> it == State.ONLINE).firstElement().subscribe(
+    stateProperty().getStream().filter(it -> it == State.ONLINE).firstElement().subscribe(
         it -> neverOnline = false
     );
-    getState().getStream().filter(
+    stateProperty().getStream().filter(
         it -> it == State.DISPOSED
     ).firstOrError().observeOn(Schedulers.io()).subscribe(
         it -> onDisposing()
@@ -430,7 +433,7 @@ public abstract class Session implements AutoCloseable {
 
     // Logging
     this.eventStream.subscribe(this::log);
-    getState().getStream().subscribe(it -> this.logger.fine(
+    stateProperty().getStream().subscribe(it -> this.logger.fine(
         "Session is now " + it.name())
     );
   }
@@ -469,10 +472,10 @@ public abstract class Session implements AutoCloseable {
    *         is already disposed of.
    */
   protected void changeState(@Nonnull final State state) {
-    if (this.state.getValue() == State.DISPOSED && state != State.DISPOSED) {
+    if (this.state.get() == State.DISPOSED && state != State.DISPOSED) {
       throw new IllegalStateException();
     }
-    this.state.changeValue(state);
+    this.state.change(state);
   }
 
   /**
@@ -502,22 +505,6 @@ public abstract class Session implements AutoCloseable {
   }
 
   /**
-   * Gets a stream of emitted {@link EventObject}s. It never emits any errors
-   * but will emit a completion signal once this class enters
-   * {@link State#DISPOSED}.
-   *
-   * <p>This class emits the following types of {@link EventObject}:</p>
-   *
-   * <ul>
-   *   <li>{@link chat.viska.commons.ExceptionCaughtEvent}</li>
-   * </ul>
-   */
-  @Nonnull
-  public Flowable<EventObject> getEventStream() {
-    return eventStream;
-  }
-
-  /**
    * Gets the logger.
    */
   @Nonnull
@@ -529,7 +516,7 @@ public abstract class Session implements AutoCloseable {
    * Gets the current {@link State}.
    */
   @Nonnull
-  public ReactiveObject<State> getState() {
+  public Property<State> stateProperty() {
     return state;
   }
 
@@ -547,7 +534,7 @@ public abstract class Session implements AutoCloseable {
    * the first time.
    */
   public void setLoginJid(@Nullable final Jid jid) {
-    if (!neverOnline || getState().getValue() != State.DISCONNECTED) {
+    if (!neverOnline || stateProperty().get() != State.DISCONNECTED) {
       throw new IllegalStateException();
     }
     this.loginJid = Jid.isEmpty(jid) ? Jid.EMPTY : jid;
@@ -558,7 +545,7 @@ public abstract class Session implements AutoCloseable {
    * can only be changed while disconnected and before going online the first time.
    */
   public void setAuthorizationId(@Nullable final Jid jid) {
-    if (!neverOnline || getState().getValue() != State.DISCONNECTED) {
+    if (!neverOnline || stateProperty().get() != State.DISCONNECTED) {
       throw new IllegalStateException();
     }
     this.authzId = jid;

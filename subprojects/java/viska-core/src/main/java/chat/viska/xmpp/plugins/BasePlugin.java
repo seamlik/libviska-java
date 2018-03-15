@@ -18,7 +18,6 @@ package chat.viska.xmpp.plugins;
 
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
-import chat.viska.commons.reactive.MutableReactiveObject;
 import chat.viska.xmpp.CommonXmlns;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
@@ -44,6 +43,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
+import rxbeans.MutableProperty;
+import rxbeans.StandardProperty;
 
 /**
  * Provides the most fundamental features of an XMPP session. This plugin is
@@ -75,10 +76,10 @@ public class BasePlugin implements Plugin {
       new AbstractMap.SimpleImmutableEntry<>(CommonXmlns.ROSTER, "query")
   ));
 
-  private final MutableReactiveObject<String> softwareName = new MutableReactiveObject<>("");
-  private final MutableReactiveObject<String> softwareVersion = new MutableReactiveObject<>("");
-  private final MutableReactiveObject<String> operatingSystem = new MutableReactiveObject<>("");
-  private final MutableReactiveObject<String> softwareType = new MutableReactiveObject<>("");
+  private final MutableProperty<String> softwareName = new StandardProperty<>("");
+  private final MutableProperty<String> softwareVersion = new StandardProperty<>("");
+  private final MutableProperty<String> operatingSystem = new StandardProperty<>("");
+  private final MutableProperty<String> softwareType = new StandardProperty<>("");
   private Session.PluginContext context;
 
   @Nullable
@@ -159,13 +160,13 @@ public class BasePlugin implements Plugin {
     ));
     queryElement
         .appendChild(result.createElement("name"))
-        .setTextContent(this.softwareName.getValue());
+        .setTextContent(softwareName.get());
     queryElement
         .appendChild(result.createElement("version"))
-        .setTextContent(this.softwareVersion.getValue());
+        .setTextContent(softwareVersion.get());
     queryElement
         .appendChild(result.createElement("os"))
-        .setTextContent(this.operatingSystem.getValue());
+        .setTextContent(operatingSystem.get());
     return result;
   }
 
@@ -180,8 +181,8 @@ public class BasePlugin implements Plugin {
         result.createElement("identity")
     );
     identityElement.setAttribute("category", "client");
-    identityElement.setAttribute("type", this.softwareType.getValue());
-    identityElement.setAttribute("name", this.softwareName.getValue());
+    identityElement.setAttribute("type", softwareType.get());
+    identityElement.setAttribute("name", softwareName.get());
     Observable.fromIterable(
         getSession().getPluginManager().getAllFeatures()
     ).subscribe(it -> {
@@ -210,17 +211,17 @@ public class BasePlugin implements Plugin {
   }
 
   @Nonnull
-  public MutableReactiveObject<String> getSoftwareName() {
+  public MutableProperty<String> softwareNameProperty() {
     return softwareName;
   }
 
   @Nonnull
-  public MutableReactiveObject<String> getSoftwareVersion() {
+  public MutableProperty<String> softwareVersionProperty() {
     return softwareVersion;
   }
 
   @Nonnull
-  public MutableReactiveObject<String> getOperatingSystem() {
+  public MutableProperty<String> operatingSystemProperty() {
     return operatingSystem;
   }
 
@@ -230,7 +231,7 @@ public class BasePlugin implements Plugin {
    * registrar</a>.
    */
   @Nonnull
-  public MutableReactiveObject<String> getSoftwareType() {
+  public MutableProperty<String> softwareTypeProperty() {
     return softwareType;
   }
 

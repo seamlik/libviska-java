@@ -37,6 +37,7 @@ allprojects {
     }
   }
   repositories {
+    mavenLocal()
     jcenter()
     google()
   }

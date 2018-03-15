@@ -13,8 +13,8 @@ public class TestUtils {
     session.changeState(Session.State.ONLINE);
 
     final BasePlugin basePlugin = session.getPluginManager().getPlugin(BasePlugin.class);
-    basePlugin.getSoftwareName().changeValue("Viska");
-    basePlugin.getSoftwareVersion().changeValue("unknown");
+    basePlugin.softwareNameProperty().changeValue("Viska");
+    basePlugin.softwareVersionProperty().changeValue("unknown");
     return session;
   }
 

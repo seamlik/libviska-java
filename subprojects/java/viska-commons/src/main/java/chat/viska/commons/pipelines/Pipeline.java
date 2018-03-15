@@ -16,8 +16,6 @@
 
 package chat.viska.commons.pipelines;
 
-import chat.viska.commons.reactive.MutableReactiveObject;
-import chat.viska.commons.reactive.ReactiveObject;
 import io.reactivex.Flowable;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -43,6 +41,9 @@ import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
 import org.apache.commons.lang3.concurrent.ConcurrentUtils;
+import rxbeans.MutableProperty;
+import rxbeans.Property;
+import rxbeans.StandardProperty;
 
 /**
  * Serial container for a series of data processors (a.k.a {@link Pipe}s). This
@@ -103,7 +104,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   private final BlockingQueue<Object> readQueue = new LinkedBlockingQueue<>();
   private final BlockingQueue<Object> writeQueue = new LinkedBlockingQueue<>();
   private final ReadWriteLock pipeLock = new ReentrantReadWriteLock(true);
-  private final MutableReactiveObject<State> state = new MutableReactiveObject<>(State.STOPPED);
+  private final MutableProperty<State> state = new StandardProperty<>(State.STOPPED);
   private Future<Void> readTask;
   private Future<Void> writeTask;
   private Object readingObject;
@@ -228,8 +229,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   /**
    * Gets the state.
    */
-  @Nonnull
-  public ReactiveObject<State> getState() {
+  public Property<State> stateProperty() {
     return state;
   }
 
@@ -238,7 +238,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    */
   public synchronized void start() {
     synchronized (state) {
-      switch (state.getValue()) {
+      switch (state.get()) {
         case RUNNING:
           return;
         case DISPOSED:
@@ -246,11 +246,11 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         default:
           break;
       }
-      state.changeValue(State.RUNNING);
+      state.change(State.RUNNING);
     }
     this.readTask = this.threadpool.submit(() -> {
       while (true) {
-        if (this.state.getValue() != State.RUNNING) {
+        if (state.get() != State.RUNNING) {
           return null;
         }
         if (this.readingObject == null) {
@@ -263,14 +263,14 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
           this.pipeLock.readLock().unlock();
         }
         this.readingObject = null;
-        if (this.state.getValue() != State.RUNNING) {
+        if (state.get() != State.RUNNING) {
           return null;
         }
       }
     });
     this.writeTask = this.threadpool.submit(() -> {
       while (true) {
-        if (this.state.getValue() != State.RUNNING) {
+        if (state.get() != State.RUNNING) {
           return null;
         }
         if (this.writingObject == null) {
@@ -283,7 +283,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
           this.pipeLock.readLock().unlock();
         }
         this.writingObject = null;
-        if (this.state.getValue() != State.RUNNING) {
+        if (state.get() != State.RUNNING) {
           return null;
         }
       }
@@ -299,7 +299,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    */
   public Future<?> stopGracefully() {
     synchronized (state) {
-      switch (state.getValue()) {
+      switch (state.get()) {
         case STOPPING:
           return ConcurrentUtils.constantFuture(null);
         case STOPPED:
@@ -307,7 +307,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         case DISPOSED:
           return ConcurrentUtils.constantFuture(null);
         default:
-          state.changeValue(State.STOPPING);
+          state.change(State.STOPPING);
       }
     }
     return threadpool.submit(() -> {
@@ -321,7 +321,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
       } else {
         writeTask.cancel(true);
       }
-      state.changeValue(State.STOPPED);
+      state.change(State.STOPPED);
       return null;
     });
   }
@@ -333,7 +333,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    */
   public void stopNow() {
     synchronized (state) {
-      switch (state.getValue()) {
+      switch (state.get()) {
         case DISPOSED:
           return;
         case STOPPED:
@@ -348,7 +348,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     if (!writeTask.isDone()) {
       writeTask.cancel(true);
     }
-    state.changeValue(State.STOPPED);
+    state.change(State.STOPPED);
   }
 
   /**
@@ -356,14 +356,14 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    */
   public void dispose() {
     synchronized (state) {
-      switch (state.getValue()) {
+      switch (state.get()) {
         case RUNNING:
           stopNow();
           break;
         case DISPOSED:
           return;
         default:
-          state.changeValue(State.DISPOSED);
+          state.change(State.DISPOSED);
           break;
       }
     }
@@ -707,7 +707,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    * @throws IllegalStateException If the pipeline is disposed of.
    */
   public void read(@Nonnull final Object obj) {
-    if (state.getValue() == State.DISPOSED) {
+    if (state.get() == State.DISPOSED) {
       throw new IllegalStateException("Pipeline disposed.");
     }
     readQueue.add(obj);
@@ -718,7 +718,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    * @throws IllegalStateException If the pipeline is disposed of.
    */
   public void write(@Nonnull final Object obj) {
-    if (state.getValue() == State.DISPOSED) {
+    if (state.get() == State.DISPOSED) {
       throw new IllegalStateException("Pipeline disposed.");
     }
     writeQueue.add(obj);

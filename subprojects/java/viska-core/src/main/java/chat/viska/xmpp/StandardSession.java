@@ -25,8 +25,6 @@ import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.functions.Action;
-import io.reactivex.schedulers.Schedulers;
-import io.reactivex.subjects.CompletableSubject;
 import java.security.NoSuchProviderException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -36,7 +34,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
-import java.util.concurrent.CancellationException;
 import java.util.logging.Level;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nonnull;
@@ -161,8 +158,8 @@ public abstract class StandardSession extends Session {
 
 
     // XML Pipeline
-    getState().getStream().filter(it -> it == State.CONNECTED).subscribe(it -> xmlPipeline.start());
-    getState().getStream().filter(it -> it == State.DISPOSED).subscribe(
+    stateProperty().getStream().filter(it -> it == State.CONNECTED).subscribe(it -> xmlPipeline.start());
+    stateProperty().getStream().filter(it -> it == State.DISPOSED).subscribe(
         it -> this.xmlPipeline.dispose()
     );
     this.xmlPipeline.getInboundExceptionStream().subscribe(
@@ -394,7 +391,7 @@ public abstract class StandardSession extends Session {
     Objects.requireNonNull(this.connection, "connection");
 
     final Action preAction = () -> {
-      getState().getAndDo(state -> {
+      stateProperty().getAndDo(state -> {
         if (state == State.DISCONNECTED) {
           changeState(State.CONNECTING);
         } else {
@@ -412,7 +409,7 @@ public abstract class StandardSession extends Session {
         resource,
         registering
     );
-    handshakerPipe.getState().getStream().subscribe(it -> getLogger().fine(
+    handshakerPipe.stateProperty().getStream().subscribe(it -> getLogger().fine(
         "HandshakerPipe is now " + it.name()
     ));
 
@@ -431,7 +428,7 @@ public abstract class StandardSession extends Session {
     final Completable result = Completable.fromAction(preAction).andThen(
         openConnection(connectionCompression, tlsCompression)
     ).doOnComplete(() -> {
-      getState().getAndDo(state -> {
+      stateProperty().getAndDoUnsafe(state -> {
         changeState(State.CONNECTED);
         if (getConnection().getTlsMethod() == Connection.TlsMethod.DIRECT) {
           verifyCertificate(getLoginJid(), getTlsSession());
@@ -451,9 +448,9 @@ public abstract class StandardSession extends Session {
   @Nonnull
   @CheckReturnValue
   public Completable disconnect() {
-    switch (getState().getValue()) {
+    switch (stateProperty().get()) {
       case DISCONNECTING:
-        return getState()
+        return stateProperty()
             .getStream()
             .filter(it -> it == State.DISCONNECTED)
             .firstOrError()
@@ -494,7 +491,7 @@ public abstract class StandardSession extends Session {
     if (!getSupportedProtocols().contains(connection.getProtocol())) {
       throw new IllegalArgumentException();
     }
-    if (getState().getValue() == State.DISCONNECTED) {
+    if (stateProperty().get() == State.DISCONNECTED) {
       this.connection = connection;
     } else {
       throw new IllegalStateException();
@@ -511,11 +508,11 @@ public abstract class StandardSession extends Session {
       xmlPipeline.dispose();
       changeState(State.DISPOSED);
     };
-    switch (getState().getValue()) {
+    switch (stateProperty().get()) {
       case DISPOSED:
         return Completable.complete();
       case DISCONNECTING:
-        return getState()
+        return stateProperty()
             .getStream()
             .filter(it -> it == State.DISCONNECTED)
             .firstOrError()
