@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+ext {
+  checkerFrameworkProcessors = [
+      'org.checkerframework.checker.nullness.NullnessChecker'
+  ]
+}
+
 apply from: 'gradle/dependencies.gradle'
 
 buildscript {
@@ -28,10 +34,17 @@ buildscript {
   }
 }
 
-allprojects {
+subprojects {
+  if (!subprojects.isEmpty()) { return }
   group = 'chat.viska'
   version = file("${rootDir}/VERSION").text
   configurations {
+    checkerFrameworkCheckerJar {
+      description = 'the Checker Framework, including the Type Annotations compiler'
+    }
+    checkerFrameworkAnnotatedJDK {
+      description = 'a copy of JDK classes with Checker Framework type qualifers inserted'
+    }
     all {
       resolutionStrategy {
         preferProjectModules()
@@ -66,6 +79,7 @@ task javadocAll(type: Javadoc) {
         'https://docs.oracle.com/javase/9/docs/api',
         'https://developer.android.com/reference',
         'http://reactivex.io/RxJava/2.x/javadoc',
+        'https://checkerframework.org/api',
         'https://static.javadoc.io/com.google.code.findbugs/jsr305/3.0.2'
     )
     overview = overviewPath

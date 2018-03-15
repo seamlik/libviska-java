@@ -15,8 +15,6 @@
  */
 
 dependencies {
-  api 'com.google.code.findbugs:jsr305:3.0.2'
-  api 'io.reactivex.rxjava2:rxjava:2.1.5'
   api 'rxbeans:rxbeans:0.1'
   implementation rootProject.libraries.COMMONS_LANG
 }

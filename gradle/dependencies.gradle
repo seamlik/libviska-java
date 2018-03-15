@@ -22,3 +22,4 @@ ext {
 libraries.COMMONS_LANG = 'org.apache.commons:commons-lang3:3.6'
 
 libraryVersions.NETTY = '4.1.22.Final'
+libraryVersions.CHECKER_FRAMEWORK = '2.4.0'

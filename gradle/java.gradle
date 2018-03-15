@@ -15,11 +15,21 @@
  */
 
 
+apply plugin: 'checkstyle'
 apply plugin: 'java-library'
 apply plugin: 'maven-publish'
+apply plugin: 'org.junit.platform.gradle.plugin'
+apply plugin: 'pmd'
 apply from: "${rootDir}/gradle/quality.gradle"
 
 sourceCompatibility = 8
+
+dependencies {
+  checkerFrameworkAnnotatedJDK "org.checkerframework:jdk8:${rootProject.libraryVersions.CHECKER_FRAMEWORK}"
+  checkerFrameworkCheckerJar "org.checkerframework:checker:${rootProject.libraryVersions.CHECKER_FRAMEWORK}"
+  testImplementation("org.junit.jupiter:junit-jupiter-api:5.1.0")
+  testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.1.0")
+}
 
 publishing {
   publications {
@@ -27,4 +37,12 @@ publishing {
       from components.java
     }
   }
+}
+
+tasks.withType(JavaCompile) {
+  options.compilerArgs.addAll([
+      '-processorpath', "${configurations.checkerFrameworkCheckerJar.asPath}".toString(),
+      "-Xbootclasspath/p:${configurations.checkerFrameworkAnnotatedJDK.asPath}".toString(),
+      '-processor', rootProject.checkerFrameworkProcessors.join(',')
+  ])
 }
