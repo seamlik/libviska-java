@@ -17,7 +17,6 @@
 // For applying quality control plugins on Java projects only.
 
 apply plugin: 'checkstyle'
-apply plugin: 'com.github.spotbugs'
 apply plugin: 'org.junit.platform.gradle.plugin'
 apply plugin: 'pmd'
 
@@ -37,13 +36,6 @@ checkstyle {
     ).text)
   }
   config = resources.text.fromFile(styleFile)
-}
-
-spotbugsMain {
-  reports {
-    html.enabled = true
-    xml.enabled = false
-  }
 }
 
 pmd {
