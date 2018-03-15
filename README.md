@@ -1,6 +1,3 @@
-Extensible XMPP Client Framework for Android and Java SE
-========================================================
-
 `libviska-java` is a set of Java libraries for developing an XMPP client. It
 aims to support as many modern or experimental features as possible. It is
 distinct from other counterparts by the following reasons:
@@ -16,34 +13,30 @@ distinct from other counterparts by the following reasons:
 This library can be used on Android (API Level >= 21) or (Java SE >= 8).
 
 License
--------
+=======
 
 `libviska-java` is free software and is licensed under Apache-2.0 License. The
 license is available in the `LICENSE` file.
 
 Contributing
-------------
+============
 
 The team behind the Viska project is relatively small compared to its
 proprietary counterparts who are backed by large companies. Therefore, we
 welcome all kinds of help!
 
-### How to Build
+## How to Build
 
-This project requires a specific version of Gradle which might be much later
-than the one installed on your system. In that case, run `gradle wrapper` first
-to download and install a newer Gradle.
+In order to build the project, simply run `gradle` or
+`./gradlew` if you are using Gradle Wrapper.
 
-In order to build the project, simply run `gradle assemble` or
-`./gradlew assemble` if you are using Gradle Wrapper.
-
-Since Android Gradle Plugin supports Android Studio 3.0 only, the build scripts
-by default will not any Android related subprojects in order to maintain
+Since Android Gradle Plugin supports Android Studio only, the build scripts
+by default will not load any Android related subprojects in order to maintain
 compatibility with Intellij IDEA. In order to build all components, use
 `settings-full.gradle` when running Gradle commands. For example:
 
 ```bash
-gradle assemble --settings-file settings-full.gradle
+gradle --settings-file settings-full.gradle
 ```
 
 Hopefully this will be fixed by a future version of the plugin.
