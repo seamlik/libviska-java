@@ -53,12 +53,11 @@ project(':android').subprojects {
 task javadocAll(type: Javadoc) {
   def outputDir = file("${buildDir}/javadocAll")
   def overviewPath = 'doc/javadoc-overview.html'
-  def cssPath = 'doc/javadoc.css'
   group = 'documentation'
   description = 'Generates Javadoc for the whole project.'
   outputs.dir outputDir
   outputs.files "${outputDir}/**/*"
-  inputs.files overviewPath, cssPath
+  inputs.files overviewPath
   options {
     links(
         'https://docs.oracle.com/javase/9/docs/api',
@@ -67,7 +66,6 @@ task javadocAll(type: Javadoc) {
         'https://static.javadoc.io/com.google.code.findbugs/jsr305/3.0.2'
     )
     overview = overviewPath
-    //stylesheetFile = file(cssPath)
   }
   source(project(':java').subprojects.collect {
     it.sourceSets.main.allJava
