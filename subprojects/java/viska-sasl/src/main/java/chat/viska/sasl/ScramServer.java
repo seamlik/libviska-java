@@ -16,14 +16,13 @@
 
 package chat.viska.sasl;
 
-import chat.viska.commons.Base64Codec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
-import java.security.NoSuchProviderException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -61,7 +60,8 @@ public class ScramServer implements Server {
 
   private final ScramMechanism scram;
   private final String initialNounce;
-  private final Base64Codec base64;
+  private final Base64.Decoder base64Decoder = Base64.getDecoder();
+  private final Base64.Encoder base64Encoder = Base64.getEncoder();
   private final CredentialRetriever retriever;
   private final Map<String, Object> properties = new HashMap<>();
   private String gs2Header = "";
@@ -97,15 +97,10 @@ public class ScramServer implements Server {
                      final CredentialRetriever retriever) {
     this.scram = scram;
     this.retriever = retriever;
-    try {
-      this.base64 = Base64Codec.getInstance();
-    } catch (NoSuchProviderException ex) {
-      throw new RuntimeException(ex);
-    }
 
     byte[] randomBytes = new byte[12]; // Making a 16-letter nounce
     new SecureRandom().nextBytes(randomBytes);
-    this.initialNounce = base64.encode(randomBytes);
+    this.initialNounce = base64Encoder.encodeToString(randomBytes);
   }
 
   private void generateSaltedPassword()
@@ -247,7 +242,7 @@ public class ScramServer implements Server {
     return String.format(
         "r=%1s,s=%2s,i=%3s",
         this.fullNounce,
-        base64.encode(this.salt),
+        base64Encoder.encodeToString(this.salt),
         this.iteration
     );
   }
@@ -279,7 +274,7 @@ public class ScramServer implements Server {
     // ChannelBinding
     final boolean channelBindingValid = Objects.equals(
         params.get("c"),
-        base64.encode(this.gs2Header.getBytes(StandardCharsets.UTF_8))
+        base64Encoder.encodeToString(this.gs2Header.getBytes(StandardCharsets.UTF_8))
     );
     if (!channelBindingValid) {
       error = new AuthenticationException(
@@ -317,7 +312,7 @@ public class ScramServer implements Server {
     } catch (InvalidKeyException ex) {
       throw new RuntimeException(ex);
     }
-    if (!Arrays.equals(clientProof, base64.decode(params.get("p")))) {
+    if (!Arrays.equals(clientProof, base64Decoder.decode(params.get("p")))) {
       error = new AuthenticationException(
           AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED,
           "Client proof incorrect."
@@ -327,7 +322,7 @@ public class ScramServer implements Server {
 
   private String getResult() {
     try {
-      return "v=" + base64.encode(scram.getServerSignature(
+      return "v=" + base64Encoder.encodeToString(scram.getServerSignature(
           this.scram.getServerKey(this.saltedPassword),
           this.scram.getAuthMessage(
               this.fullNounce.replace(initialNounce, ""),

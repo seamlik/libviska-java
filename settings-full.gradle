@@ -1,16 +1,1 @@
-rootProject.name = 'viska'
-
-include ':android:viska-impl-android'
-include ':java:viska-cmd-java'
-include ':java:viska-commons'
-include ':java:viska-core'
-include ':java:viska-impl-javase'
-include ':java:viska-impl-netty'
-include ':java:viska-sasl'
-
-rootProject.children.each { it ->
-  it.projectDir = file("${rootDir}/subprojects/${it.name}")
-  it.children.each { itt ->
-    itt.projectDir = file("${rootDir}/subprojects/${itt.parent.name}/${itt.name}")
-  }
-}
+apply from: 'settings.gradle'

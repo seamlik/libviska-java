@@ -16,7 +16,6 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.Base64Codec;
 import chat.viska.commons.DisposablesBin;
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.ExceptionCaughtEvent;
@@ -37,9 +36,9 @@ import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.CompletableSubject;
 import java.beans.PropertyChangeEvent;
-import java.security.NoSuchProviderException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.EventObject;
 import java.util.HashSet;
@@ -198,7 +197,8 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
   private final Jid loginJid;
   private final Jid authzId;
   private final CredentialRetriever retriever;
-  private final Base64Codec base64;
+  private final Base64.Encoder base64Encoder = Base64.getEncoder();
+  private final Base64.Decoder base64Decoder = Base64.getDecoder();
   private final String presetResource;
   private final List<String> saslMechanisms = new ArrayList<>();
   private final FlowableProcessor<EventObject> eventStream;
@@ -351,7 +351,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
     }
     String msg = "";
     if (this.saslClient.isClientFirst()) {
-      msg = this.base64.encode(this.saslClient.respond());
+      msg = base64Encoder.encodeToString(this.saslClient.respond());
       if (msg.isEmpty()) {
         msg = "=";
       }
@@ -425,7 +425,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         break;
       case "success":
         if (StringUtils.isNotBlank(msg)) {
-          this.saslClient.acceptChallenge(this.base64.decode(msg));
+          this.saslClient.acceptChallenge(base64Decoder.decode(msg));
         }
         if (!this.saslClient.isCompleted()) {
           sendStreamError(new StreamErrorException(
@@ -447,14 +447,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
         }
         break;
       case "challenge":
-        this.saslClient.acceptChallenge(this.base64.decode(msg));
+        this.saslClient.acceptChallenge(base64Decoder.decode(msg));
         if (!this.saslClient.isCompleted()) {
           final byte[] response = this.saslClient.respond();
           if (response != null) {
             this.pipeline.write(DomUtils.readDocument(String.format(
                 "<response xmlns=\"%1s\">%2s</response>",
                 CommonXmlns.SASL,
-                this.base64.encode(response)
+                base64Encoder.encodeToString(response)
             )));
           } else {
             this.pipeline.write(DomUtils.readDocument(String.format(
@@ -587,11 +587,6 @@ public class HandshakerPipe extends BlankPipe implements SessionAware {
       this.saslMechanisms.addAll(saslMechanisms);
     }
     this.presetResource = resource == null ? "" : resource;
-    try {
-      this.base64 = Base64Codec.getInstance();
-    } catch (NoSuchProviderException ex) {
-      throw new RuntimeException(ex);
-    }
 
     final FlowableProcessor<EventObject> unsafeEventStream = PublishProcessor.create();
     this.eventStream = unsafeEventStream.toSerialized();

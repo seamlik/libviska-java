@@ -16,13 +16,12 @@
 
 package chat.viska.sasl;
 
-import chat.viska.commons.Base64Codec;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
 import java.security.spec.InvalidKeySpecException;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -57,7 +56,8 @@ public class ScramMechanism {
   private final Mac hmac;
   private final String algorithm;
   private final SecretKeyFactory keyFactory;
-  private final Base64Codec base64;
+  private final Base64.Decoder base64Decoder = Base64.getDecoder();
+  private final Base64.Encoder base64Encoder = Base64.getEncoder();
 
   static String getClientFirstMessageBare(final String username,
                                           final String nounce) {
@@ -126,7 +126,7 @@ public class ScramMechanism {
     return String.format(
         "r=%1s,s=%2s,i=%3s",
         nounce,
-        base64.encode(salt),
+        base64Encoder.encodeToString(salt),
         iteration
     );
   }
@@ -134,7 +134,7 @@ public class ScramMechanism {
   String getClientFinalMessageWithoutProof(final String nounce, final String gs2Header) {
     return String.format(
         "c=%1s,r=%2s",
-        base64.encode(gs2Header.getBytes(StandardCharsets.UTF_8)),
+        base64Encoder.encodeToString(gs2Header.getBytes(StandardCharsets.UTF_8)),
         nounce
     );
   }
@@ -181,11 +181,6 @@ public class ScramMechanism {
     this.hmac = hmac;
     this.keyFactory = keyFactory;
     this.algorithm = algorithm == null ? "" : algorithm;
-    try {
-      this.base64 = Base64Codec.getInstance();
-    } catch (NoSuchProviderException ex) {
-      throw new RuntimeException(ex);
-    }
   }
 
   public ScramMechanism(final String algorithm) throws NoSuchAlgorithmException {
@@ -198,11 +193,6 @@ public class ScramMechanism {
     this.keyFactory = SecretKeyFactory.getInstance(
         "PBKDF2With" + hmacAlgorithm
     );
-    try {
-      this.base64 = Base64Codec.getInstance();
-    } catch (NoSuchProviderException ex) {
-      throw new RuntimeException(ex);
-    }
   }
 
   public String getAlgorithm() {

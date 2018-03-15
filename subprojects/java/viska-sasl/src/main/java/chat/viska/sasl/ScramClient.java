@@ -16,12 +16,11 @@
 
 package chat.viska.sasl;
 
-import chat.viska.commons.Base64Codec;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
-import java.security.NoSuchProviderException;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -53,7 +52,8 @@ public class ScramClient implements Client {
   }
 
   private final ScramMechanism scram;
-  private final Base64Codec base64;
+  private final Base64.Encoder base64Encoder = Base64.getEncoder();
+  private final Base64.Decoder base64Decoder = Base64.getDecoder();
   private final String authnId;
   private final String authzId;
   private final String initialNounce;
@@ -128,7 +128,7 @@ public class ScramClient implements Client {
 
     // Salt
     try {
-      this.salt = base64.decode(params.get("s"));
+      this.salt = base64Decoder.decode(params.get("s"));
     } catch (Exception ex) {
       state = State.COMPLETED;
       error = new AuthenticationException(
@@ -245,7 +245,7 @@ public class ScramClient implements Client {
     return String.format(
         "%1s,p=%2s",
         this.scram.getClientFinalMessageWithoutProof(fullNounce, getGs2Header()),
-        base64.encode(clientProof)
+        base64Encoder.encodeToString(clientProof)
     );
   }
 
@@ -282,7 +282,7 @@ public class ScramClient implements Client {
         } catch (InvalidKeyException ex) {
           throw new RuntimeException(ex);
         }
-        if (Arrays.equals(serverSig, base64.decode(pair[1]))) {
+        if (Arrays.equals(serverSig, base64Decoder.decode(pair[1]))) {
           break;
         } else {
           error = new AuthenticationException(
@@ -321,18 +321,13 @@ public class ScramClient implements Client {
     this.authnId = authnId;
     this.authzId = authzId == null ? "" : authzId;
     this.retriever = retriever;
-    try {
-      this.base64 = Base64Codec.getInstance();
-    } catch (NoSuchProviderException ex) {
-      throw new RuntimeException(ex);
-    }
     if (this.authnId.isEmpty()) {
       throw new IllegalArgumentException("`authnId` is absent.");
     }
 
     byte[] randomBytes = new byte[6];
     new SecureRandom().nextBytes(randomBytes);
-    this.initialNounce = base64.encode(randomBytes).trim();
+    this.initialNounce = base64Encoder.encodeToString(randomBytes).trim();
   }
 
   @Nonnull

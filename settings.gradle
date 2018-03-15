@@ -4,7 +4,6 @@ include ':android'
 include ':java:viska-cmd-java'
 include ':java:viska-commons'
 include ':java:viska-core'
-include ':java:viska-impl-javase'
 include ':java:viska-impl-netty'
 include ':java:viska-sasl'
 
