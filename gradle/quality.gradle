@@ -47,7 +47,6 @@ pmd {
 rootProject.ext {
   checkerFrameworkProcessors = [
       'org.checkerframework.checker.formatter.FormatterChecker',
-      'org.checkerframework.checker.index.IndexChecker',
       'org.checkerframework.checker.interning.InterningChecker',
       'org.checkerframework.checker.nullness.NullnessChecker',
       'org.checkerframework.checker.regex.RegexChecker',
