@@ -25,8 +25,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * SASL client of <a href="https://datatracker.ietf.org/doc/rfc5802">SCRAM
@@ -64,7 +63,7 @@ public class ScramClient implements Client {
   private byte[] saltedPassword = new byte[0];
   private byte[] salt = new byte[0];
   private int iteration = -1;
-  private AuthenticationException error;
+  private @Nullable AuthenticationException error;
 
   private String getGs2Header() {
     final StringBuilder result = new StringBuilder("n,");
@@ -83,7 +82,7 @@ public class ScramClient implements Client {
     );
   }
 
-  private void consumeChallenge(final String challenge) {
+  private void consumeChallenge(final String challenge) throws AuthenticationException {
     final Map<String, String> params;
     try {
       params = ScramMechanism.convertMessageToMap(challenge, false);
@@ -93,7 +92,7 @@ public class ScramClient implements Client {
           "Invalid syntax."
       );
       state = State.COMPLETED;
-      return;
+      throw error;
     }
 
     // Extension
@@ -103,7 +102,7 @@ public class ScramClient implements Client {
           AuthenticationException.Condition.MALFORMED_REQUEST,
           "Extension not supported."
       );
-      return;
+      throw error;
     }
 
     // Nounce
@@ -114,7 +113,7 @@ public class ScramClient implements Client {
           AuthenticationException.Condition.MALFORMED_REQUEST,
           "Empty nounce."
       );
-      return;
+      throw error;
     }
     if (!serverNounce.startsWith(initialNounce)) {
       state = State.COMPLETED;
@@ -127,15 +126,23 @@ public class ScramClient implements Client {
     fullNounce = serverNounce;
 
     // Salt
+    final @Nullable String saltParam = params.get("s");
+    if (saltParam == null) {
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Salt not received."
+      );
+      throw error;
+    }
     try {
-      this.salt = base64Decoder.decode(params.get("s"));
-    } catch (Exception ex) {
+      this.salt = base64Decoder.decode(saltParam);
+    } catch (IllegalArgumentException ex) {
       state = State.COMPLETED;
       error = new AuthenticationException(
           AuthenticationException.Condition.MALFORMED_REQUEST,
           "Invalid salt."
       );
-      return;
+      throw error;
     }
     if (this.salt.length == 0) {
       state = State.COMPLETED;
@@ -143,25 +150,33 @@ public class ScramClient implements Client {
           AuthenticationException.Condition.MALFORMED_REQUEST,
           "Empty salt."
       );
-      return;
+      throw error;
     }
 
     // Iteration
+    final @Nullable String iterationParam = params.get("i");
+    if (iterationParam == null) {
+      error = new AuthenticationException(
+          AuthenticationException.Condition.MALFORMED_REQUEST,
+          "Iteration not received."
+      );
+      throw error;
+    }
     try {
-      this.iteration = Integer.parseInt(params.get("i"));
-    } catch (Exception ex) {
+      this.iteration = Integer.parseInt(iterationParam);
+    } catch (NumberFormatException ex) {
       state = State.COMPLETED;
       error = new AuthenticationException(
           AuthenticationException.Condition.MALFORMED_REQUEST,
           "Invalid iteration."
       );
-      return;
+      throw error;
     }
     if (this.iteration < 1) {
       state = State.COMPLETED;
       error = new AuthenticationException(
           AuthenticationException.Condition.MALFORMED_REQUEST,
-          "Invalid iteration."
+          "Iteration negative."
       );
     }
   }
@@ -330,13 +345,11 @@ public class ScramClient implements Client {
     this.initialNounce = base64Encoder.encodeToString(randomBytes).trim();
   }
 
-  @Nonnull
   @Override
   public String getMechanism() {
     return "SCRAM-" + scram.getAlgorithm();
   }
 
-  @Nullable
   @Override
   public byte[] respond() {
     switch (state) {
@@ -352,7 +365,7 @@ public class ScramClient implements Client {
   }
 
   @Override
-  public void acceptChallenge(final byte[] challenge) {
+  public void acceptChallenge(final byte[] challenge) throws AuthenticationException {
     switch (state) {
       case INITIAL_RESPONSE_SENT:
         consumeChallenge(new String(challenge, StandardCharsets.UTF_8));
@@ -387,7 +400,6 @@ public class ScramClient implements Client {
     return error;
   }
 
-  @Nonnull
   @Override
   public Map<String, ?> getNegotiatedProperties() {
     if (!isCompleted()) {

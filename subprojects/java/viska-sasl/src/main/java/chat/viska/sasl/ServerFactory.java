@@ -17,9 +17,11 @@
 package chat.viska.sasl;
 
 import java.security.NoSuchAlgorithmException;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class ServerFactory {
 
+  @Nullable
   public static Server newServer(final String mechanism,
                                  final String name,
                                  final CredentialRetriever retriever) {

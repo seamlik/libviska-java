@@ -17,9 +17,8 @@
 package chat.viska.sasl;
 
 import java.util.Map;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a> server.
@@ -30,20 +29,18 @@ public interface Server {
   /**
    * Gets the name of the SASL mechanism.
    */
-  @Nonnull
   String getMechanism();
 
   /**
    * Generates a challenge.
    * @return {@code null} if error occurred.
    */
-  @Nullable
-  byte[] challenge();
+  byte[] challenge() throws AuthenticationException;
 
   /**
    * Accepts and processes a response.
    */
-  void acceptResponse(byte[] response);
+  void acceptResponse(byte[] response) throws AuthenticationException;
 
   /**
    * Indicates if the mechanism requires the server to send an initial challenge.
@@ -68,7 +65,6 @@ public interface Server {
    * client did not specify one, it returns the authentication ID instead.
    * @throws IllegalStateException If authentication not completed.
    */
-  @Nonnull
   String getAuthorizationId();
 
   /**
@@ -76,6 +72,5 @@ public interface Server {
    * authentication. What key-value pairs it will contain is defined by the
    * implementations.
    */
-  @Nonnull
   Map<String, ?> getNegotiatedProperties();
 }

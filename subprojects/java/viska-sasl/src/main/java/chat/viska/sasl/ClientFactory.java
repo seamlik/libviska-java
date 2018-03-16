@@ -19,6 +19,7 @@ package chat.viska.sasl;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Factory to instantiate {@link Client}s from
@@ -28,6 +29,7 @@ public class ClientFactory {
 
   private final List<String> mechanisms;
 
+  @Nullable
   public static Client newClient(String mechanism,
                                  String authnId,
                                  String authzId,
@@ -75,6 +77,7 @@ public class ClientFactory {
     this.mechanisms = new ArrayList<>(mechanisms);
   }
 
+  @Nullable
   public Client newClient(List<String> mechanisms,
                           String authnId,
                           String authzId,

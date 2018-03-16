@@ -44,20 +44,16 @@ public class ScramTest {
     }
     while (true) {
       final byte[] challenge = server.challenge();
-      Assertions.assertNotNull(challenge);
       client.acceptChallenge(challenge);
       if (client.isCompleted() && server.isCompleted()) {
         break;
       }
       final byte[] response = client.respond();
-      Assertions.assertNotNull(response);
       server.acceptResponse(response);
       if (client.isCompleted() && server.isCompleted()) {
         break;
       }
     }
-    Assertions.assertNull(client.getError());
-    Assertions.assertNull(server.getError());
     Assertions.assertEquals(server.getAuthorizationId(), "viska");
   }
 }

@@ -24,11 +24,11 @@ import java.security.spec.InvalidKeySpecException;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
-import javax.annotation.Nullable;
 import javax.crypto.Mac;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Represents the hash algorithm used by a {@literal SCRAM-*} mechanism.

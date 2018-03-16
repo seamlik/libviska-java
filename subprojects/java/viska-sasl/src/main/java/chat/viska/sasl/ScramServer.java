@@ -27,9 +27,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import java.util.Optional;
 import javax.annotation.concurrent.NotThreadSafe;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * SASL server of <a href="https://datatracker.ietf.org/doc/rfc5802">SCRAM
@@ -66,13 +66,13 @@ public class ScramServer implements Server {
   private final Map<String, Object> properties = new HashMap<>();
   private String gs2Header = "";
   private String username = "";
-  private byte[] saltedPassword;
-  private byte[] salt;
+  private byte[] saltedPassword = new byte[0];
+  private byte[] salt = new byte[0];
   private int iteration = -1;
   private String authzId = "";
   private String fullNounce = "";
   private State state = State.INITIALIZED;
-  private AuthenticationException error;
+  private @Nullable AuthenticationException error;
 
   /**
    * Constructs a SCRAM server. The data retrieved by the {@code retriever} must
@@ -120,7 +120,7 @@ public class ScramServer implements Server {
     this.saltedPassword = scram.getSaltedPassword(password, this.salt, this.iteration);
   }
 
-  private void consumeInitialResponse(final String response) {
+  private void consumeInitialResponse(final String response) throws AuthenticationException {
     final Map<String, String> params;
     try {
       params = ScramMechanism.convertMessageToMap(response, true);
@@ -130,21 +130,18 @@ public class ScramServer implements Server {
           "Invalid syntax."
       );
       this.state = State.COMPLETED;
-      return;
+      throw error;
     }
 
     // gs2-header
-    this.gs2Header = params.get("gs2-header");
-    if (this.gs2Header == null) {
-      this.gs2Header = "";
-    }
+    this.gs2Header = Optional.ofNullable(params.get("gs2-header")).orElse("");
     if (gs2Header.isEmpty()) {
       error = new AuthenticationException(
           AuthenticationException.Condition.MALFORMED_REQUEST,
           "Invalid syntax."
       );
       this.state = State.COMPLETED;
-      return;
+      throw error;
     }
 
     // Channel Binding
@@ -158,10 +155,7 @@ public class ScramServer implements Server {
     }
 
     // Authorization ID
-    this.authzId = params.get("a");
-    if (this.authzId == null) {
-      this.authzId = "";
-    }
+    this.authzId = Optional.ofNullable(params.get("a")).orElse("");
 
     // Extension
     if (params.containsKey("m")) {
@@ -174,19 +168,16 @@ public class ScramServer implements Server {
     }
 
     // Username
-    this.username = params.get("n");
-    this.username = this.username == null
-        ? ""
-        : this.username
-            .replace("=2C", ",")
-            .replace("=3D", "=");
+    this.username = Optional.ofNullable(params.get("n")).map(
+      it -> it.replace("=2C", ",").replace("=3D", "=")
+    ).orElse("");
     if (username.isEmpty()) {
       error = new AuthenticationException(
           AuthenticationException.Condition.MALFORMED_REQUEST,
           "Invalid username."
       );
       this.state = State.COMPLETED;
-      return;
+      throw error;
     }
 
     // Nounce
@@ -201,7 +192,6 @@ public class ScramServer implements Server {
     this.fullNounce = clientNounce + this.initialNounce;
   }
 
-  @Nonnull
   private String getChallenge() {
     try {
       final byte[] saltedPassword = (byte[]) retriever.retrieve(
@@ -247,7 +237,7 @@ public class ScramServer implements Server {
     );
   }
 
-  private void consumeFinalResponse(String response) {
+  private void consumeFinalResponse(String response) throws AuthenticationException {
     // This method does not set the state to COMPLETED because the server has a
     // chance to send the error back to the client.
 
@@ -312,11 +302,20 @@ public class ScramServer implements Server {
     } catch (InvalidKeyException ex) {
       throw new RuntimeException(ex);
     }
-    if (!Arrays.equals(clientProof, base64Decoder.decode(params.get("p")))) {
+    final @Nullable String proofParam = params.get("p");
+    if (proofParam == null) {
+      error = new AuthenticationException(
+          AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED,
+          "Client proof not received."
+      );
+      throw error;
+    }
+    if (!Arrays.equals(clientProof, base64Decoder.decode(proofParam))) {
       error = new AuthenticationException(
           AuthenticationException.Condition.CLIENT_NOT_AUTHORIZED,
           "Client proof incorrect."
       );
+      throw error;
     }
   }
 
@@ -344,13 +343,11 @@ public class ScramServer implements Server {
     this.properties.put(ScramMechanism.KEY_ITERATION, this.iteration);
   }
 
-  @Nonnull
   @Override
   public String getMechanism() {
     return "SCRAM-" + scram.getAlgorithm();
   }
 
-  @Nullable
   @Override
   public byte[] challenge() {
     switch (state) {
@@ -374,7 +371,7 @@ public class ScramServer implements Server {
   }
 
   @Override
-  public void acceptResponse(final byte[] response) {
+  public void acceptResponse(final byte[] response) throws AuthenticationException {
     switch (state) {
       case INITIALIZED:
         consumeInitialResponse(new String(response, StandardCharsets.UTF_8));
@@ -411,13 +408,11 @@ public class ScramServer implements Server {
   }
 
   @Override
-  @Nonnull
   public Map<String, ?> getNegotiatedProperties() {
     return Collections.unmodifiableMap(properties);
   }
 
   @Override
-  @Nonnull
   public String getAuthorizationId() {
     if (this.state != State.COMPLETED) {
       throw new IllegalStateException("Authentication not completed.");
