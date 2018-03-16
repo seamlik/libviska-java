@@ -16,7 +16,6 @@
 
 package chat.viska.sasl;
 
-import chat.viska.commons.EnumUtils;
 import java.util.Objects;
 
 /**
@@ -39,17 +38,21 @@ public class AuthenticationException extends Exception {
     MECHANISM_TOO_WEEK,
     SERVER_NOT_AUTHORIZED,
     TEPORARY_AUTH_FAILURE;
+
+    public String toXmlValue() {
+      return name().replace('_', '-').toLowerCase();
+    }
   }
 
   private final Condition condition;
 
   public AuthenticationException(final Condition condition) {
-    super("[" + EnumUtils.toXmlValue(condition) + "]");
+    super("[" + condition.toXmlValue() + "]");
     this.condition = condition;
   }
 
   public AuthenticationException(final Condition condition, final String text) {
-    super("[" + EnumUtils.toXmlValue(condition) + "]" + text);
+    super("[" + condition.toXmlValue() + "]" + text);
     Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
@@ -57,14 +60,12 @@ public class AuthenticationException extends Exception {
   public AuthenticationException(Condition condition,
                                  String text,
                                  Throwable throwable) {
-    super("[" + condition.toString() + "]" + text, throwable);
-    Objects.requireNonNull(condition, "`condition` is absent.");
+    super("[" + condition.toXmlValue() + "]" + text, throwable);
     this.condition = condition;
   }
 
   public AuthenticationException(Condition condition, Throwable throwable) {
-    super("[" + condition.toString() + "]", throwable);
-    Objects.requireNonNull(condition, "`condition` is absent.");
+    super("[" + condition.toXmlValue() + "]", throwable);
     this.condition = condition;
   }
 

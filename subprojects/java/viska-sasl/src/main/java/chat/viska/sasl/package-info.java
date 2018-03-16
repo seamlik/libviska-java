@@ -19,7 +19,9 @@
  * <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a>. This package
  * aims to serve as an alternative solution to the one provided by Java SE and
  * be usable in environments like Android where {@link javax.security.sasl} is
- * unavailable.
+ * unavailable. As such, this project is designed for general purpose and has few runtime
+ * dependencies. Any third-party projects should be able to use this project without bothering
+ * Viska or XMPP.
  *
  * <p>When using the classes of this package, string normalization like
  * {@code stringprep} or
@@ -27,7 +29,4 @@
  * by the user manually, and strings like username and password are always
  * assumed already normalized.</p>
  */
-@ParametersAreNonnullByDefault
 package chat.viska.sasl;
-
-import javax.annotation.ParametersAreNonnullByDefault;

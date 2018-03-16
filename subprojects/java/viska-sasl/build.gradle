@@ -1,3 +1,4 @@
 dependencies {
-  implementation project(':java:viska-commons')
+  api 'com.google.code.findbugs:jsr305:3.0.2'
+  api "org.checkerframework:checker-qual:${rootProject.libraryVersions.CHECKER_FRAMEWORK}"
 }
