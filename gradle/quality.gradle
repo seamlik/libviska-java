@@ -19,7 +19,7 @@
 
 checkstyle {
   toolVersion = '8.8'
-  File styleFile = file("${reportsDir}/config.xml")
+  File styleFile = file("${rootProject.buildDir}/config.xml")
   if (!styleFile.exists()) {
     mkdir styleFile.parent
     styleFile.createNewFile()

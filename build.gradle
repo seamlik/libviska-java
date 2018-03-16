@@ -103,7 +103,6 @@ task clean {
   group = 'build'
   doLast {
     delete buildDir
-    delete file('config/checkstyle/checkstyle.xml')
   }
 }
 
