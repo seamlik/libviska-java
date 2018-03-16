@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-ext {
-  checkerFrameworkProcessors = [
-      'org.checkerframework.checker.nullness.NullnessChecker'
-  ]
-}
-
 apply from: 'gradle/dependencies.gradle'
 
 buildscript {
@@ -36,6 +30,7 @@ buildscript {
 
 subprojects {
   if (!subprojects.isEmpty()) { return }
+  apply from: "${rootDir}/gradle/quality.gradle"
   group = 'chat.viska'
   version = file("${rootDir}/VERSION").text
   configurations {

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-// For applying quality control plugins on Java projects only.
-
+apply plugin: 'checkstyle'
+apply plugin: 'org.junit.platform.gradle.plugin'
+apply plugin: 'pmd'
 
 checkstyle {
   toolVersion = '8.8'
@@ -31,27 +32,31 @@ checkstyle {
 }
 
 pmd {
+  toolVersion = '6.1.0'
   ruleSets = [
-      'java-basic',
-      'java-braces',
-      'java-clone',
-      'java-codesize',
-      'java-controversial',
-      'java-coupling',
-      'java-design',
-      'java-empty',
-      'java-finalizers',
-      'java-imports',
-      'java-junit',
-      'java-logging-java',
-      'java-migrating',
-      'java-naming',
-      'java-optimizations',
-      'java-strictexception',
-      'java-strings',
-      'java-sunsecure',
-      'java-typeresolution',
-      'java-unnecessary',
-      'java-unusedcode'
+      'category/java/bestpractices.xml',
+      'category/java/codestyle.xml',
+      'category/java/design.xml',
+      'category/java/documentation.xml',
+      'category/java/errorprone.xml',
+      'category/java/multithreading.xml',
+      'category/java/performance.xml'
+  ]
+}
+
+rootProject.ext {
+  checkerFrameworkProcessors = [
+      'org.checkerframework.checker.formatter.FormatterChecker',
+      'org.checkerframework.checker.index.IndexChecker',
+      'org.checkerframework.checker.interning.InterningChecker',
+      'org.checkerframework.checker.nullness.NullnessChecker',
+      'org.checkerframework.checker.regex.RegexChecker',
+      'org.checkerframework.checker.signature.SignatureChecker',
+      'org.checkerframework.common.aliasing.AliasingChecker',
+      'org.checkerframework.common.value.ValueChecker'
+  ]
+  checkerFrameworkSkipUses = [
+      '^org\\.apache\\.commons\\.lang3\\.',
+      'io\\.reactivex\\.'
   ]
 }

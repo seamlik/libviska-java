@@ -15,12 +15,11 @@
  */
 
 
-apply plugin: 'checkstyle'
+
 apply plugin: 'java-library'
 apply plugin: 'maven-publish'
-apply plugin: 'org.junit.platform.gradle.plugin'
-apply plugin: 'pmd'
-apply from: "${rootDir}/gradle/quality.gradle"
+
+
 
 sourceCompatibility = 8
 
@@ -43,6 +42,7 @@ tasks.withType(JavaCompile) {
   options.compilerArgs.addAll([
       '-processorpath', "${configurations.checkerFrameworkCheckerJar.asPath}".toString(),
       "-Xbootclasspath/p:${configurations.checkerFrameworkAnnotatedJDK.asPath}".toString(),
-      '-processor', rootProject.checkerFrameworkProcessors.join(',')
+      '-processor', rootProject.checkerFrameworkProcessors.join(','),
+      "-AskipUses=${rootProject.checkerFrameworkSkipUses.join('|')}".toString()
   ])
 }
