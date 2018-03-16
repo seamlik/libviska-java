@@ -51,9 +51,7 @@ rootProject.ext {
       'org.checkerframework.checker.nullness.NullnessChecker',
       'org.checkerframework.checker.optional.OptionalChecker',
       'org.checkerframework.checker.regex.RegexChecker',
-      'org.checkerframework.checker.signature.SignatureChecker',
-      'org.checkerframework.common.aliasing.AliasingChecker',
-      'org.checkerframework.common.value.ValueChecker'
+      'org.checkerframework.checker.signature.SignatureChecker'
   ]
   checkerFrameworkSkipUses = [
       '^org\\.apache\\.commons\\.lang3\\.',
