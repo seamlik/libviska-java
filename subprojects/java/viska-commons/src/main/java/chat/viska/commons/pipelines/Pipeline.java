@@ -16,11 +16,14 @@
 
 package chat.viska.commons.pipelines;
 
+import io.reactivex.Completable;
 import io.reactivex.Flowable;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import io.reactivex.Maybe;
+import io.reactivex.annotations.SchedulerSupport;
+import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
+import io.reactivex.schedulers.Schedulers;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -29,18 +32,16 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.Callable;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
-import org.apache.commons.lang3.concurrent.ConcurrentUtils;
+import org.checkerframework.checker.lock.qual.GuardedBy;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import rxbeans.MutableProperty;
 import rxbeans.Property;
 import rxbeans.StandardProperty;
@@ -62,6 +63,8 @@ import rxbeans.StandardProperty;
  * <p>Beware that although a {@link Pipe} is safe to invoke any methods of this
  * class, it must not wait for the operation to finish, otherwise expect
  * deadlocks.</p>
+ *
+ * <p>{@link Pipe}s are uniquely named, but multiple unnamed {@link Pipe}s are allowed.</p>
  * @param <I> Type of the inbound output.
  * @param <O> Type of the outbound output.
  */
@@ -84,18 +87,12 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     STOPPED,
 
     /**
-     * Indicates a {@link Pipeline} is stopping, which means
-     * {@link #stopGracefully()} is invoked.
-     */
-    STOPPING,
-
-    /**
      * Indicates a {@link Pipeline} is disposed of and can no longer be reused.
      */
     DISPOSED
   }
 
-  private final ExecutorService threadpool = Executors.newCachedThreadPool();
+  @GuardedBy("pipeLock")
   private final LinkedList<Map.Entry<String, Pipe>> pipes = new LinkedList<>();
   private final FlowableProcessor<I> inboundStream;
   private final FlowableProcessor<Throwable> inboundExceptionStream;
@@ -105,13 +102,9 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   private final BlockingQueue<Object> writeQueue = new LinkedBlockingQueue<>();
   private final ReadWriteLock pipeLock = new ReentrantReadWriteLock(true);
   private final MutableProperty<State> state = new StandardProperty<>(State.STOPPED);
-  private Future<Void> readTask;
-  private Future<Void> writeTask;
-  private Object readingObject;
-  private Object writingObject;
+  private final CompositeDisposable taskTokens = new CompositeDisposable();
 
-  private void processObject(@Nonnull final Object obj, final boolean isReading)
-      throws InterruptedException {
+  private void processObject(final Object obj, final boolean isReading) {
     final ListIterator<Map.Entry<String, Pipe>> iterator = isReading
         ? pipes.listIterator()
         : pipes.listIterator(pipes.size());
@@ -156,8 +149,8 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     }
   }
 
-  private void processException(@Nonnull ListIterator<Map.Entry<String, Pipe>> iterator,
-                                @Nonnull Throwable cause,
+  private void processException(ListIterator<Map.Entry<String, Pipe>> iterator,
+                                Throwable cause,
                                 boolean isReading) {
     while (isReading ? iterator.hasNext() : iterator.hasPrevious()) {
       final Pipe pipe = isReading ? iterator.next().getValue() : iterator.previous().getValue();
@@ -172,18 +165,15 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         cause = rethrown;
       }
     }
-    if (cause != null) {
-      if (isReading) {
-        inboundExceptionStream.onNext(cause);
-      } else {
-        outboundExceptionStream.onNext(cause);
-      }
+    if (isReading) {
+      inboundExceptionStream.onNext(cause);
+    } else {
+      outboundExceptionStream.onNext(cause);
     }
   }
 
   @Nullable
-  private ListIterator<Map.Entry<String, Pipe>>
-  getIteratorOf(@Nonnull final String name) {
+  private ListIterator<Map.Entry<String, Pipe>> getIteratorOf(final String name) {
     if (StringUtils.isBlank(name)) {
       return null;
     }
@@ -199,8 +189,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   @Nullable
-  private ListIterator<Map.Entry<String, Pipe>>
-  getIteratorOf(@Nonnull final Pipe pipe) {
+  private ListIterator<Map.Entry<String, Pipe>> getIteratorOf(@Nullable final Pipe pipe) {
     if (pipe == null) {
       return null;
     }
@@ -236,9 +225,9 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   /**
    * Starts the pipeline.
    */
-  public synchronized void start() {
-    synchronized (state) {
-      switch (state.get()) {
+  public void start() {
+    state.getAndDo(state -> {
+      switch (state) {
         case RUNNING:
           return;
         case DISPOSED:
@@ -246,94 +235,42 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         default:
           break;
       }
-      state.change(State.RUNNING);
-    }
-    this.readTask = this.threadpool.submit(() -> {
-      while (true) {
-        if (state.get() != State.RUNNING) {
-          return null;
-        }
-        if (this.readingObject == null) {
-          this.readingObject = readQueue.take();
-        }
-        this.pipeLock.readLock().lockInterruptibly();
-        try {
-          processObject(this.readingObject, true);
-        } finally {
-          this.pipeLock.readLock().unlock();
-        }
-        this.readingObject = null;
-        if (state.get() != State.RUNNING) {
-          return null;
-        }
-      }
-    });
-    this.writeTask = this.threadpool.submit(() -> {
-      while (true) {
-        if (state.get() != State.RUNNING) {
-          return null;
-        }
-        if (this.writingObject == null) {
-          this.writingObject = writeQueue.take();
-        }
-        pipeLock.readLock().lockInterruptibly();
-        try {
-          processObject(this.writingObject, false);
-        } finally {
-          this.pipeLock.readLock().unlock();
-        }
-        this.writingObject = null;
-        if (state.get() != State.RUNNING) {
-          return null;
-        }
-      }
-    });
-  }
+      this.state.change(State.RUNNING);
 
-  /**
-   * Stops the pipeline after the currently running reading task and writing
-   * task finish.
-   * @return Token to track the completion of this method. Canceling it will
-   *         stop from waiting but the pipeline will still stop after the
-   *         reading and writing threads finish.
-   */
-  public Future<?> stopGracefully() {
-    synchronized (state) {
-      switch (state.get()) {
-        case STOPPING:
-          return ConcurrentUtils.constantFuture(null);
-        case STOPPED:
-          return ConcurrentUtils.constantFuture(null);
-        case DISPOSED:
-          return ConcurrentUtils.constantFuture(null);
-        default:
-          state.change(State.STOPPING);
-      }
-    }
-    return threadpool.submit(() -> {
-      if (this.readingObject != null) {
-        readTask.get();
-      } else {
-        readTask.cancel(true);
-      }
-      if (this.writingObject != null) {
-        writeTask.get();
-      } else {
-        writeTask.cancel(true);
-      }
-      state.change(State.STOPPED);
-      return null;
+      final Completable readTask = Completable.fromAction(() -> {
+        while (true) {
+          if (this.state.get() != State.RUNNING) {
+            return;
+          }
+          final Object obj = readQueue.take();
+          pipeLock.readLock().lockInterruptibly();
+          processObject(obj, true);
+          pipeLock.readLock().unlock();
+        }
+      });
+      final Completable writeTask = Completable.fromAction(() -> {
+        while (true) {
+          if (this.state.get() != State.RUNNING) {
+            return;
+          }
+          final Object obj = writeQueue.take();
+          pipeLock.readLock().lockInterruptibly();
+          processObject(obj, false);
+          pipeLock.readLock().unlock();
+        }
+      });
+      taskTokens.add(readTask.onErrorComplete().subscribeOn(Schedulers.io()).subscribe());
+      taskTokens.add(writeTask.onErrorComplete().subscribeOn(Schedulers.io()).subscribe());
     });
   }
 
   /**
    * Stops the Pipeline immediately by killing the reading and writing threads.
-   * The data being processed at the time will retain and be re-processed after
-   * the pipeline starts again.
+   * The data being processed at the time will be abandoned.
    */
   public void stopNow() {
-    synchronized (state) {
-      switch (state.get()) {
+    state.getAndDo(state -> {
+      switch (state) {
         case DISPOSED:
           return;
         case STOPPED:
@@ -341,53 +278,38 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         default:
           break;
       }
-    }
-    if (!readTask.isDone()) {
-      readTask.cancel(true);
-    }
-    if (!writeTask.isDone()) {
-      writeTask.cancel(true);
-    }
-    state.change(State.STOPPED);
+      taskTokens.clear();
+      this.state.change(State.STOPPED);
+    });
   }
 
   /**
    * Disposes of the pipeline.
    */
   public void dispose() {
-    synchronized (state) {
-      switch (state.get()) {
+    state.getAndDo(state -> {
+      switch (state) {
         case RUNNING:
           stopNow();
           break;
         case DISPOSED:
           return;
         default:
-          state.change(State.DISPOSED);
           break;
       }
-    }
-    clearQueues();
-    threadpool.shutdownNow();
-    inboundStream.onComplete();
-    inboundExceptionStream.onComplete();
-    outboundStream.onComplete();
-    outboundExceptionStream.onComplete();
-    readingObject = null;
-    writingObject = null;
-    for (Map.Entry<String, Pipe> entry : pipes) {
-      entry.getValue().onRemovedFromPipeline(this);
-    }
-    pipes.clear();
+      removeAll();
+      clearQueues();
+      inboundStream.onComplete();
+      inboundExceptionStream.onComplete();
+      outboundStream.onComplete();
+      outboundExceptionStream.onComplete();
+      this.state.change(State.DISPOSED);
+    });
   }
 
-  @Nonnull
-  public Future<Void> addTowardsInboundEnd(@Nonnull final String previous,
-                                           @Nullable final String name,
-                                           @Nonnull final Pipe pipe) {
+  public void addTowardsInboundEnd(final String previous, final String name, final Pipe pipe) {
     Validate.notBlank(previous);
-    Objects.requireNonNull(pipe);
-    return threadpool.submit(() -> {
+    Completable.fromAction(() -> {
       pipeLock.writeLock().lockInterruptibly();
       try {
         if (getIteratorOf(name) != null) {
@@ -398,25 +320,16 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
           throw new NoSuchElementException(previous);
         }
         iterator.next();
-        iterator.add(new AbstractMap.SimpleImmutableEntry<>(
-            name == null ? "" : name,
-            pipe
-        ));
+        iterator.add(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
         pipe.onAddedToPipeline(this);
       } finally {
         pipeLock.writeLock().unlock();
       }
-      return null;
-    });
+    }).onErrorComplete().subscribeOn(Schedulers.io()).subscribe();
   }
 
-  @Nonnull
-  public Future<Void> addTowardsInboundEnd(@Nonnull final Pipe previous,
-                                           @Nullable final String name,
-                                           @Nonnull final Pipe pipe) {
-    Objects.requireNonNull(previous);
-    Objects.requireNonNull(pipe);
-    return threadpool.submit(() -> {
+  public void addTowardsInboundEnd(final Pipe previous,  final String name, final Pipe pipe) {
+    Completable.fromAction(() -> {
       pipeLock.writeLock().lockInterruptibly();
       try {
         if (getIteratorOf(name) != null) {
@@ -427,25 +340,17 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
           throw new NoSuchElementException();
         }
         iterator.next();
-        iterator.add(new AbstractMap.SimpleImmutableEntry<>(
-            name == null ? "" : name,
-            pipe
-        ));
+        iterator.add(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
         pipe.onAddedToPipeline(this);
       } finally {
         pipeLock.writeLock().unlock();
       }
-      return null;
-    });
+    }).onErrorComplete().subscribeOn(Schedulers.io()).subscribe();
   }
 
-  @Nonnull
-  public Future<Void> addTowardsOutboundEnd(@Nonnull final String next,
-                                            @Nullable final String name,
-                                            @Nonnull final Pipe pipe) {
+  public void addTowardsOutboundEnd(final String next, final String name, final Pipe pipe) {
     Validate.notBlank(next);
-    Objects.requireNonNull(pipe);
-    return threadpool.submit(() -> {
+    Completable.fromAction(() -> {
       pipeLock.writeLock().lockInterruptibly();
       try {
         if (getIteratorOf(name) != null) {
@@ -455,25 +360,16 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         if (iterator == null) {
           throw new NoSuchElementException(next);
         }
-        iterator.add(new AbstractMap.SimpleImmutableEntry<>(
-            name == null ? "" : name,
-            pipe
-        ));
+        iterator.add(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
         pipe.onAddedToPipeline(this);
       } finally {
         pipeLock.writeLock().unlock();
       }
-      return null;
-    });
+    }).onErrorComplete().subscribeOn(Schedulers.io()).subscribe();
   }
 
-  @Nonnull
-  public Future<Void> addTowardsOutboundEnd(@Nonnull final Pipe next,
-                                            @Nullable final String name,
-                                            @Nonnull final Pipe pipe) {
-    Objects.requireNonNull(next);
-    Objects.requireNonNull(pipe);
-    return threadpool.submit(() -> {
+  public void addTowardsOutboundEnd(final Pipe next, final String name, final Pipe pipe) {
+    Completable.fromAction(() -> {
       pipeLock.writeLock().lockInterruptibly();
       try {
         if (getIteratorOf(name) != null) {
@@ -483,66 +379,48 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         if (iterator == null) {
           throw new NoSuchElementException();
         }
-        iterator.add(new AbstractMap.SimpleImmutableEntry<>(
-            name == null ? "" : name,
-            pipe
-        ));
+        iterator.add(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
         pipe.onAddedToPipeline(this);
       } finally {
         pipeLock.writeLock().unlock();
       }
-      return null;
-    });
+    }).onErrorComplete().subscribeOn(Schedulers.io()).subscribe();
   }
 
   /**
    * Adds a {@link Pipe} at the outbound end.
    */
-  @Nonnull
-  public Future<?> addAtOutboundEnd(@Nullable final String name,
-                                    @Nonnull final Pipe pipe) {
-    Objects.requireNonNull(pipe);
-    return threadpool.submit(() -> {
+  public void addAtOutboundEnd(final String name, final Pipe pipe) {
+    Completable.fromAction(() -> {
       pipeLock.writeLock().lockInterruptibly();
       try {
         if (getIteratorOf(name) != null) {
           throw new IllegalArgumentException("Name collision: " + name);
         }
-        pipes.addFirst(new AbstractMap.SimpleImmutableEntry<>(
-            name == null ? "" : name,
-            pipe
-        ));
+        pipes.addFirst(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
         pipe.onAddedToPipeline(this);
       } finally {
         pipeLock.writeLock().unlock();
       }
-      return null;
-    });
+    }).onErrorComplete().subscribeOn(Schedulers.io()).subscribe();
   }
 
   /**
    * Adds a {@link Pipe} at the inbound end.
    */
-  @Nonnull
-  public Future<?> addAtInboundEnd(@Nullable final String name,
-                                   @Nonnull final Pipe pipe) {
-    Objects.requireNonNull(pipe);
-    return threadpool.submit(() -> {
+  public void addAtInboundEnd(final String name, final Pipe pipe) {
+    Completable.fromAction(() -> {
       pipeLock.writeLock().lockInterruptibly();
       try {
         if (getIteratorOf(name) != null) {
           throw new IllegalArgumentException("Name collision: " + name);
         }
-        pipes.addLast(new AbstractMap.SimpleImmutableEntry<>(
-            name == null ? "" : name,
-            pipe
-        ));
+        pipes.addLast(new AbstractMap.SimpleImmutableEntry<>(name, pipe));
         pipe.onAddedToPipeline(this);
       } finally {
         pipeLock.writeLock().unlock();
       }
-      return null;
-    });
+    }).onErrorComplete().subscribeOn(Schedulers.io()).subscribe();
   }
 
   /**
@@ -555,25 +433,25 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   /**
    * Removes all {@link Pipe}s.
-   * @return Token to track the completion of this method or cancel it.
    */
-  @Nonnull
-  public Future<?> removeAll() {
-    return threadpool.submit(() -> {
+  public void removeAll() {
+    Completable.fromAction(() -> {
       pipeLock.writeLock().lockInterruptibly();
+      for (Map.Entry<String, Pipe> entry : pipes) {
+        entry.getValue().onRemovedFromPipeline(this);
+      }
       pipes.clear();
       pipeLock.writeLock().unlock();
-      return null;
-    });
+    }).onErrorComplete().subscribeOn(Schedulers.io()).subscribe();
   }
 
   /**
    * Removes a {@link Pipe}.
    */
-  @Nonnull
-  public Future<Pipe> remove(@Nonnull final String name) {
+  @SchedulerSupport(SchedulerSupport.IO)
+  public Maybe<Pipe> remove(final String name) {
     Validate.notBlank(name);
-    return threadpool.submit(() -> {
+    return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
       final Pipe pipe;
       pipeLock.writeLock().lockInterruptibly();
       try {
@@ -588,17 +466,16 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         pipeLock.writeLock().unlock();
       }
       return pipe;
-    });
+    }).subscribeOn(Schedulers.io());
   }
 
   /**
    * Removes a {@link Pipe}. Fails silently if the specified {@link Pipe} does
    * not exist in the pipeline.
    */
-  @Nonnull
-  public Future<Pipe> remove(@Nonnull final Pipe pipe) {
-    Objects.requireNonNull(pipe);
-    return threadpool.submit(() -> {
+  @SchedulerSupport(SchedulerSupport.IO)
+  public Maybe<Pipe> remove(final Pipe pipe) {
+    return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
       pipeLock.writeLock().lockInterruptibly();
       try {
         final ListIterator iterator = getIteratorOf(pipe);
@@ -612,49 +489,43 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         pipeLock.writeLock().unlock();
       }
       return pipe;
-    });
+    }).subscribeOn(Schedulers.io());
   }
 
-  @Nonnull
-  public Future<Pipe> removeAtOutboundEnd() {
-    return threadpool.submit(() -> {
-      final Pipe pipe;
+  @SchedulerSupport(SchedulerSupport.IO)
+  public Maybe<Pipe> removeAtOutboundEnd() {
+    return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
       pipeLock.writeLock().lockInterruptibly();
-      try {
-        pipe = pipes.pollFirst().getValue();
-        if (pipe != null) {
-          pipe.onRemovedFromPipeline(this);
-        }
-      } finally {
-        pipeLock.writeLock().unlock();
+      final Map.Entry<String, Pipe> entry = pipes.pollFirst();
+      if (entry == null) {
+        return null;
+      } else {
+        entry.getValue().onRemovedFromPipeline(this);
       }
-      return pipe;
-    });
+      pipeLock.writeLock().unlock();
+      return entry.getValue();
+    }).subscribeOn(Schedulers.io());
   }
 
-  @Nonnull
-  public Future<Pipe> removeAtInboundEnd() {
-    return threadpool.submit(() -> {
+  @SchedulerSupport(SchedulerSupport.IO)
+  public Maybe<Pipe> removeAtInboundEnd() {
+    return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
       pipeLock.writeLock().lockInterruptibly();
-      final Pipe pipe;
-      try {
-        pipe = pipes.pollLast().getValue();
-        if (pipe != null) {
-          pipe.onRemovedFromPipeline(this);
-        }
-      } finally {
-        pipeLock.writeLock().unlock();
+      final Map.Entry<String, Pipe> entry = pipes.pollLast();
+      if (entry == null) {
+        return null;
+      } else {
+        entry.getValue().onRemovedFromPipeline(this);
       }
-      return pipe;
-    });
+      pipeLock.writeLock().unlock();
+      return entry.getValue();
+    }).subscribeOn(Schedulers.io());
   }
 
-  @Nonnull
-  public Future<Pipe> replace(@Nonnull final String name,
-                              @Nonnull final Pipe newPipe) {
+  @SchedulerSupport(SchedulerSupport.IO)
+  public Maybe<Pipe> replace(final String name, final Pipe newPipe) {
     Validate.notBlank(name);
-    Objects.requireNonNull(newPipe);
-    return threadpool.submit(() -> {
+    return Maybe.fromCallable(() -> {
       pipeLock.writeLock().lockInterruptibly();
       final Pipe oldPipe;
       try {
@@ -673,15 +544,12 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         pipeLock.writeLock().unlock();
       }
       return oldPipe;
-    });
+    }).subscribeOn(Schedulers.io());
   }
 
-  @Nonnull
-  public Future<Pipe> replace(@Nonnull final Pipe oldPipe,
-                              @Nonnull final Pipe newPipe) {
-    Objects.requireNonNull(oldPipe);
-    Objects.requireNonNull(newPipe);
-    return threadpool.submit(() -> {
+  @SchedulerSupport(SchedulerSupport.IO)
+  public Maybe<Pipe> replace(final Pipe oldPipe, final Pipe newPipe) {
+    return Maybe.fromCallable(() -> {
       pipeLock.writeLock().lockInterruptibly();
       try {
         final ListIterator<Map.Entry<String, Pipe>> iterator = getIteratorOf(oldPipe);
@@ -699,14 +567,14 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         pipeLock.writeLock().unlock();
       }
       return oldPipe;
-    });
+    }).subscribeOn(Schedulers.io());
   }
 
   /**
    * Feeds a data at the outbound end.
    * @throws IllegalStateException If the pipeline is disposed of.
    */
-  public void read(@Nonnull final Object obj) {
+  public void read(final Object obj) {
     if (state.get() == State.DISPOSED) {
       throw new IllegalStateException("Pipeline disposed.");
     }
@@ -717,49 +585,57 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    * Feeds a data at the inbound end.
    * @throws IllegalStateException If the pipeline is disposed of.
    */
-  public void write(@Nonnull final Object obj) {
+  public void write(final Object obj) {
     if (state.get() == State.DISPOSED) {
       throw new IllegalStateException("Pipeline disposed.");
     }
     writeQueue.add(obj);
   }
 
-  @Nonnull
-  public Pipe get(@Nullable final String name) {
-    for (Map.Entry<String, Pipe> it : pipes) {
-      if (it.getKey().equals(name)) {
-        return it.getValue();
+  @SchedulerSupport(SchedulerSupport.IO)
+  public Maybe<Pipe> get(@Nullable final String name) {
+    return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
+      pipeLock.readLock().lockInterruptibly();
+      for (Map.Entry<String, Pipe> it : pipes) {
+        if (it.getKey().equals(name)) {
+          pipeLock.readLock().unlock();
+          return it.getValue();
+        }
       }
-    }
-    return null;
+      return null;
+    }).subscribeOn(Schedulers.io());
   }
 
-  @Nullable
-  public Pipe getFirst() {
-    return pipes.peekFirst().getValue();
+  @SchedulerSupport(SchedulerSupport.IO)
+  public Maybe<Pipe> getOutboundEnd() {
+    return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
+      pipeLock.readLock().lockInterruptibly();
+      final Map.@Nullable Entry<String, Pipe> entry = pipes.peekFirst();
+      return entry == null ? null : entry.getValue();
+    }).subscribeOn(Schedulers.io());
   }
 
-  @Nullable
-  public Pipe getLast() {
-    return pipes.peekLast().getValue();
+  @SchedulerSupport(SchedulerSupport.IO)
+  public Maybe<Pipe> getInboundEnd() {
+    return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
+      pipeLock.readLock().lockInterruptibly();
+      final Map.@Nullable Entry<String, Pipe> entry = pipes.peekLast();
+      return entry == null ? null : entry.getValue();
+    }).subscribeOn(Schedulers.io());
   }
 
-  @Nonnull
   public Flowable<I> getInboundStream() {
     return inboundStream;
   }
 
-  @Nonnull
   public Flowable<Throwable> getInboundExceptionStream() {
     return inboundExceptionStream;
   }
 
-  @Nonnull
   public Flowable<O> getOutboundStream() {
     return outboundStream;
   }
 
-  @Nonnull
   public Flowable<Throwable> getOutboundExceptionStream() {
     return outboundExceptionStream;
   }

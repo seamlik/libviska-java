@@ -16,18 +16,14 @@
 
 package chat.viska.commons;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.EventObject;
-import java.util.logging.Level;
 import org.apache.commons.lang3.Validate;
 
 public class ExceptionCaughtEvent extends EventObject {
 
   private Throwable cause;
 
-  public ExceptionCaughtEvent(@Nonnull Object source,
-                              @Nonnull Throwable cause) {
+  public ExceptionCaughtEvent(Object source, Throwable cause) {
     super(source);
     Validate.notNull(cause);
     this.cause = cause;

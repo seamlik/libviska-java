@@ -18,6 +18,7 @@ package chat.viska.commons.pipelines;
 
 import chat.viska.commons.pipelines.Pipe.Shareable;
 import java.util.List;
+import javax.annotation.concurrent.Immutable;
 
 /**
  * {@link Pipe} that does nothing but forwarding anything coming through. It can
@@ -25,6 +26,7 @@ import java.util.List;
  * or as a placeholder in a {@link Pipeline}.
  */
 @Shareable
+@Immutable
 public class BlankPipe implements Pipe {
 
   private static final BlankPipe INSTANCE = new BlankPipe();

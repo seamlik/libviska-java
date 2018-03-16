@@ -16,9 +16,8 @@
 
 package chat.viska.commons;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import org.apache.commons.lang3.StringUtils;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Provides utility functions for working with {@link Enum}s.
@@ -34,9 +33,8 @@ public class EnumUtils {
    * @throws IllegalArgumentException If the conversion cannot be done.
    */
   @Nullable
-  public static <T extends Enum<T>> T
-  fromXmlValue(@Nonnull final Class<T> type,
-               @Nullable final String value) throws IllegalArgumentException {
+  public static <T extends Enum<T>> T fromXmlValue(final Class<T> type, final String value)
+      throws IllegalArgumentException {
     if (StringUtils.isBlank(value)) {
       return null;
     } else {
@@ -50,9 +48,7 @@ public class EnumUtils {
    * @param value The enum.
    * @param <T> Type of the enum.
    */
-  @Nonnull
-  public static <T extends Enum<T>> String
-  toXmlValue(@Nonnull final T value) {
+  public static <T extends Enum<T>> String toXmlValue(final T value) {
     return value.name().replace('_', '-').toLowerCase();
   }
 }

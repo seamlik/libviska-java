@@ -16,16 +16,16 @@
 
 package chat.viska.commons.pipelines;
 
-import javax.annotation.Nonnull;
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Target;
 import java.util.List;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Pipe as in a {@link Pipeline}. All methods must be thread-safe because
- * {@link Pipeline}s use multi-threads internally to schedule tasks.
+ * Pipe as in a {@link Pipeline}.
  */
+@ThreadSafe
 public interface Pipe {
 
   /**
@@ -44,8 +44,7 @@ public interface Pipe {
    * @param cause Received exception.
    * @throws Throwable If the Pipe decides to forward the exception.
    */
-  void catchInboundException(@Nonnull Pipeline<?, ?> pipeline,
-                             @Nonnull Throwable cause) throws Throwable;
+  void catchInboundException(Pipeline<?, ?> pipeline, Throwable cause) throws Throwable;
 
   /**
    * Invoked when the Pipe received an exception in the writing direction.
@@ -53,8 +52,7 @@ public interface Pipe {
    * @param cause Received exception.
    * @throws Throwable If the Pipe decides to forward the exception.
    */
-  void catchOutboundException(@Nonnull Pipeline<?, ?> pipeline,
-                              @Nonnull Throwable cause) throws Throwable;
+  void catchOutboundException(Pipeline<?, ?> pipeline, Throwable cause) throws Throwable;
 
   /**
    * Invoked when the Pipe is reading data.
@@ -63,9 +61,7 @@ public interface Pipe {
    * @param toForward An output placeholder for forwarding.
    * @throws Exception If any {@link Exception} is thrown during the reading.
    */
-  void onReading(@Nonnull Pipeline<?, ?> pipeline,
-                 @Nonnull Object toRead,
-                 @Nonnull List<Object> toForward) throws Exception;
+  void onReading(Pipeline<?, ?> pipeline, Object toRead, List<Object> toForward) throws Exception;
 
 
   /**
@@ -75,18 +71,16 @@ public interface Pipe {
    * @param toForward Output placeholder for forwarding.
    * @throws Exception If any {@link Exception} is thrown during the writing.
    */
-  void onWriting(@Nonnull Pipeline<?, ?> pipeline,
-                 @Nonnull Object toWrite,
-                 @Nonnull List<Object> toForward) throws Exception;
+  void onWriting(Pipeline<?, ?> pipeline, Object toWrite, List<Object> toForward) throws Exception;
 
   /**
    * Invoked when the Pipe is inserted into a {@link Pipeline}.
    * @param pipeline Attached {@link Pipeline}.
    */
-  void onAddedToPipeline(@Nonnull Pipeline<?, ?> pipeline);
+  void onAddedToPipeline(Pipeline<?, ?> pipeline);
 
   /**
    * Invoked when the Pipe is removed from a {@link Pipeline}.
    */
-  void onRemovedFromPipeline(@Nonnull Pipeline<?, ?> pipeline);
+  void onRemovedFromPipeline(Pipeline<?, ?> pipeline);
 }

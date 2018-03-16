@@ -16,16 +16,13 @@
 
 package chat.viska.commons;
 
-import io.reactivex.Observable;
-import java.io.InputStream;
-import javax.annotation.Nonnull;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -35,9 +32,8 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import org.apache.commons.lang3.StringUtils;
+import org.checkerframework.dataflow.qual.Pure;
 import org.w3c.dom.Document;
-import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
@@ -78,11 +74,13 @@ public class DomUtils {
   /**
    * Converts a {@link NodeList} to a {@link List}.
    */
-  @Nonnull
-  public static List<Node> convertToList(@Nonnull final NodeList nodeList) {
+  @Pure
+  public static List<Node> convertToList(final NodeList nodeList) {
     final List<Node> list = new ArrayList<>(nodeList.getLength());
-    for (int i = 0; i < nodeList.getLength(); ++i) {
+    int i = 0;
+    while (nodeList.item(i) != null) {
       list.add(nodeList.item(i));
+      ++i;
     }
     return list;
   }
@@ -90,8 +88,7 @@ public class DomUtils {
   /**
    * Converts a {@link Document} to a {@link String}.
    */
-  @Nonnull
-  public static String writeString(@Nonnull final Document document)
+  public static String writeString(final Document document)
       throws TransformerException {
     final Writer writer = new StringWriter();
     synchronized (DOM_TRANSFORMER) {
@@ -103,7 +100,6 @@ public class DomUtils {
   /**
    * Reads a {@link Document}.
    */
-  @Nonnull
   public static Document readDocument(final String xml)
       throws SAXException {
     final Document document;
@@ -121,7 +117,6 @@ public class DomUtils {
   /**
    * Reads a {@link Document}.
    */
-  @Nonnull
   public static Document readDocument(final InputStream xml)
       throws SAXException, IOException {
     final Document document;
