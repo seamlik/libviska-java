@@ -16,13 +16,14 @@
 
 package chat.viska.commons;
 
+import java.util.Locale;
 import org.apache.commons.lang3.StringUtils;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Provides utility functions for working with {@link Enum}s.
  */
-public class EnumUtils {
+public final class EnumUtils {
 
   /**
    * Gets an enum value based on its value appearing in an XML document.
@@ -38,7 +39,7 @@ public class EnumUtils {
     if (StringUtils.isBlank(value)) {
       return null;
     } else {
-      return Enum.valueOf(type, value.replace('-', '_').toUpperCase());
+      return Enum.valueOf(type, value.replace('-', '_').toUpperCase(Locale.ENGLISH));
     }
   }
 
@@ -49,6 +50,8 @@ public class EnumUtils {
    * @param <T> Type of the enum.
    */
   public static <T extends Enum<T>> String toXmlValue(final T value) {
-    return value.name().replace('_', '-').toLowerCase();
+    return value.name().replace('_', '-').toLowerCase(Locale.ENGLISH);
   }
+
+  private EnumUtils() {}
 }

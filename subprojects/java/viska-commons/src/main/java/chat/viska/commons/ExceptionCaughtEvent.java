@@ -21,9 +21,9 @@ import org.apache.commons.lang3.Validate;
 
 public class ExceptionCaughtEvent extends EventObject {
 
-  private Throwable cause;
+  private final Throwable cause;
 
-  public ExceptionCaughtEvent(Object source, Throwable cause) {
+  public ExceptionCaughtEvent(final Object source, final Throwable cause) {
     super(source);
     Validate.notNull(cause);
     this.cause = cause;

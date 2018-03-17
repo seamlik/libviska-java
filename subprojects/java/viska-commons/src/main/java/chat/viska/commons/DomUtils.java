@@ -32,6 +32,7 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import org.checkerframework.checker.lock.qual.GuardedBy;
 import org.checkerframework.dataflow.qual.Pure;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -43,9 +44,12 @@ import org.xml.sax.SAXException;
  * Provides utility functions for working with DOM.
  */
 @ThreadSafe
-public class DomUtils {
+public final class DomUtils {
 
+  @GuardedBy("itself")
   private static final DocumentBuilder DOM_BUILDER;
+
+  @GuardedBy("itself")
   private static final Transformer DOM_TRANSFORMER;
 
   static {
@@ -102,16 +106,16 @@ public class DomUtils {
    */
   public static Document readDocument(final String xml)
       throws SAXException {
-    final Document document;
     synchronized (DOM_BUILDER) {
       try {
-        document = DOM_BUILDER.parse(new InputSource(new StringReader(xml)));
+        final Document document = DOM_BUILDER.parse(new InputSource(new StringReader(xml)));
+        document.normalizeDocument();
+        return document;
       } catch (IOException ex) {
         throw new RuntimeException(ex);
       }
     }
-    document.normalizeDocument();
-    return document;
+
   }
 
   /**

@@ -592,7 +592,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     writeQueue.add(obj);
   }
 
-  @SchedulerSupport(SchedulerSupport.IO)
+  @SchedulerSupport(SchedulerSupport.NONE)
   public Maybe<Pipe> get(@Nullable final String name) {
     return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
       pipeLock.readLock().lockInterruptibly();
@@ -603,25 +603,25 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
         }
       }
       return null;
-    }).subscribeOn(Schedulers.io());
+    });
   }
 
-  @SchedulerSupport(SchedulerSupport.IO)
+  @SchedulerSupport(SchedulerSupport.NONE)
   public Maybe<Pipe> getOutboundEnd() {
     return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
       pipeLock.readLock().lockInterruptibly();
       final Map.@Nullable Entry<String, Pipe> entry = pipes.peekFirst();
       return entry == null ? null : entry.getValue();
-    }).subscribeOn(Schedulers.io());
+    });
   }
 
-  @SchedulerSupport(SchedulerSupport.IO)
+  @SchedulerSupport(SchedulerSupport.NONE)
   public Maybe<Pipe> getInboundEnd() {
     return Maybe.fromCallable((Callable<@Nullable Pipe>) () -> {
       pipeLock.readLock().lockInterruptibly();
       final Map.@Nullable Entry<String, Pipe> entry = pipes.peekLast();
       return entry == null ? null : entry.getValue();
-    }).subscribeOn(Schedulers.io());
+    });
   }
 
   public Flowable<I> getInboundStream() {

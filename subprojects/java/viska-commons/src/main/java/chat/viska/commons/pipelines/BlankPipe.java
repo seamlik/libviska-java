@@ -29,22 +29,19 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 public class BlankPipe implements Pipe {
 
-  private static final BlankPipe INSTANCE = new BlankPipe();
-
-  public static BlankPipe getInstance() {
-    return INSTANCE;
-  }
+  /**
+   * Globally shared instance of this type.
+   */
+  public static final BlankPipe INSTANCE = new BlankPipe();
 
   @Override
-  public void catchInboundException(final Pipeline<?, ?> pipeline,
-                                    final Throwable cause)
+  public void catchInboundException(final Pipeline<?, ?> pipeline, final Throwable cause)
       throws Throwable {
     throw cause;
   }
 
   @Override
-  public void catchOutboundException(final Pipeline<?, ?> pipeline,
-                                     final Throwable cause)
+  public void catchOutboundException(final Pipeline<?, ?> pipeline, final Throwable cause)
       throws Throwable {
     throw cause;
   }
