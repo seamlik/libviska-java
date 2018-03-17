@@ -16,7 +16,8 @@
 
 package chat.viska.sasl;
 
-import java.util.Objects;
+import java.util.Locale;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Error occurred during an
@@ -40,7 +41,7 @@ public class AuthenticationException extends Exception {
     TEPORARY_AUTH_FAILURE;
 
     public String toXmlValue() {
-      return name().replace('_', '-').toLowerCase();
+      return name().replace('_', '-').toLowerCase(Locale.ENGLISH);
     }
   }
 
@@ -51,20 +52,19 @@ public class AuthenticationException extends Exception {
     this.condition = condition;
   }
 
-  public AuthenticationException(final Condition condition, final String text) {
+  public AuthenticationException(final Condition condition, @Nullable final String text) {
     super("[" + condition.toXmlValue() + "]" + text);
-    Objects.requireNonNull(condition, "`condition` is absent.");
     this.condition = condition;
   }
 
-  public AuthenticationException(Condition condition,
-                                 String text,
-                                 Throwable throwable) {
+  public AuthenticationException(final Condition condition,
+                                 @Nullable final String text,
+                                 @Nullable final Throwable throwable) {
     super("[" + condition.toXmlValue() + "]" + text, throwable);
     this.condition = condition;
   }
 
-  public AuthenticationException(Condition condition, Throwable throwable) {
+  public AuthenticationException(final Condition condition, @Nullable final Throwable throwable) {
     super("[" + condition.toXmlValue() + "]", throwable);
     this.condition = condition;
   }

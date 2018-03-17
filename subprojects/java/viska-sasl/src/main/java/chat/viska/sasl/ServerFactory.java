@@ -19,33 +19,22 @@ package chat.viska.sasl;
 import java.security.NoSuchAlgorithmException;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
-public class ServerFactory {
+public final class ServerFactory {
 
   @Nullable
   public static Server newServer(final String mechanism,
-                                 final String name,
+                                 @Nullable final String name,
                                  final CredentialRetriever retriever) {
-    switch (mechanism) {
-      case "SCRAM-SHA-1":
-        try {
-          return new ScramServer(new ScramMechanism("SHA-1"), retriever);
-        } catch (NoSuchAlgorithmException ex) {
-          return null;
-        }
-      case "SCRAM-SHA-256":
-        try {
-          return new ScramServer(new ScramMechanism("SHA-256"), retriever);
-        } catch (NoSuchAlgorithmException ex) {
-          return null;
-        }
-      case "SCRAM-SHA-512":
-        try {
-          return new ScramServer(new ScramMechanism("SHA-512"), retriever);
-        } catch (NoSuchAlgorithmException ex) {
-          return null;
-        }
-      default:
+    if (mechanism.startsWith("SCRAM-")) {
+      try {
+        return new ScramServer(new ScramMechanism(mechanism.substring(6)), retriever);
+      } catch (NoSuchAlgorithmException ex) {
         return null;
+      }
+    } else {
+      return null;
     }
   }
+
+  private ServerFactory() {}
 }

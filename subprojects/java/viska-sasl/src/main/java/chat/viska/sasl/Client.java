@@ -16,6 +16,7 @@
 
 package chat.viska.sasl;
 
+import java.util.List;
 import java.util.Map;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -46,7 +47,7 @@ public interface Client {
    * @throws IllegalStateException If invoked before sending a response after
    *         accepting the last challenge.
    */
-  void acceptChallenge(byte[] challenge) throws AuthenticationException;
+  void acceptChallenge(byte[] challenge);
 
   /**
    * Indicates if the mechanism requires the client to send an initial response.

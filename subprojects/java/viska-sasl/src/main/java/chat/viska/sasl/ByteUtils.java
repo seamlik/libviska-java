@@ -16,13 +16,13 @@
 
 package chat.viska.sasl;
 
-class ByteUtils {
+final class ByteUtils {
 
   public static byte[] xor(final byte[] bytesA, final byte[] bytesB) {
     if (bytesA.length != bytesB.length) {
       throw new IllegalArgumentException();
     }
-    byte[] result = new byte[bytesA.length];
+    final byte[] result = new byte[bytesA.length];
     for (int it = 0; it < bytesA.length; ++it) {
       result[it] = (byte) (bytesA[it] ^ bytesB[it]);
     }

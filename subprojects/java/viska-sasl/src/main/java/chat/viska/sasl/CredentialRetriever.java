@@ -33,5 +33,5 @@ public interface CredentialRetriever {
    * @throws IOException If any error occurred during the retrieval.
    */
   Object retrieve(String authnId, String mechanism, String key)
-      throws IOException, AbortedException;
+      throws IOException;
 }

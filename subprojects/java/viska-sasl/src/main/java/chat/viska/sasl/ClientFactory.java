@@ -30,46 +30,23 @@ public class ClientFactory {
   private final List<String> mechanisms;
 
   @Nullable
-  public static Client newClient(String mechanism,
-                                 String authnId,
-                                 String authzId,
-                                 CredentialRetriever retriever) {
-    switch (mechanism) {
-      case "SCRAM-SHA-1":
-        try {
-          return new ScramClient(
-              new ScramMechanism("SHA-1"),
-              authnId,
-              authzId,
-              retriever
-          );
-        } catch (NoSuchAlgorithmException ex) {
-          return null;
-        }
-      case "SCRAM-SHA-256":
-        try {
-          return new ScramClient(
-              new ScramMechanism("SHA-256"),
-              authnId,
-              authzId,
-              retriever
-          );
-        } catch (NoSuchAlgorithmException ex) {
-          return null;
-        }
-      case "SCRAM-SHA-512":
-        try {
-          return new ScramClient(
-              new ScramMechanism("SHA-512"),
-              authnId,
-              authzId,
-              retriever
-          );
-        } catch (NoSuchAlgorithmException ex) {
-          return null;
-        }
-      default:
+  public static Client newClient(final String mechanism,
+                                 final String authnId,
+                                 final String authzId,
+                                 final CredentialRetriever retriever) {
+    if (mechanism.startsWith("SCRAM-")) {
+      try {
+        return new ScramClient(
+            new ScramMechanism(mechanism.substring(6)),
+            authnId,
+            authzId,
+            retriever
+        );
+      } catch (NoSuchAlgorithmException ex) {
         return null;
+      }
+    } else {
+      return null;
     }
   }
 

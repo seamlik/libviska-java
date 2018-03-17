@@ -40,7 +40,7 @@ public interface Server {
   /**
    * Accepts and processes a response.
    */
-  void acceptResponse(byte[] response) throws AuthenticationException;
+  void acceptResponse(byte[] response);
 
   /**
    * Indicates if the mechanism requires the server to send an initial challenge.
