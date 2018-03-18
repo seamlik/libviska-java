@@ -10,7 +10,7 @@ distinct from other counterparts by the following reasons:
   * XEPs are implemented as plugins and work in a plug-and-play manner, which
     gives high extensibility.
 
-This library can be used on Android (API Level >= 21) or (Java SE >= 8).
+This library can be used on Android (API Level >= 26) or (Java SE >= 8).
 
 License
 =======
