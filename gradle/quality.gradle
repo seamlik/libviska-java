@@ -52,6 +52,6 @@ rootProject.ext {
   ]
   checkerFrameworkSkipUses = [
       '^org\\.apache\\.commons\\.lang3\\.',
-      'io\\.reactivex\\.'
+      '^io\\.reactivex\\.'
   ]
 }
