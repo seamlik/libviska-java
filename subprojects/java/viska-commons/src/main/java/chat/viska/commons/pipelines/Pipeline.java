@@ -84,12 +84,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     /**
      * Indicates a {@link Pipeline} has stopped.
      */
-    STOPPED,
-
-    /**
-     * Indicates a {@link Pipeline} is disposed of and can no longer be reused.
-     */
-    DISPOSED
+    STOPPED
   }
 
   @GuardedBy("pipeLock")
@@ -227,16 +222,9 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    */
   public void start() {
     state.getAndDo(state -> {
-      switch (state) {
-        case RUNNING:
-          return;
-        case DISPOSED:
-          throw new IllegalStateException();
-        default:
-          break;
+      if (state == State.RUNNING) {
+        return;
       }
-      this.state.change(State.RUNNING);
-
       final Completable readTask = Completable.fromAction(() -> {
         while (true) {
           if (this.state.get() != State.RUNNING) {
@@ -259,6 +247,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
           pipeLock.readLock().unlock();
         }
       });
+      this.state.change(State.RUNNING);
       taskTokens.add(readTask.onErrorComplete().subscribeOn(Schedulers.io()).subscribe());
       taskTokens.add(writeTask.onErrorComplete().subscribeOn(Schedulers.io()).subscribe());
     });
@@ -270,40 +259,11 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    */
   public void stopNow() {
     state.getAndDo(state -> {
-      switch (state) {
-        case DISPOSED:
-          return;
-        case STOPPED:
-          return;
-        default:
-          break;
+      if (state == State.STOPPED) {
+        return;
       }
       taskTokens.clear();
       this.state.change(State.STOPPED);
-    });
-  }
-
-  /**
-   * Disposes of the pipeline.
-   */
-  public void dispose() {
-    state.getAndDo(state -> {
-      switch (state) {
-        case RUNNING:
-          stopNow();
-          break;
-        case DISPOSED:
-          return;
-        default:
-          break;
-      }
-      removeAll();
-      clearQueues();
-      inboundStream.onComplete();
-      inboundExceptionStream.onComplete();
-      outboundStream.onComplete();
-      outboundExceptionStream.onComplete();
-      this.state.change(State.DISPOSED);
     });
   }
 
@@ -575,9 +535,6 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    * @throws IllegalStateException If the pipeline is disposed of.
    */
   public void read(final Object obj) {
-    if (state.get() == State.DISPOSED) {
-      throw new IllegalStateException("Pipeline disposed.");
-    }
     readQueue.add(obj);
   }
 
@@ -586,9 +543,6 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
    * @throws IllegalStateException If the pipeline is disposed of.
    */
   public void write(final Object obj) {
-    if (state.get() == State.DISPOSED) {
-      throw new IllegalStateException("Pipeline disposed.");
-    }
     writeQueue.add(obj);
   }
 
