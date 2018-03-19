@@ -52,7 +52,9 @@ rootProject.ext {
       'org.checkerframework.checker.optional.OptionalChecker'
   ]
   checkerFrameworkSkipUses = [
-      '^org\\.apache\\.commons\\.lang3\\.',
-      '^io\\.reactivex\\.'
+      '^io\\.netty\\.',
+      '^io\\.reactivex\\.',
+      '^java\\.net\\.URI',
+      '^org\\.apache\\.commons\\.lang3\\.'
   ]
 }
