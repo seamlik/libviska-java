@@ -23,16 +23,16 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
-import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.concurrent.ThreadSafe;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Plugin for an {@link Session}.
  */
 @ThreadSafe
-public interface Plugin extends SessionAware {
+public interface Plugin {
 
   /**
    * Specifies the dependencies of a {@link Plugin}.
@@ -66,8 +66,9 @@ public interface Plugin extends SessionAware {
     final Set<Class<? extends Plugin>> dependencies = new LinkedHashSet<>();
     Class<?> clazz = getClass();
     while (clazz != null) {
-      if (clazz.isAnnotationPresent(DependsOn.class)) {
-        dependencies.addAll(Arrays.asList(clazz.getAnnotation(DependsOn.class).value()));
+      final @Nullable DependsOn annotation = clazz.getAnnotation(DependsOn.class);
+      if (annotation != null) {
+        dependencies.addAll(Arrays.asList(annotation.value()));
       }
       clazz = clazz.getSuperclass();
     }
@@ -87,8 +88,9 @@ public interface Plugin extends SessionAware {
     final Set<String> features = new LinkedHashSet<>();
     Class<?> clazz = getClass();
     while (clazz != null) {
-      if (clazz.isAnnotationPresent(Features.class)) {
-        features.addAll(Arrays.asList(clazz.getAnnotation(Features.class).value()));
+      final @Nullable Features annotation = clazz.getAnnotation(Features.class);
+      if (annotation != null) {
+        features.addAll(Arrays.asList(annotation.value()));
       }
       clazz = clazz.getSuperclass();
     }
@@ -103,8 +105,7 @@ public interface Plugin extends SessionAware {
    * @return {@link Set} of {@link java.util.Map.Entry}s whose keys are XML
    *         namespaces and values are {@code <iq/>} sub-element tag names.
    */
-  @Nonnull
   Set<Map.Entry<String, String>> getSupportedIqs();
 
-  void onApplying(@Nonnull final Session.PluginContext context);
+  void onApplying(final Session.PluginContext context);
 }

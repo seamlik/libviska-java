@@ -1,14 +1,14 @@
 package chat.viska.xmpp;
 
-import io.reactivex.Completable;
+import chat.viska.commons.DomUtils;
+import chat.viska.commons.ExceptionCaughtEvent;
 import io.reactivex.Flowable;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
-import javax.annotation.CheckReturnValue;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import java.util.logging.Level;
+import javax.xml.transform.TransformerException;
 
 /**
  * Simulated {@link Session} for testing {@link Plugin}s.
@@ -20,26 +20,26 @@ public class SimulatedSession extends Session {
   private final Set<StreamFeature> features = new CopyOnWriteArraySet<>();
   private Jid jid = Jid.EMPTY;
 
-  private void onDisposing() {
+  @Override
+  protected void onDisposing() {
     inboundStream.onComplete();
     outboundStream.onComplete();
   }
 
-  @Nonnull
   @Override
   protected Flowable<Stanza> getInboundStanzaStream() {
     return inboundStream;
   }
 
   @Override
-  protected void sendStanza(@Nonnull final Stanza stanza) {
+  protected void sendStanza(final Stanza stanza) {
     outboundStream.onNext(stanza);
   }
 
   @Override
-  protected void sendError(@Nonnull final StreamErrorException error) {
+  protected void sendError(final StreamErrorException error) {
     outboundStream.onNext(new XmlWrapperStanza(error.toXml()));
-    changeState(State.DISCONNECTED);
+    changeStateToConnected();
   }
 
   public SimulatedSession() {
@@ -47,52 +47,68 @@ public class SimulatedSession extends Session {
     this.inboundStream = unsafeInboundStream.toSerialized();
     final FlowableProcessor<Stanza> unsafeOutboundStream = PublishProcessor.create();
     this.outboundStream = unsafeOutboundStream.toSerialized();
+
+    outboundStream.subscribe(
+        it -> System.out.println("[XML sent] " + DomUtils.writeString(it.getXml())),
+        ex -> triggerEvent(new ExceptionCaughtEvent(this, ex))
+    );
   }
 
-  @Nonnull
+  /**
+   * Gets the outbound {@link Stanza} stream.
+   */
   public Flowable<Stanza> getOutboundStream() {
     return outboundStream;
   }
 
-  @Nonnull
+  /**
+   * Gets the inbound {@link Stanza} stream.
+   */
   public Flowable<Stanza> getInboundStream() {
     return inboundStream;
   }
 
-  public void readStanza(@Nonnull final Stanza stanza) {
+  /**
+   * Reads a {@link Stanza} as if it is received from a server.
+   */
+  public void readStanza(final Stanza stanza) {
+    try {
+      System.out.println("[XML received] " + DomUtils.writeString(stanza.getXml()));
+    } catch (TransformerException ex) {
+      throw new RuntimeException(ex);
+    }
     inboundStream.onNext(stanza);
   }
 
-  public void setNegotiatedJid(@Nullable final Jid jid) {
-    this.jid = Jid.isEmpty(jid) ? Jid.EMPTY : jid;
-  }
-
-
-  @Override
-  public void changeState(@Nonnull final State state) {
-    super.changeState(state);
+  /**
+   * Sets the negotiated {@link Jid}.
+   */
+  public void setNegotiatedJid(final Jid jid) {
+    this.jid = jid;
   }
 
   /**
-   * Gets the {@link StreamFeature}s.
-   * @return Modifiable thread-safe {@link Set}.
+   * Starts running this {@link Session}.
    */
-  @Nonnull
+  public void login() {
+    changeStateToConnecting();
+    changeStateToConnected();
+    changeStateToHandshaking();
+    changeStateToOnline();
+  }
+
   @Override
   public Set<StreamFeature> getStreamFeatures() {
     return features;
   }
 
-  @Nonnull
-  @Override
-  @CheckReturnValue
-  public Completable dispose() {
-    return Completable.fromAction(() -> changeState(State.DISPOSED));
-  }
-
-  @Nonnull
   @Override
   public Jid getNegotiatedJid() {
     return jid;
+  }
+
+  @Override
+  public void disconnect() {
+    changeStateToDisconnected();
   }
 }

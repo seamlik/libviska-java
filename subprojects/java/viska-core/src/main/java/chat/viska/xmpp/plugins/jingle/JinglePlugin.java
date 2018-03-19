@@ -25,21 +25,20 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import javax.annotation.Nonnull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 @Plugin.DependsOn(BasePlugin.class)
 @Plugin.Features(CommonXmlns.JINGLE)
 public class JinglePlugin implements Plugin {
 
   private final Set<JingleSession> sessions = new HashSet<>();
-  private Session.PluginContext context;
+  private Session.@Nullable PluginContext context;
 
   public Set<JingleSession> getJingleSessions() {
     return Collections.unmodifiableSet(sessions);
   }
 
   @Override
-  @Nonnull
   public Set<Map.Entry<String, String>> getSupportedIqs() {
     return Collections.singleton(
         new AbstractMap.SimpleImmutableEntry<>(CommonXmlns.JINGLE, "jingle")
@@ -47,13 +46,7 @@ public class JinglePlugin implements Plugin {
   }
 
   @Override
-  public void onApplying(@Nonnull Session.PluginContext context) {
+  public void onApplying(Session.PluginContext context) {
     this.context = context;
-  }
-
-  @Nonnull
-  @Override
-  public Session getSession() {
-    return context.getSession();
   }
 }

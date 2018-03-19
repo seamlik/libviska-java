@@ -19,5 +19,6 @@ dependencies {
   implementation "io.netty:netty-codec-http:${rootProject.libraryVersions.NETTY}"
   implementation "io.netty:netty-codec-xml:${rootProject.libraryVersions.NETTY}"
   implementation "io.netty:netty-handler:${rootProject.libraryVersions.NETTY}"
+  implementation project(':java:viska-commons')
   implementation rootProject.libraries.COMMONS_LANG
 }

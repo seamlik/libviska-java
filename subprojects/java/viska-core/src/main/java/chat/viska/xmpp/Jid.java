@@ -19,9 +19,8 @@ package chat.viska.xmpp;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import org.apache.commons.lang3.StringUtils;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * XMPP address.
@@ -47,8 +46,7 @@ public class Jid {
   private final String domainPart;
   private final String resourcePart;
 
-  @Nonnull
-  private static List<String> parseJidParts(@Nullable final String rawJid) {
+  private static List<String> parseJidParts(final String rawJid) {
     final List<String> result = Arrays.asList("", "", "");
     if (StringUtils.isBlank(rawJid)) {
       return result;
@@ -98,15 +96,19 @@ public class Jid {
     }
   }
 
-  public Jid(@Nullable final String localPart,
-             @Nullable final String domainPart,
-             @Nullable final String resourcePart) {
-    this.localPart = (localPart == null) ? "" : localPart;
-    this.domainPart = (domainPart == null) ? "" : domainPart;
-    this.resourcePart = (resourcePart == null) ? "" : resourcePart;
+  /**
+   * Constructs with 3 parts specified.
+   */
+  public Jid(final String localPart, final String domainPart, final String resourcePart) {
+    this.localPart = localPart;
+    this.domainPart = domainPart;
+    this.resourcePart = resourcePart;
   }
 
-  public Jid(@Nonnull final String jid) {
+  /**
+   * Constructs using a literal.
+   */
+  public Jid(final String jid) {
     this(parseJidParts(jid));
   }
 
@@ -115,7 +117,6 @@ public class Jid {
    * @return never {@code null}.
    */
   @Override
-  @Nonnull
   public String toString() {
     if (isEmpty()) {
       return "";
@@ -134,7 +135,6 @@ public class Jid {
    * Returns the localPart part of this JID.
    * @return never {@code null}.
    */
-  @Nonnull
   public String getLocalPart() {
     return localPart;
   }
@@ -143,7 +143,6 @@ public class Jid {
    * Returns the domainPart part of this JID.
    * @return {@code null}.
    */
-  @Nonnull
   public String getDomainPart() {
     return domainPart;
   }
@@ -152,12 +151,10 @@ public class Jid {
    * Returns the resourcePart part of this JID.
    * @return never {@code null}.
    */
-  @Nonnull
   public String getResourcePart() {
     return resourcePart;
   }
 
-  @Nonnull
   public Jid toBareJid() {
     return resourcePart.isEmpty() ? this : new Jid(localPart, domainPart, "");
   }
@@ -167,7 +164,7 @@ public class Jid {
   }
 
   @Override
-  public boolean equals(Object obj) {
+  public boolean equals(@Nullable final Object obj) {
     if (this == obj) {
       return true;
     }

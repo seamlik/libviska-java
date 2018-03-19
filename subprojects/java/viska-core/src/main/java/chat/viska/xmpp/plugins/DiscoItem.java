@@ -17,9 +17,8 @@
 package chat.viska.xmpp.plugins;
 
 import chat.viska.xmpp.Jid;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.Objects;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Result of an {@code #items} query defined in
@@ -31,18 +30,17 @@ public class DiscoItem {
   private final String name;
   private final String node;
 
-  public DiscoItem(@Nullable final Jid jid,
-                   @Nullable final String name,
-                   @Nullable final String node) {
-    this.jid = jid == null ? Jid.EMPTY : jid;
-    this.name = name == null ? "" : name;
-    this.node = node == null ? "" : node;
+  public DiscoItem(final Jid jid,
+                   final String name,
+                   final String node) {
+    this.jid = jid;
+    this.name = name;
+    this.node = node;
   }
 
   /**
    * Gets the JID.
    */
-  @Nonnull
   public Jid getJid() {
     return jid;
   }
@@ -50,18 +48,19 @@ public class DiscoItem {
   /**
    * Gets the name.
    */
-  @Nonnull
   public String getName() {
     return name;
   }
 
-  @Nonnull
+  /**
+   * Gets the node.
+   */
   public String getNode() {
     return node;
   }
 
   @Override
-  public boolean equals(Object obj) {
+  public boolean equals(@Nullable Object obj) {
     if (this == obj) {
       return true;
     }

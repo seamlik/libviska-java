@@ -15,11 +15,12 @@
  */
 
 dependencies {
-  api project(':java:viska-commons')
+  api 'rxbeans:rxbeans:0.1'
   implementation 'com.google.code.gson:gson:2.8.1'
   implementation 'dnsjava:dnsjava:2.1.8'
   implementation "io.netty:netty-resolver-dns:${rootProject.libraryVersions.NETTY}"
   implementation "io.netty:netty-transport:${rootProject.libraryVersions.NETTY}"
+  implementation project(':java:viska-commons')
   implementation project(':java:viska-sasl')
   implementation rootProject.libraries.COMMONS_LANG
 }

@@ -18,9 +18,6 @@ package chat.viska.xmpp;
 
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.Objects;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -68,7 +65,7 @@ public class StreamErrorException extends Exception {
   private final Condition condition;
   private final String text;
 
-  public static StreamErrorException fromXml(@Nonnull final Document xml) {
+  public static StreamErrorException fromXml(final Document xml) {
     StreamErrorException.Condition condition = null;
     Element conditionElement = null;
     int cursor = 0;
@@ -113,30 +110,27 @@ public class StreamErrorException extends Exception {
     }
   }
 
-  public StreamErrorException(@Nonnull final Condition condition) {
+  public StreamErrorException(final Condition condition) {
     super("[" + EnumUtils.toXmlValue(condition) + "]");
     this.text = "";
     this.condition = condition;
   }
 
-  public StreamErrorException(@Nonnull final Condition condition,
-                              @Nonnull final String text) {
+  public StreamErrorException(final Condition condition,
+                              final String text) {
     super(text);
     this.condition = condition;
     this.text = text;
   }
 
-  @Nonnull
   public Condition getCondition() {
     return condition;
   }
 
-  @Nonnull
   public String getText() {
     return text;
   }
 
-  @Nonnull
   public Document toXml() {
     final Document xml;
     try {

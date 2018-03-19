@@ -58,9 +58,11 @@ project(':java').subprojects {
   apply from: "${rootDir}/gradle/java.gradle"
 }
 
+/*
 project(':android').subprojects {
   apply from: "${rootDir}/gradle/android.gradle"
 }
+*/
 
 task javadocAll(type: Javadoc) {
   def outputDir = file("${buildDir}/javadocAll")

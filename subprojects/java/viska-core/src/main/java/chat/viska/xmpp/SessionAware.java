@@ -16,18 +16,14 @@
 
 package chat.viska.xmpp;
 
-import javax.annotation.Nonnull;
-
 /**
  * Indicates this class is associated to an {@link Session}. Once the
- * {@link Session} has been disposed of, this class must also be considered in
- * the same state and start cleaning up resources.
+ * {@link Session} has been disposed of, the instance of this type must also be considered disposed.
  */
 public interface SessionAware {
 
   /**
-   * Gets the associated XMPP session.
+   * Gets the associated {@link Session}.
    */
-  @Nonnull
   Session getSession();
 }

@@ -17,7 +17,6 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.ExceptionCaughtEvent;
-import io.reactivex.Completable;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
@@ -30,17 +29,15 @@ import java.util.EventObject;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckReturnValue;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import javax.annotation.WillCloseWhenClosed;
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
+import org.checkerframework.checker.lock.qual.GuardedBy;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import rxbeans.MutableProperty;
@@ -72,7 +69,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
    *             +--------------+
    *
    *                    ^
-   *                    | dispose()
+   *                    | close()
    *                    +
    *
    *             +---------------+
@@ -148,6 +145,8 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     ONLINE
   }
 
+
+
   /**
    * Contains information of {@link Plugin}s applied on an {@link Session}.
    */
@@ -164,12 +163,9 @@ public abstract class Session extends StandardObject implements AutoCloseable {
      * has already been applied.
      * @throws IllegalArgumentException If it fails to apply the {@link Plugin}.
      */
-    public void apply(@Nonnull final Class<? extends Plugin> type) {
-      if (getPlugin(type) != null) {
-        return;
-      }
+    public void apply(final Class<? extends Plugin> type) {
       synchronized (this.contexts) {
-        if (getPlugin(type) != null) {
+        if (getPlugins().parallelStream().anyMatch(type::isInstance)) {
           return;
         }
         final Plugin plugin;
@@ -191,28 +187,32 @@ public abstract class Session extends StandardObject implements AutoCloseable {
 
     /**
      * Gets an applied plugin which is of a particular type.
-     * @return {@code null} if the plugin cannot be found.
+     * @throws NoSuchElementException If no such plugin found.
      */
-    @Nullable
-    public <T extends Plugin> T getPlugin(@Nonnull final Class<T> type) {
+    public <T extends Plugin> T getPlugin(final Class<T> type) {
       synchronized (this.contexts) {
         for (PluginContext it : this.contexts) {
           if (type.isInstance(it.plugin)) {
-            return (T) it.plugin;
+            return type.cast(it.plugin);
           }
         }
       }
-      return null;
+      throw new NoSuchElementException();
     }
 
-    @Nonnull
+    /**
+     * Gets all applied {@link Plugin}.
+     */
     public Set<Plugin> getPlugins() {
       final Set<Plugin> results = new HashSet<>();
       Observable.fromIterable(this.contexts).map(it -> it.plugin).subscribe(results::add);
       return Collections.unmodifiableSet(results);
     }
 
-    public void setEnabled(@Nonnull final Class<? extends Plugin> type, final boolean enabled) {
+    /**
+     * Enable or disable a {@link Plugin}.
+     */
+    public void setEnabled(final Class<? extends Plugin> type, final boolean enabled) {
       synchronized (this.contexts) {
         for (PluginContext it : this.contexts) {
           if (type.isInstance(it.plugin)) {
@@ -222,7 +222,10 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       }
     }
 
-    public void remove(@Nonnull final Class<? extends Plugin> type) {
+    /**
+     * Removes a {@link Plugin}.
+     */
+    public void remove(final Class<? extends Plugin> type) {
       final Set<PluginContext> toRemove = new HashSet<>();
       synchronized (this.contexts) {
         for (PluginContext it : this.contexts) {
@@ -235,6 +238,10 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       }
     }
 
+    /**
+     * Gets all features provided by the currently applied plugins.
+     * @see <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>
+     */
     public Set<String> getAllFeatures() {
       final Set<String> features = new LinkedHashSet<>();
       synchronized (contexts) {
@@ -246,7 +253,6 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     }
 
     @Override
-    @Nonnull
     public Session getSession() {
       return Session.this;
     }
@@ -260,6 +266,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
    * the {@link Plugin} is removed from the {@link Session}, the context is destroyed and all its
    * stream properties will signal a completion.
    */
+  @ThreadSafe
   public class PluginContext implements SessionAware {
 
     @GuardedBy("itself")
@@ -268,24 +275,25 @@ public abstract class Session extends StandardObject implements AutoCloseable {
         enabled.get() && stateProperty().get() == State.ONLINE
     );
     private final Plugin plugin;
-    private final FlowableProcessor<Stanza> inboundStanzaStream = PublishProcessor.create();
+    private final FlowableProcessor<Stanza> inboundStanzaStream;
     private final Disposable stanzaSubscription;
 
-    private PluginContext(@Nonnull final Plugin plugin) {
+    private PluginContext(final Plugin plugin) {
       this.plugin = plugin;
+      final FlowableProcessor<Stanza> unsafeStream = PublishProcessor.create();
+      inboundStanzaStream = unsafeStream.toSerialized();
+
       Flowable.combineLatest(
           this.enabled.getStream(),
           stateProperty().getStream(),
           (enabled, state) -> enabled && state == State.ONLINE
-      ).subscribe(this.available::change);
-      this.stanzaSubscription = Session.this.getInboundStanzaStream().filter(
-          it -> this.enabled.get()
-      ).subscribe(
-          this.inboundStanzaStream::onNext
-      );
-      stateProperty().getStream().filter(it -> it == State.DISPOSED).firstOrError().subscribe(it -> {
-        onDestroying();
-      });
+      ).observeOn(Schedulers.io()).subscribe(this.available::change);
+      stanzaSubscription = Session
+          .this
+          .getInboundStanzaStream()
+          .filter(it -> this.enabled.get())
+          .observeOn(Schedulers.io())
+          .subscribe(this.inboundStanzaStream::onNext);
     }
 
     private void onDestroying() {
@@ -296,8 +304,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     /**
      * Sends a stanza.
      */
-    @Nonnull
-    public StanzaReceipt sendStanza(@Nonnull final Stanza stanza) {
+    public StanzaReceipt sendStanza(final Stanza stanza) {
       this.available.getStream().filter(it -> it).firstElement().subscribe(
           it -> Session.this.sendStanza(stanza)
       );
@@ -309,8 +316,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
      * @return {@link IqReceipt} whose {@link IqReceipt#getResponse()} will signal a completion
      *         immediately if the provided {@code iq} is a result or error.
      */
-    @Nonnull
-    public IqReceipt sendIq(@Nonnull final Stanza iq) {
+    public IqReceipt sendIq(final Stanza iq) {
       if (StringUtils.isBlank(iq.getId())) {
         throw new IllegalArgumentException("No ID");
       }
@@ -343,10 +349,9 @@ public abstract class Session extends StandardObject implements AutoCloseable {
      * Sends a simple query. This query will look like:
      * <p>{@code <iq id="..." to="target"><query xmlns="namespace" (more params) />}</p>
      */
-    @Nonnull
-    public IqReceipt sendIq(@Nonnull final String namespace,
-                            @Nullable final Jid recipient,
-                            @Nullable final Map<String, String> attributes) {
+    public IqReceipt sendIq(final String namespace,
+                            final Jid recipient,
+                            final Map<String, String> attributes) {
       final String id = UUID.randomUUID().toString();
       final Document iq =  Stanza.getIqTemplate(
           Stanza.IqType.GET,
@@ -357,10 +362,8 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       final Element element = (Element) iq.getDocumentElement().appendChild(
           iq.createElementNS(namespace, "query")
       );
-      if (attributes != null) {
-        for (Map.Entry<String, String> it : attributes.entrySet()) {
-          element.setAttribute(it.getKey(), it.getValue());
-        }
+      for (Map.Entry<String, String> it : attributes.entrySet()) {
+        element.setAttribute(it.getKey(), it.getValue());
       }
       return sendIq(new XmlWrapperStanza(iq));
     }
@@ -368,12 +371,14 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     /**
      * Sends a stanza error.
      */
-    @Nonnull
-    public StanzaReceipt sendError(@Nonnull final StanzaErrorException error) {
+    public StanzaReceipt sendError(final StanzaErrorException error) {
       return sendStanza(new XmlWrapperStanza(error.toXml()));
     }
 
-    public void sendError(@Nonnull final StreamErrorException error) {
+    /**
+     * Sends a stream error and closes the connection.
+     */
+    public void sendError(final StreamErrorException error) {
       availableProperty().getStream().filter(it -> it).firstElement().subscribe(
           it -> Session.this.sendError(error)
       );
@@ -382,16 +387,17 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     /**
      * Gets a stream of inbound {@link Stanza}s.
      */
-    @Nonnull
     public Flowable<Stanza> getInboundStanzaStream() {
       return inboundStanzaStream;
     }
 
+    /**
+     * Indicates if the interacting sending or receiving stanzas is available.
+     */
     public Property<Boolean> availableProperty() {
       return available;
     }
 
-    @Nonnull
     @Override
     public Session getSession() {
       return Session.this;
@@ -399,16 +405,17 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   }
 
   private final MutableProperty<State> state = new StandardProperty<>(State.DISCONNECTED);
-  private final FlowableProcessor<EventObject> eventStream;
   private final PluginManager pluginManager = new PluginManager();
   private final Logger logger = Logger.getAnonymousLogger();
   private Jid loginJid = Jid.EMPTY;
   private Jid authzId = Jid.EMPTY;
   private boolean neverOnline = true;
 
-  private void onDisposing() {
-    this.eventStream.onComplete();
-  }
+  /**
+   * Performs cleaning up resources. This method is called by {@link Session} when it is being
+   * closed.
+   */
+  protected abstract void onDisposing();
 
   protected void log(final EventObject event) {
     logger.log(Level.INFO, event.toString());
@@ -419,95 +426,124 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   }
 
   protected Session() {
-    // Event stream
-    final FlowableProcessor<EventObject> unsafeEventStream = PublishProcessor.create();
-    this.eventStream = unsafeEventStream.toSerialized();
-    stateProperty().getStream().filter(it -> it == State.ONLINE).firstElement().subscribe(
+    state.getStream().filter(it -> it == State.ONLINE).firstElement().subscribe(
         it -> neverOnline = false
-    );
-    stateProperty().getStream().filter(
-        it -> it == State.DISPOSED
-    ).firstOrError().observeOn(Schedulers.io()).subscribe(
-        it -> onDisposing()
     );
 
     // Logging
-    this.eventStream.subscribe(this::log);
-    stateProperty().getStream().subscribe(it -> this.logger.fine(
+    getEventStream().observeOn(Schedulers.io()).subscribe(this::log);
+    state.getStream().subscribe(it -> this.logger.fine(
         "Session is now " + it.name())
     );
   }
 
   /**
-   * Triggers an {@link EventObject}.
-   * @param event The event to be triggered.
-   */
-  protected void triggerEvent(@Nonnull final EventObject event) {
-    if (!eventStream.hasComplete()) {
-      eventStream.onNext(event);
-    }
-  }
-
-  /**
    * Gets a stream of inbound {@link Stanza}s. It is usually subscribed by {@link PluginContext}s.
    */
-  @Nonnull
   protected abstract Flowable<Stanza> getInboundStanzaStream();
 
   /**
    * Sends a {@link Stanza} into the XMPP stream. Usually invoked by {@link PluginContext}s.
    */
-  protected abstract void sendStanza(@Nonnull final Stanza stanza);
+  protected abstract void sendStanza(final Stanza stanza);
 
   /**
    * Sends a stream error and then disconnects. Since a {@link Session} with a stream error is quite
    * fragile, this method won't complain even if it is disconnected already.
    */
-  protected abstract void sendError(@Nonnull final StreamErrorException error);
+  protected abstract void sendError(final StreamErrorException error);
 
   /**
-   * Sets the {@link Session.State}. May also set {@link Session.State#DISPOSED} resulting in
-   * calling {@link #dispose()}.
-   * @throws IllegalStateException If trying to set to another {@link Session.State} when this class
-   *         is already disposed of.
+   * Changes the state to {@link State#DISCONNECTED}.
+   * @throws IllegalStateException If the session is disposed.
    */
-  protected void changeState(@Nonnull final State state) {
-    if (this.state.get() == State.DISPOSED && state != State.DISPOSED) {
-      throw new IllegalStateException();
-    }
-    this.state.change(state);
+  protected final void changeStateToDisconnected() {
+    state.getAndDo(state -> {
+      if (state == State.DISPOSED) {
+        throw new IllegalStateException();
+      }
+      this.state.change(State.DISCONNECTED);
+    });
+  }
+
+  /**
+   * Changes the state to {@link State#CONNECTED}.
+   * @throws IllegalStateException If the current state if not {@link State#CONNECTING}.
+   */
+  protected final void changeStateToConnected() {
+    state.getAndDo(state -> {
+      if (state != State.CONNECTING) {
+        throw new IllegalStateException();
+      }
+      this.state.change(State.CONNECTED);
+    });
+  }
+
+  /**
+   * Changes the state to {@link State#CONNECTING}.
+   * @throws IllegalStateException If the current state if not {@link State#DISCONNECTED}.
+   */
+  protected final void changeStateToConnecting() {
+    state.getAndDo(state -> {
+      if (state != State.DISCONNECTED) {
+        throw new IllegalStateException();
+      }
+      this.state.change(State.CONNECTING);
+    });
+  }
+
+  /**
+   * Changes the state to {@link State#HANDSHAKING}.
+   * @throws IllegalStateException If the current state if not {@link State#CONNECTED}.
+   */
+  protected final void changeStateToHandshaking() {
+    state.getAndDo(state -> {
+      if (state != State.CONNECTED) {
+        throw new IllegalStateException();
+      }
+      this.state.change(State.HANDSHAKING);
+    });
+  }
+
+  /**
+   * Changes the state to {@link State#ONLINE}.
+   */
+  protected final void changeStateToOnline() {
+    state.getAndDo(state -> {
+      if (state == State.DISPOSED || state != State.HANDSHAKING) {
+        throw new IllegalStateException();
+      }
+      this.state.change(State.ONLINE);
+    });
   }
 
   /**
    * Gets the negotiated {@link StreamFeature}s.
    */
-  @Nonnull
   public abstract Set<StreamFeature> getStreamFeatures();
-
-  /**
-   * Starts shutting down the Session and releasing all system resources.
-   */
-  @Nonnull
-  @CheckReturnValue
-  @WillCloseWhenClosed
-  public abstract Completable dispose();
 
   /**
    * Gets the negotiated {@link Jid} after handshake.
    * @return {@link Jid#EMPTY} if the handshake has not completed yet or it is an anonymous login.
    */
-  @Nonnull
   public abstract Jid getNegotiatedJid();
 
-  @Override
-  public void close() {
-    dispose().blockingAwait();
+  /**
+   * Starts closing the XMPP stream and the network connection.
+   */
+  public void disconnect() {
+    stateProperty().getAndDo(state -> {
+      if (state == State.DISCONNECTED || state == State.DISCONNECTING || state == State.DISPOSED) {
+        return;
+      }
+      this.state.change(State.DISCONNECTING);
+    });
+
   }
 
   /**
    * Gets the logger.
    */
-  @Nonnull
   public Logger getLogger() {
     return logger;
   }
@@ -515,7 +551,6 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   /**
    * Gets the current {@link State}.
    */
-  @Nonnull
   public Property<State> stateProperty() {
     return state;
   }
@@ -523,7 +558,6 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   /**
    * Gets the plugin manager.
    */
-  @Nonnull
   public PluginManager getPluginManager() {
     return pluginManager;
   }
@@ -533,7 +567,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
    * anonymous login. This property can only be changed while disconnected and before going online
    * the first time.
    */
-  public void setLoginJid(@Nullable final Jid jid) {
+  public void setLoginJid(final Jid jid) {
     if (!neverOnline || stateProperty().get() != State.DISCONNECTED) {
       throw new IllegalStateException();
     }
@@ -544,7 +578,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
    * Sets the authorization identity. It is by default set to {@link Jid#EMPTY}. This property
    * can only be changed while disconnected and before going online the first time.
    */
-  public void setAuthorizationId(@Nullable final Jid jid) {
+  public void setAuthorizationId(final Jid jid) {
     if (!neverOnline || stateProperty().get() != State.DISCONNECTED) {
       throw new IllegalStateException();
     }
@@ -557,5 +591,34 @@ public abstract class Session extends StandardObject implements AutoCloseable {
 
   public Jid getAutorizationId() {
     return authzId;
+  }
+
+  @Override
+  public final void close() {
+    state.getAndDo(state -> {
+      switch (state) {
+        case DISPOSED:
+          return;
+        case DISCONNECTED:
+          break;
+        case DISCONNECTING:
+          break;
+        default:
+          disconnect();
+          break;
+      }
+      onDisposing();
+      stateProperty()
+          .getStream()
+          .filter(it -> it == State.DISCONNECTED)
+          .firstOrError()
+          .toCompletable()
+          .doOnComplete(() -> {
+            onDisposing();
+            this.state.change(State.DISPOSED);
+          })
+          .observeOn(Schedulers.io())
+          .subscribe();
+    });
   }
 }

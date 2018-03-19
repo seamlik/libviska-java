@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 public class JidTest {
 
   @Test
-  public void parseJidTest() throws Exception {
+  public void parseJidTest() {
     new Jid("juliet@example.com");
     new Jid("example.com");
     new Jid("example.com/foo");

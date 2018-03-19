@@ -16,7 +16,6 @@
 
 package chat.viska.cmd;
 
-import chat.viska.commons.EnumUtils;
 import chat.viska.xmpp.Connection;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Session;
@@ -46,7 +45,7 @@ public class Cmd {
     @Parameter(converter = JidConverter.class, required = true)
     private List<Jid> entities;
 
-    public void run() throws Throwable {
+    public void run() {
       final BasePlugin basePlugin = session.getPluginManager().getPlugin(BasePlugin.class);
       for (Jid it : entities) {
         System.out.println("<" + it + ">");
@@ -62,7 +61,7 @@ public class Cmd {
           System.out.println("      Type: " + identity.getType());
         });
 
-        final List<DiscoItem> items = basePlugin.queryDiscoItems(it, null).blockingGet();
+        final List<DiscoItem> items = basePlugin.queryDiscoItems(it, "").blockingGet();
         System.out.println("  Items: ");
         items.forEach(item -> {
           System.out.println("    JID: " + item.getJid());
@@ -82,6 +81,7 @@ public class Cmd {
         System.out.println("    Name: " + softwareInfo.getName());
         System.out.println("    Version: " + softwareInfo.getVersion());
         System.out.println("    Operating system: " + softwareInfo.getOperatingSystem());
+        session.close();
       }
     }
   }
@@ -89,14 +89,14 @@ public class Cmd {
   @Parameters(commandNames = "roster")
   private class RosterCommand {
 
-    public void run() throws Exception {
+    public void run() {
       final BasePlugin plugin = session.getPluginManager().getPlugin(BasePlugin.class);
       List<RosterItem> roster = plugin.queryRoster().blockingGet();
       roster.forEach(it -> {
         System.out.println("Jid: " + it.getJid());
         if (it.getSubscription() != null) {
           System.out.println(
-              "  Subscription: " + EnumUtils.toXmlValue(it.getSubscription())
+              "  Subscription: " + it.getSubscription()
           );
         }
         if (!it.getName().isEmpty()) {
@@ -114,13 +114,13 @@ public class Cmd {
   private class ConnectionsCommand {
 
     @Parameter(required = true)
-    private List<String> domains;
+    private List<String> domains = Collections.emptyList();
 
     public void run() {
       for (String domain : domains) {
         System.out.println('<' + domain + '>');
         final List<Connection> connections = Connection
-            .queryAll(domain, null, null)
+            .queryAll(domain, null, Collections.emptyList())
             .blockingGet();
         for (Connection it : connections) {
           System.out.print(it.getProtocol());
@@ -174,13 +174,14 @@ public class Cmd {
   }
 
   private void initialize() {
-    Connection connection;
+    final Connection connection;
     if (this.websocket != null) {
       connection = new Connection(Connection.Protocol.WEBSOCKET, this.websocket);
     } else {
       try {
-        connection = Observable
-            .fromIterable(Connection.queryAll(jid.getDomainPart(), null, null).blockingGet())
+        connection = Connection
+            .queryAll(jid.getDomainPart(), null, Collections.emptyList())
+            .flattenAsObservable(it -> it)
             .filter(Connection::isTlsEnabled)
             .blockingFirst();
       } catch (Exception ex) {
@@ -191,7 +192,7 @@ public class Cmd {
       }
     }
     try {
-      this.session = StandardSession.getInstance(Collections.singleton(connection.getProtocol()));
+      session = StandardSession.newInstance(Collections.singleton(connection.getProtocol()));
     } catch (Exception ex) {
       throw new RuntimeException("No XMPP Session implementation is installed.");
     }
@@ -210,10 +211,16 @@ public class Cmd {
       this.session.getLogger().setLevel(Level.WARNING);
     }
 
-    this.session.login(this.password).blockingAwait();
+    session.login(this.password);
+    session
+        .stateProperty()
+        .getStream()
+        .filter(it -> it == Session.State.ONLINE)
+        .firstOrError()
+        .blockingGet();
   }
 
-  private void run(String... args) throws Throwable {
+  private void run(String... args) {
     final InfoCommand infoCommand = new InfoCommand();
     final RosterCommand rosterCommand = new RosterCommand();
     final ConnectionsCommand connectionsCommand = new ConnectionsCommand();

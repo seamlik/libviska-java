@@ -17,11 +17,10 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.EnumUtils;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Objects;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
@@ -74,12 +73,12 @@ public class StanzaErrorException extends Exception {
   private final Jid originalSender;
   private final Jid intendedRecipient;
   private final Jid errorGenerator;
-  private final URI redirect;
+  private final @Nullable URI redirect;
   private final Type type;
   private final Condition condition;
   private final String text;
-  private final Element appCondition;
-  private final Element stanza;
+  private final @Nullable Element appCondition;
+  private final @Nullable Element stanza;
 
   /**
    * Generates an instance of this type based on the XML data of a stanza error.
@@ -87,9 +86,7 @@ public class StanzaErrorException extends Exception {
    *         conform to <a href="https://datatracker.ietf.org/doc/rfc6120">RFC
    *         6120</a>.
    */
-  @Nonnull
-  public static StanzaErrorException fromXml(@Nonnull final Document document)
-      throws StreamErrorException {
+  public static StanzaErrorException fromXml(final Document document) throws StreamErrorException {
     final Element errorElement = (Element) document
         .getDocumentElement()
         .getElementsByTagName("error")
@@ -156,7 +153,7 @@ public class StanzaErrorException extends Exception {
           "Malformed redirect URI."
       );
     }
-    final String text = textElement == null ? null : textElement.getTextContent();
+    final String text = textElement == null ? "" : textElement.getTextContent();
     final Element appCondition = hasAppCondition
         ? (Element) errorElement.getChildNodes().item(textElement != null ? 3 : 2)
         : null;
@@ -179,11 +176,11 @@ public class StanzaErrorException extends Exception {
     );
   }
 
-  public StanzaErrorException(@Nonnull final Stanza stanza,
-                              @Nonnull final Condition condition,
-                              @Nonnull final Type type,
-                              @Nullable final String text,
-                              @Nullable final Jid errorGenerator,
+  public StanzaErrorException(final Stanza stanza,
+                              final Condition condition,
+                              final Type type,
+                              final String text,
+                              final Jid errorGenerator,
                               @Nullable final URI redirect,
                               @Nullable final Element appCondition) {
     this(
@@ -204,14 +201,14 @@ public class StanzaErrorException extends Exception {
   /**
    * Default constructor.
    */
-  public StanzaErrorException(@Nonnull final Stanza.Type stanzaType,
-                              @Nonnull final String id,
-                              @Nonnull final Jid originalSender,
-                              @Nonnull final Jid intendedRecipient,
-                              @Nonnull final Condition condition,
-                              @Nonnull final Type errorType,
-                              @Nullable final String text,
-                              @Nullable final Jid errorGenerator,
+  public StanzaErrorException(final Stanza.Type stanzaType,
+                              final String id,
+                              final Jid originalSender,
+                              final Jid intendedRecipient,
+                              final Condition condition,
+                              final Type errorType,
+                              final String text,
+                              final Jid errorGenerator,
                               @Nullable final URI redirect,
                               @Nullable final Element appCondition,
                               @Nullable final Element stanza) {
@@ -230,19 +227,11 @@ public class StanzaErrorException extends Exception {
     this.appCondition = appCondition;
     this.stanza = stanza;
     this.text = text;
-
-    Objects.requireNonNull(stanzaType, "`stanzaType` is absent.");
-    Objects.requireNonNull(id, "`id` is absent.");
-    Objects.requireNonNull(originalSender, "`originalSender` is absent.");
-    Objects.requireNonNull(intendedRecipient, "`intendedRecipient` is absent.");
-    Objects.requireNonNull(condition, "`condition` is absent.");
-    Objects.requireNonNull(errorType, "`errorType` is absent.");
   }
 
   /**
    * Gets the stanza ID.
    */
-  @Nonnull
   public String getId() {
     return id;
   }
@@ -250,7 +239,6 @@ public class StanzaErrorException extends Exception {
   /**
    * Gets the stanza sender.
    */
-  @Nullable
   public Jid getOriginalSender() {
     return originalSender;
   }
@@ -258,7 +246,6 @@ public class StanzaErrorException extends Exception {
   /**
    * Gets the stanza recipient.
    */
-  @Nullable
   public Jid getIntendedRecipient() {
     return intendedRecipient;
   }
@@ -290,7 +277,6 @@ public class StanzaErrorException extends Exception {
   /**
    * Gets the descriptive text.
    */
-  @Nonnull
   public String getText() {
     return text;
   }
@@ -323,12 +309,10 @@ public class StanzaErrorException extends Exception {
   /**
    * Gets the stanza type.
    */
-  @Nullable
   public Stanza.Type getStanzaType() {
     return stanzaType;
   }
 
-  @Nonnull
   public Document toXml() {
     throw new UnsupportedOperationException();
   }

@@ -16,13 +16,12 @@
 
 package chat.viska.xmpp.plugins;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Result of an {@code #info} query defined in
@@ -39,18 +38,17 @@ public class DiscoInfo {
     private final String type;
     private final String name;
 
-    public Identity(@Nullable final String category,
-                    @Nullable final String type,
-                    @Nullable final String name) {
-      this.category = category == null ? "" : category;
-      this.type = type == null ? "" : type;
-      this.name = name == null ? "" : name;
+    public Identity(final String category,
+                    final String type,
+                    final String name) {
+      this.category = category;
+      this.type = type;
+      this.name = name;
     }
 
     /**
      * Gets the category.
      */
-    @Nonnull
     public String getCategory() {
       return category;
     }
@@ -58,7 +56,6 @@ public class DiscoInfo {
     /**
      * Gets the type.
      */
-    @Nonnull
     public String getType() {
       return type;
     }
@@ -66,13 +63,12 @@ public class DiscoInfo {
     /**
      * Gets the name.
      */
-    @Nonnull
     public String getName() {
       return name;
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equals(@Nullable Object obj) {
       if (this == obj) {
         return true;
       }
@@ -91,7 +87,6 @@ public class DiscoInfo {
     }
 
     @Override
-    @Nonnull
     public String toString() {
       return String.format(
           "Category: %1s, Type: %2s, Name: %3s",
@@ -108,21 +103,16 @@ public class DiscoInfo {
   /**
    * Default constructor.
    */
-  public DiscoInfo(@Nullable final Collection<Identity> identities,
-                   @Nullable final Collection<String> features) {
-    this.identities = identities == null
-        ? Collections.emptyList()
-        : new ArrayList<>(identities);
-    this.features = features == null
-        ? Collections.emptyList()
-        : new ArrayList<>(features);
+  public DiscoInfo(final Collection<Identity> identities,
+                   final Collection<String> features) {
+    this.identities = new ArrayList<>(identities);
+    this.features = new ArrayList<>(features);
   }
 
   /**
    * Gets the identities.
    * @return Unmodifiable set.
    */
-  @Nonnull
   public List<Identity> getIdentities() {
     return Collections.unmodifiableList(identities);
   }
@@ -131,13 +121,12 @@ public class DiscoInfo {
    * Gets the features.
    * @return Unmodifiable set.
    */
-  @Nonnull
   public List<String> getFeatures() {
     return Collections.unmodifiableList(features);
   }
 
   @Override
-  public boolean equals(final Object obj) {
+  public boolean equals(@Nullable final Object obj) {
     if (this == obj) {
       return true;
     }

@@ -42,14 +42,15 @@ import java.util.EventObject;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
+import org.checkerframework.checker.lock.qual.GuardedBy;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -95,13 +96,16 @@ import rxbeans.StandardProperty;
  * fails. However, this class aborts the handshake immediately after the
  * authentication fails.</p>
  */
-public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.Object {
+public class HandshakerPipe extends BlankPipe implements rxbeans.Object {
 
   /**
    * Indicates the state of a {@link HandshakerPipe}.
    */
   public enum State {
 
+    /**
+     * Indicates the pipe is newly created.
+     */
     INITIALIZED,
 
     /**
@@ -161,17 +165,15 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
 
     private final StreamFeature feature;
 
-    public FeatureNegotiatedEvent(@Nonnull final HandshakerPipe source,
-                                  @Nonnull final StreamFeature feature) {
+    public FeatureNegotiatedEvent(final HandshakerPipe source,
+                                  final StreamFeature feature) {
       super(source);
-      Objects.requireNonNull(feature);
       this.feature = feature;
     }
 
     /**
      * Gets the {@link StreamFeature} that was negotiated.
      */
-    @Nonnull
     public StreamFeature getFeature() {
       return feature;
     }
@@ -197,7 +199,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
   private final Set<StreamFeature> negotiatedFeatures = new HashSet<>();
   private final Jid loginJid;
   private final Jid authzId;
-  private final CredentialRetriever retriever;
+  private final @Nullable CredentialRetriever retriever;
   private final Base64.Encoder base64Encoder = Base64.getEncoder();
   private final Base64.Decoder base64Decoder = Base64.getDecoder();
   private final String presetResource;
@@ -205,9 +207,9 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
   private final FlowableProcessor<EventObject> eventStream;
   private final CompositeDisposable bin = new CompositeDisposable();
   private final CompletableSubject handshakeResult = CompletableSubject.create();
-  private Pipeline<?, ?> pipeline;
-  private Client saslClient;
-  private StreamFeature negotiatingFeature;
+  private @MonotonicNonNull Pipeline<?, ?> pipeline;
+  private @Nullable Client saslClient;
+  private @Nullable StreamFeature negotiatingFeature;
   private Jid negotiatedJid = Jid.EMPTY;
   private String resourceBindingIqId = "";
 
@@ -243,8 +245,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
     }
   }
 
-  private void consumeStreamOpening(@Nonnull final Document document) {
-    Objects.requireNonNull(document);
+  private void consumeStreamOpening(final Document document) {
     Version serverVersion = null;
     final String serverVersionText = document.getDocumentElement().getAttribute(
         "version"
@@ -282,7 +283,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
    * @return {@link StreamFeature} selected to negotiate.
    */
   @Nullable
-  private Element consumeStreamFeatures(@Nonnull final Document document) {
+  private Element consumeStreamFeatures(final Document document) {
     final List<Node> announcedFeatures = DomUtils.convertToList(
         document.getDocumentElement().getChildNodes()
     );
@@ -327,8 +328,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
     }
   }
 
-  private void initiateSasl(@Nonnull final Element mechanismsElement)
-      throws SAXException {
+  private void initiateSasl(final Element mechanismsElement) throws SAXException {
     final List<String> mechanisms = Observable.fromIterable(DomUtils.convertToList(
         mechanismsElement.getElementsByTagName("mechanism")
     )).map(Node::getTextContent)
@@ -352,7 +352,11 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
     }
     String msg = "";
     if (this.saslClient.isClientFirst()) {
-      msg = base64Encoder.encodeToString(this.saslClient.respond());
+      try {
+        msg = base64Encoder.encodeToString(this.saslClient.respond());
+      } catch (AuthenticationException ex) {
+        throw new RuntimeException(ex);
+      }
       if (msg.isEmpty()) {
         msg = "=";
       }
@@ -366,12 +370,15 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
   }
 
   private void initiateResourceBinding() {
+    if (pipeline == null) {
+      throw new IllegalStateException();
+    }
     this.resourceBindingIqId = UUID.randomUUID().toString();
     final Document iq = Stanza.getIqTemplate(
         Stanza.IqType.SET,
         resourceBindingIqId,
-        null,
-        null
+        Jid.EMPTY,
+        Jid.EMPTY
     );
     final Element bind = (Element) iq.getDocumentElement().appendChild(iq.createElementNS(
         CommonXmlns.RESOURCE_BINDING,
@@ -386,26 +393,27 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
     this.pipeline.write(iq);
   }
 
-  private void consumeStartTls(@Nonnull final Document xml) {
-    switch (xml.getDocumentElement().getLocalName()) {
-      case "proceed":
-        this.negotiatedFeatures.add(StreamFeature.STARTTLS);
-        this.eventStream.onNext(
-            new FeatureNegotiatedEvent(this, StreamFeature.STARTTLS)
-        );
-        this.negotiatingFeature = null;
-        break;
-      case "failure":
-        handshakeResult.onError(new Exception("Server failed to proceed StartTLS."));
-        break;
-      default:
-        sendStreamError(new StreamErrorException(
-            StreamErrorException.Condition.UNSUPPORTED_STANZA_TYPE
-        ));
+  private void consumeStartTls(final Document xml) {
+    String s = xml.getDocumentElement().getLocalName();
+    if ("proceed".equals(s)) {
+      this.negotiatedFeatures.add(StreamFeature.STARTTLS);
+      this.eventStream.onNext(
+          new FeatureNegotiatedEvent(this, StreamFeature.STARTTLS)
+      );
+      this.negotiatingFeature = null;
+    } else if ("failure".equals(s)) {
+      handshakeResult.onError(new Exception("Server failed to proceed StartTLS."));
+    } else {
+      sendStreamError(new StreamErrorException(
+          StreamErrorException.Condition.UNSUPPORTED_STANZA_TYPE
+      ));
     }
   }
 
-  private void consumeSasl(@Nonnull final Document document) throws SAXException {
+  private void consumeSasl(final Document document) throws SAXException {
+    if (saslClient == null) {
+      throw new IllegalStateException();
+    }
     final String msg = document.getDocumentElement().getTextContent();
 
     if (this.saslClient.isCompleted() && StringUtils.isNotBlank(msg)) {
@@ -450,14 +458,14 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
       case "challenge":
         this.saslClient.acceptChallenge(base64Decoder.decode(msg));
         if (!this.saslClient.isCompleted()) {
-          final byte[] response = this.saslClient.respond();
-          if (response != null) {
+          try {
+            final byte[] response = this.saslClient.respond();
             this.pipeline.write(DomUtils.readDocument(String.format(
                 "<response xmlns=\"%1s\">%2s</response>",
                 CommonXmlns.SASL,
                 base64Encoder.encodeToString(response)
             )));
-          } else {
+          } catch (AuthenticationException ex) {
             this.pipeline.write(DomUtils.readDocument(String.format(
                 "<abort xmlns=\"%1s\"/>",
                 CommonXmlns.SASL
@@ -476,13 +484,12 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
     }
   }
 
-  private void consumeStreamCompression(@Nonnull Document document) {
+  private void consumeStreamCompression(Document document) {
     throw new UnsupportedOperationException();
   }
 
-  private void consumeResourceBinding(@Nonnull final Document document)
-      throws SAXException {
-    if (!this.resourceBindingIqId.equals(document.getDocumentElement().getAttribute("id"))) {
+  private void consumeResourceBinding(final Document document) {
+    if (!resourceBindingIqId.equals(document.getDocumentElement().getAttribute("id"))) {
       sendStreamError(new StreamErrorException(
           StreamErrorException.Condition.NOT_AUTHORIZED
       ));
@@ -493,15 +500,30 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
         sendStreamError(ex);
       }
     } else if ("result".equals(document.getDocumentElement().getAttribute("type"))) {
-      final Element bindElement = (Element) document
-          .getDocumentElement()
-          .getElementsByTagNameNS(CommonXmlns.RESOURCE_BINDING, "bind")
-          .item(0);
-      final String[] results = bindElement
-          .getElementsByTagNameNS(CommonXmlns.RESOURCE_BINDING, "jid")
-          .item(0)
-          .getTextContent()
-          .split(" ");
+      final Optional<Element> bindElement = DomUtils
+          .convertToList(document.getDocumentElement().getChildNodes())
+          .stream()
+          .filter(it -> "bind".equals(it.getLocalName()))
+          .filter(it -> CommonXmlns.RESOURCE_BINDING.equals(it.getNamespaceURI()))
+          .map(it -> (Element) it)
+          .findFirst();
+      if (!bindElement.isPresent()) {
+        sendStreamError(new StreamErrorException(
+            StreamErrorException.Condition.INVALID_XML,
+            "Empty result."
+        ));
+        return;
+      }
+      final String[] results = DomUtils
+          .convertToList(bindElement.get().getChildNodes())
+          .stream()
+          .map(it -> (Element) it)
+          .filter(it -> "jid".equals(it.getLocalName()))
+          .filter(it -> CommonXmlns.RESOURCE_BINDING.equals(it.getNamespaceURI()))
+          .map(it -> StringUtils.defaultIfBlank(it.getTextContent(), "").split(" "))
+          .findFirst()
+          .orElse(new String[0]);
+
       switch (results.length) {
         case 1:
           this.negotiatedJid = new Jid(results[0]);
@@ -548,46 +570,46 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
     sendStreamOpening();
   }
 
+
   /**
    * Default constructor.
-   * @param session Associated XMPP session.
-   * @param loginJid Authentication ID, which is typically the local part of a
-   *        {@link Jid} for
-   *        <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a>
-   *        mechanisms which uses a "simple user name".
-   * @param authzId Authorization ID, which is a bare {@link Jid}.
-   * @param retriever Credential retriever.
+   * @param loginJid Required when registering.
+   * @param authzId Authorization ID, optional.
    * @param saslMechanisms <a href="https://datatracker.ietf.org/doc/rfc4422">SASL</a>
-   *        Mechanisms used during handshake. Use {@code null} to specify the
-   *        default ones.
-   * @param resource XMPP Resource. If {@code null} or empty, the server will
-   *                 generate a random one on behalf of the client.
+   *        Mechanisms used during handshake. Use an empty {@link Set} in order to use the default.
+   * @param resource XMPP Resource. If empty, the server will generate a random one.
    * @param registering Indicates if the handshake includes in-band
    *                    registration.
    */
-   public HandshakerPipe(@Nonnull final StandardSession session,
-                         @Nullable final Jid loginJid,
-                         @Nullable final Jid authzId,
-                         @Nullable final CredentialRetriever retriever,
-                         @Nullable final List<String> saslMechanisms,
-                         @Nullable final String resource,
-                         final boolean registering) {
+  public HandshakerPipe(final StandardSession session,
+                        final Jid loginJid,
+                        final Jid authzId,
+                        @Nullable final CredentialRetriever retriever,
+                        final List<String> saslMechanisms,
+                        final String resource,
+                        final boolean registering) {
     if (registering) {
-      Validate.isTrue(!Jid.isEmpty(loginJid), "loginJid");
+      Validate.isTrue(
+          !Jid.isEmpty(loginJid),
+          "\"loginJid\" must be provided when registering."
+      );
     }
     if (!Jid.isEmpty(loginJid)) {
-      Objects.requireNonNull(retriever, "retriever");
+      Objects.requireNonNull(
+          retriever,
+          "A credential retriever must be provided when registering."
+      );
     }
     this.session = session;
-    this.loginJid = Jid.isEmpty(loginJid) ? Jid.EMPTY : loginJid;
-    this.authzId = Jid.isEmpty(authzId) ? Jid.EMPTY : authzId;
+    this.loginJid = loginJid;
+    this.authzId = authzId;
     this.retriever = retriever;
-    if (saslMechanisms == null || saslMechanisms.isEmpty()) {
+    if (saslMechanisms.isEmpty()) {
       this.saslMechanisms.add("SCRAM-SHA-1");
     } else {
       this.saslMechanisms.addAll(saslMechanisms);
     }
-    this.presetResource = resource == null ? "" : resource;
+    presetResource = resource;
 
     final FlowableProcessor<EventObject> unsafeEventStream = PublishProcessor.create();
     this.eventStream = unsafeEventStream.toSerialized();
@@ -608,54 +630,50 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
   /**
    * Closes the XMPP stream.
    */
-  public Completable closeStream() {
-    synchronized (state) {
-      switch (state.get()) {
+  public void closeStream() {
+    state.getAndDo(state -> {
+      switch (state) {
         case INITIALIZED:
-          state.change(State.STREAM_CLOSED);
-          return Completable.complete();
+          this.state.change(State.STREAM_CLOSED);
+          return;
         case STREAM_CLOSING:
           break;
         case STREAM_CLOSED:
-          return Completable.complete();
+          return;
         case DISPOSED:
-          return Completable.complete();
+          return;
         default:
           //TODO: Timeout
           sendStreamClosing();
-          state.change(State.STREAM_CLOSING);
+          this.state.change(State.STREAM_CLOSING);
           break;
       }
-    }
-    return state
-        .getStream()
-        .filter(it -> it == State.STREAM_CLOSED)
-        .first(State.STREAM_CLOSED)
-        .toCompletable();
+    });
   }
 
-  public void sendStreamError(@Nonnull final StreamErrorException error) {
-    try {
-      session.stateProperty().getAndDo(state -> {
-        if (state == Session.State.ONLINE || state == Session.State.HANDSHAKING) {
-          pipeline.write(error.toXml());
-        }
-        closeStream();
-        eventStream.onNext(new ExceptionCaughtEvent(this, error));
-        if (!handshakeResult.hasComplete() && !handshakeResult.hasThrowable()) {
-          handshakeResult.onError(error);
-        }
-      });
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
+  /**
+   * Sends a stream error and closes the connection.
+   */
+  public void sendStreamError(final StreamErrorException error) {
+    if (pipeline == null) {
+      throw new IllegalStateException();
     }
+    session.stateProperty().getAndDo(state -> {
+      if (state == Session.State.ONLINE || state == Session.State.HANDSHAKING) {
+        pipeline.write(error.toXml());
+      }
+      closeStream();
+      eventStream.onNext(new ExceptionCaughtEvent(this, error));
+      if (!handshakeResult.hasComplete() && !handshakeResult.hasThrowable()) {
+        handshakeResult.onError(error);
+      }
+    });
   }
 
   /**
    * Gets the JID negotiated during Resource Binding.
    * @return {@code null} if the negotiation is not completed yet.
    */
-  @Nonnull
   public Jid getNegotiatedJid() {
     return negotiatedJid;
   }
@@ -671,12 +689,10 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
    * Gets the handshake result. Signals {@link CancellationException} if the network connection is
    * lost during the handshake. May signals other {@link Exception}s depending on the situation.
    */
-  @Nonnull
   public Completable getHandshakeResult() {
     return handshakeResult;
   }
 
-  @Nonnull
   public Set<StreamFeature> getStreamFeatures() {
     return Collections.unmodifiableSet(negotiatedFeatures);
   }
@@ -695,7 +711,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
   public void onReading(final Pipeline<?, ?> pipeline,
                         final Object toRead,
                         final List<Object> toForward) throws Exception {
-    state.getAndDoUnsafe(state -> {
+    state.getAndDoUnsafe(Exception.class, state -> {
       if (state == State.DISPOSED) {
         throw new IllegalStateException();
       }
@@ -758,24 +774,19 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
               ));
             }
           } else {
-            switch (negotiatingFeature) {
-              case STARTTLS:
-                this.session.getLogger().fine("Negotiating StartTLS.");
-                initiateStartTls();
-                break;
-              case SASL:
-                this.session.getLogger().fine("Negotiating SASL.");
-                initiateSasl(selectedFeature);
-                break;
-              case RESOURCE_BINDING:
-                this.session.getLogger().fine("Negotiating Resource Binding.");
-                initiateResourceBinding();
-                break;
-              default:
-                sendStreamError(new StreamErrorException(
-                    StreamErrorException.Condition.UNSUPPORTED_FEATURE
-                ));
-                break;
+            if (negotiatingFeature == StreamFeature.STARTTLS) {
+              this.session.getLogger().fine("Negotiating StartTLS.");
+              initiateStartTls();
+            } else if (negotiatingFeature == StreamFeature.SASL) {
+              this.session.getLogger().fine("Negotiating SASL.");
+              initiateSasl(selectedFeature);
+            } else if (negotiatingFeature == StreamFeature.RESOURCE_BINDING) {
+              this.session.getLogger().fine("Negotiating Resource Binding.");
+              initiateResourceBinding();
+            } else {
+              sendStreamError(new StreamErrorException(
+                  StreamErrorException.Condition.UNSUPPORTED_FEATURE
+              ));
             }
           }
         } else {
@@ -833,6 +844,10 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
     if (state.get() != State.INITIALIZED) {
       throw new IllegalStateException();
     }
+    final Connection connection = session.getConnection();
+    if (connection == null) {
+      throw new IllegalStateException();
+    }
 
     /* Resource Binding implicitly means completion of negotiation. See
      * <https://mail.jabber.org/pipermail/jdev/2017-August/090324.html> */
@@ -843,7 +858,7 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
         it -> checkIfAllMandatoryFeaturesNegotiated()
     ).observeOn(Schedulers.io()).subscribe(it -> state.change(State.COMPLETED));
 
-    if (this.session.getConnection().getTlsMethod() == Connection.TlsMethod.STARTTLS) {
+    if (connection.getTlsMethod() == Connection.TlsMethod.STARTTLS) {
       final Disposable subscription = session.getEventStream().ofType(
           StandardSession.TlsDeployedEvent.class
       ).firstElement().observeOn(Schedulers.io()).subscribe(it -> {
@@ -857,16 +872,9 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
     }
     bin.add(
         session
-            .getEventStream()
-            .ofType(StandardSession.ConnectionTerminatedEvent.class)
-            .observeOn(Schedulers.io())
-            .subscribe(it -> state.change(State.STREAM_CLOSED))
-    );
-    bin.add(
-        session
-            .getEventStream()
-            .ofType(StandardSession.ConnectionTerminatedEvent.class)
-            .observeOn(Schedulers.io())
+            .stateProperty()
+            .getStream()
+            .filter(it -> it == Session.State.DISCONNECTED)
             .subscribe(it -> state.change(State.STREAM_CLOSED))
     );
     this.pipeline = pipeline;
@@ -909,11 +917,5 @@ public class HandshakerPipe extends BlankPipe implements SessionAware, rxbeans.O
     } else {
       super.onWriting(pipeline, toWrite, toForward);
     }
-  }
-
-  @Override
-  @Nonnull
-  public StandardSession getSession() {
-    return session;
   }
 }

@@ -16,10 +16,9 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import org.apache.commons.lang3.StringUtils;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
@@ -46,45 +45,36 @@ public class XmlWrapperStanza extends Stanza {
   /**
    * Default constructor.
    */
-  public XmlWrapperStanza(@Nonnull final Document xml) {
+  public XmlWrapperStanza(final Document xml) {
     this.xml = xml;
   }
 
-  @Nonnull
   @Override
   public Document getXml() {
     return xml;
   }
 
   @Override
-  @Nonnull
   public String getId() {
     return xml.getDocumentElement().getAttribute("id");
   }
 
   @Override
-  @Nonnull
   public Jid getRecipient() {
     return new Jid(xml.getDocumentElement().getAttribute("to"));
   }
 
   @Override
-  @Nonnull
   public Jid getSender() {
     return new Jid(xml.getDocumentElement().getAttribute("from"));
   }
 
   @Override
-  @Nonnull
   public Type getType() {
-    final Type type = EnumUtils.fromXmlValue(
+    return EnumUtils.fromXmlValue(
         Type.class,
         xml.getDocumentElement().getLocalName()
     );
-    if (type == null) {
-      throw new IllegalArgumentException();
-    }
-    return type;
   }
 
   @Override
@@ -97,18 +87,12 @@ public class XmlWrapperStanza extends Stanza {
   }
 
   @Override
-  @Nonnull
   public String getIqName() {
     final Element iqElement = (Element) this.xml.getDocumentElement().getFirstChild();
-    if (iqElement == null) {
-      return "";
-    } else {
-      return iqElement.getLocalName();
-    }
+    return iqElement == null ? "" : StringUtils.defaultIfBlank(iqElement.getLocalName(), "");
   }
 
   @Override
-  @Nonnull
   public String getIqNamespace() {
     final Element iqElement = (Element) this.xml
         .getDocumentElement()

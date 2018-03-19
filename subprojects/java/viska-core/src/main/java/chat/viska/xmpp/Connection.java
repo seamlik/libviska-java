@@ -47,10 +47,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xbill.DNS.ExtendedResolver;
@@ -111,6 +110,11 @@ public class Connection {
     DIRECT,
 
     /**
+     * Indicates TLS is not used.
+     */
+    NONE,
+
+    /**
      * Indicates using StartTLS.
      */
     STARTTLS
@@ -137,7 +141,6 @@ public class Connection {
    * @param json Indicates whether to get the JSON version or the XML version.
    * @throws MalformedURLException If {@code domain} is invalid.
    */
-  @Nonnull
   private static URL getHostMetaUrl(final String host, final boolean json)
       throws MalformedURLException {
     final String hostMetaPath = "/.well-known/host-meta" + (json ? ".json" : "");
@@ -149,51 +152,33 @@ public class Connection {
   }
 
   /**
-   * Downloads the {@literal host-meta.json}. Signals
-   * {@link MalformedURLException} if {@code domain} is invalid. Signals
-   * {@link InvalidHostMetaException} if the downloaded XML is invalid.
+   * Downloads the {@literal host-meta.json}.
    */
-  @Nonnull
-  private static Maybe<JsonObject>
-  downloadHostMetaJson(final String domain, @Nullable final Proxy proxy) {
-    return Maybe.fromCallable(() -> {
+  private static Single<JsonObject> downloadHostMetaJson(final String domain,
+                                                         @Nullable final Proxy proxy) {
+    return Single.fromCallable(() -> {
       final URL hostMetaUrl = getHostMetaUrl(domain, true);
-      try {
-          final InputStream stream = proxy == null
-              ? hostMetaUrl.openStream()
-              : hostMetaUrl.openConnection(proxy).getInputStream();
-          final InputStreamReader reader = new InputStreamReader(
-              stream, StandardCharsets.UTF_8
-          );
-          return new JsonParser().parse(reader).getAsJsonObject();
-      } catch (JsonParseException ex) {
-        throw new InvalidHostMetaException(ex);
-      } catch (Exception ex) {
-        return null;
-      }
+      final InputStream stream = proxy == null
+          ? hostMetaUrl.openStream()
+          : hostMetaUrl.openConnection(proxy).getInputStream();
+      final InputStreamReader reader = new InputStreamReader(
+          stream, StandardCharsets.UTF_8
+      );
+      return new JsonParser().parse(reader).getAsJsonObject();
     });
   }
 
   /**
-   * Downloads the {@literal host-meta.xml}. Signals
-   * {@link MalformedURLException} if {@code domain} is invalid. Signals
-   * {@link SAXException} if the downloaded XML is invalid.
+   * Downloads the {@literal host-meta.xml}.
    */
-  @Nonnull
-  private static Maybe<Document>
+  private static Single<Document>
   downloadHostMetaXml(final String domain, @Nullable final Proxy proxy) {
-    return Maybe.fromCallable(() -> {
+    return Single.fromCallable(() -> {
       final URL hostMetaUrl = getHostMetaUrl(domain, false);
-      try {
-        final InputStream stream = proxy == null
-            ? hostMetaUrl.openStream()
-            : hostMetaUrl.openConnection(proxy).getInputStream();
-        return DomUtils.readDocument(stream);
-      } catch (SAXException ex) {
-        throw ex;
-      } catch (Exception ex) {
-        return null;
-      }
+      final InputStream stream = proxy == null
+          ? hostMetaUrl.openStream()
+          : hostMetaUrl.openConnection(proxy).getInputStream();
+      return DomUtils.readDocument(stream);
     });
   }
 
@@ -202,16 +187,14 @@ public class Connection {
    * {@link MalformedURLException} if {@code domain} is invalid. Signals
    * {@link SAXException} if the XML is invalid.
    */
-  @Nonnull
-  public static Maybe<List<Connection>>
-  queryHostMetaXml(final String domain, @Nullable final Proxy proxy) {
+  public static Single<List<Connection>> queryHostMetaXml(final String domain,
+                                                          @Nullable final Proxy proxy) {
     return downloadHostMetaXml(domain, proxy).map(Connection::queryHostMetaXml);
   }
 
   /**
    * Queries {@literal host-meta.xml} for {@link Connection}s.
    */
-  @Nonnull
   public static List<Connection> queryHostMetaXml(final Document hostMeta) {
     return Observable.fromIterable(
         DomUtils.convertToList(hostMeta.getDocumentElement().getElementsByTagName("Link"))
@@ -223,8 +206,7 @@ public class Connection {
     )).toList().blockingGet();
   }
 
-  private static List<Connection>
-  queryHostMetaJson(@Nonnull final JsonObject hostMeta) {
+  private static List<Connection> queryHostMetaJson(final JsonObject hostMeta) {
     return Observable.fromIterable(
         hostMeta.getAsJsonObject().getAsJsonArray("links")
     ).filter(
@@ -242,10 +224,34 @@ public class Connection {
     )).toList().blockingGet();
   }
 
+  /**
+   * Queries {@literal host-meta.json} for {@link Connection}s. Signals {@link DnsQueryException}.
+   */
+  public static List<Connection> queryHostMetaJson(final Reader hostMeta)
+      throws InvalidHostMetaException {
+    try {
+      return queryHostMetaJson(
+          new JsonParser().parse(hostMeta).getAsJsonObject()
+      );
+    } catch (Exception ex) {
+      throw new InvalidHostMetaException(ex);
+    }
+  }
+
+  /**
+   * Queries {@literal host-meta.json} for XMPP connections. Signals
+   * {@link InvalidHostMetaException} if the JSON is invalid. Signals
+   * {@link MalformedURLException} if {@code domain} is invalid. Signals {@link DnsQueryException}.
+   */
+  public static Single<List<Connection>> queryHostMetaJson(final String domain,
+                                                           @Nullable final Proxy proxy) {
+    return downloadHostMetaJson(domain, proxy).map(Connection::queryHostMetaJson);
+  }
+
   private static Single<List<Record>>
-  lookupDnsUsingDnsjava(@Nonnull final String query,
+  lookupDnsUsingDnsjava(final String query,
                         final int type,
-                        @Nullable final List<InetAddress> dns) throws TextParseException {
+                        @Nullable final List<InetAddress> dns) {
     return Single.fromCallable(() -> {
       final List<? extends Resolver> resolvers = dns == null
           ? Collections.emptyList()
@@ -298,81 +304,53 @@ public class Connection {
     }).doFinally(threadPool::shutdownGracefully);
   }
 
-  /**
-   * Queries {@literal host-meta.json} for {@link Connection}s. Signals {@link DnsQueryException}.
-   */
-  @Nonnull
-  public static List<Connection> queryHostMetaJson(final Reader hostMeta)
-      throws InvalidHostMetaException {
-    try {
-      return queryHostMetaJson(
-          new JsonParser().parse(hostMeta).getAsJsonObject()
-      );
-    } catch (Exception ex) {
-      throw new InvalidHostMetaException(ex);
-    }
-  }
 
-  /**
-   * Queries {@literal host-meta.json} for XMPP connections. Signals
-   * {@link InvalidHostMetaException} if the JSON is invalid. Signals
-   * {@link MalformedURLException} if {@code domain} is invalid. Signals {@link DnsQueryException}.
-   */
-  public static Maybe<List<Connection>>
-  queryHostMetaJson(@Nonnull final String domain, @Nullable final Proxy proxy) {
-    return downloadHostMetaJson(domain, proxy).map(Connection::queryHostMetaJson);
-  }
+
+
 
   /**
    * Queries DNS records for {@link Connection}s. Signals {@link Exception} if
    * DNS queries could not be made. Signals {@link DnsQueryException}.
    * @throws IllegalArgumentException If {@code domain} is invalid.
    */
-  @Nonnull
-  public static Single<List<Connection>> queryDns(@Nonnull final String domain,
-                                                  @Nullable final List<InetAddress> dns) {
+  public static Single<List<Connection>> queryDns(final String domain,
+                                                  final List<InetAddress> dns) {
     final Observable<Connection> startTlsResults;
     final Observable<Connection> directTlsResults;
     final Observable<Connection> txtResults;
 
-
-
-    try {
-      startTlsResults = lookupDnsUsingDnsjava(
-          QUERY_DNR_SRV_STARTTLS + domain, Type.SRV, dns
-      ).flattenAsObservable(it -> it).cast(SRVRecord.class).map(it -> new Connection(
-          it.getTarget().toString(true),
-          it.getPort(),
-          TlsMethod.STARTTLS
-      ));
-      directTlsResults = lookupDnsUsingDnsjava(
-          QUERY_DNR_SRV_DIRECTTLS + domain, Type.SRV, dns
-      ).flattenAsObservable(it -> it).cast(SRVRecord.class).map(it -> new Connection(
-          it.getTarget().toString(true),
-          it.getPort(),
-          TlsMethod.DIRECT
-      ));
-      txtResults = lookupDnsUsingDnsjava(
-          QUERY_DNS_TXT + domain, Type.TXT, dns
-      ).flattenAsObservable(
-          it -> it
-      ).cast(
-          TXTRecord.class
-      ).map(
-          TXTRecord::getStrings
-      ).flatMap(
-          Observable::fromArray
-      ).cast(
-          String.class
-      ).filter(
-          it -> it.startsWith(KEY_TXT_WEBSOCKET)
-      ).map(it -> new Connection(
-          Protocol.WEBSOCKET,
-          new URI(it.substring(it.indexOf('=') + 1))
-      ));
-    } catch (TextParseException ex) {
-      throw new IllegalArgumentException(ex);
-    }
+    startTlsResults = lookupDnsUsingDnsjava(
+        QUERY_DNR_SRV_STARTTLS + domain, Type.SRV, dns
+    ).flattenAsObservable(it -> it).cast(SRVRecord.class).map(it -> new Connection(
+        it.getTarget().toString(true),
+        it.getPort(),
+        TlsMethod.STARTTLS
+    ));
+    directTlsResults = lookupDnsUsingDnsjava(
+        QUERY_DNR_SRV_DIRECTTLS + domain, Type.SRV, dns
+    ).flattenAsObservable(it -> it).cast(SRVRecord.class).map(it -> new Connection(
+        it.getTarget().toString(true),
+        it.getPort(),
+        TlsMethod.DIRECT
+    ));
+    txtResults = lookupDnsUsingDnsjava(
+        QUERY_DNS_TXT + domain, Type.TXT, dns
+    ).flattenAsObservable(
+        it -> it
+    ).cast(
+        TXTRecord.class
+    ).map(
+        TXTRecord::getStrings
+    ).flatMap(
+        Observable::fromArray
+    ).cast(
+        String.class
+    ).filter(
+        it -> it.startsWith(KEY_TXT_WEBSOCKET)
+    ).map(it -> new Connection(
+        Protocol.WEBSOCKET,
+        new URI(it.substring(it.indexOf('=') + 1))
+    ));
 
     /*
     startTlsResults = lookupDnsUsingNetty(
@@ -434,12 +412,13 @@ public class Connection {
    * Queries {@link Connection}s from a server using all methods. The token
    * silently ignores all signaled {@link Exception}s. Signals {@link DnsQueryException}.
    */
-  public static Single<List<Connection>>
-  queryAll(final String domain, @Nullable final Proxy proxy, @Nullable List<InetAddress> dns) {
+  public static Single<List<Connection>> queryAll(final String domain,
+                                                  @Nullable final Proxy proxy,
+                                                  List<InetAddress> dns) {
     return Single.zip(
-        queryDns(domain, dns),
-        queryHostMetaXml(domain, proxy).toSingle(Collections.emptyList()),
-        queryHostMetaJson(domain, proxy).toSingle(Collections.emptyList()),
+        queryDns(domain, dns).onErrorReturnItem(Collections.emptyList()),
+        queryHostMetaXml(domain, proxy).onErrorReturnItem(Collections.emptyList()),
+        queryHostMetaJson(domain, proxy).onErrorReturnItem(Collections.emptyList()),
         (list1, list2, list3) -> {
           final List<Connection> result = new ArrayList<>(list1);
           result.addAll(list2);
@@ -454,9 +433,9 @@ public class Connection {
    * @param port Use {@code -1} to indicate no port.
    * @throws IllegalArgumentException If {@link Protocol#TCP} is specified.
    */
-  public Connection(@Nonnull final Protocol protocol,
-                    @Nonnull final String scheme,
-                    @Nonnull final String domain,
+  public Connection(final Protocol protocol,
+                    final String scheme,
+                    final String domain,
                     final int port,
                     @Nullable final String path) {
     Objects.requireNonNull(protocol, "`protocol` is absent.");
@@ -472,7 +451,7 @@ public class Connection {
     this.domain = domain;
     this.port = port;
     this.path = StringUtils.defaultIfBlank(path, "");
-    this.tlsMethod = null;
+    this.tlsMethod = TlsMethod.NONE;
   }
 
   /**
@@ -482,7 +461,7 @@ public class Connection {
    */
   public Connection(final String domain,
                     final int port,
-                    @Nullable final TlsMethod tlsMethod) {
+                    final TlsMethod tlsMethod) {
     this.protocol = Protocol.TCP;
     Validate.notBlank(domain, "`domain` is absent.");
     this.domain = domain;
@@ -510,7 +489,6 @@ public class Connection {
   /**
    * Gets the protocol.
    */
-  @Nonnull
   public Protocol getProtocol() {
     return protocol;
   }
@@ -526,7 +504,6 @@ public class Connection {
   /**
    * Gets the "scheme" part of a URL. Might be {@literal ws} or {@literal wss}.
    */
-  @Nonnull
   public String getScheme() {
     return scheme;
   }
@@ -534,7 +511,6 @@ public class Connection {
   /**
    * Gets the domain name or IP address of the server.
    */
-  @Nonnull
   public String getDomain() {
     return domain;
   }
@@ -542,7 +518,6 @@ public class Connection {
   /**
    * Gets the "path" part of a URI.
    */
-  @Nonnull
   public String getPath() {
     return path;
   }
@@ -568,14 +543,13 @@ public class Connection {
    * Gets how it establishes TLS connections.
    * @return {@code null} if it does not use TLS at all.
    */
-  @Nullable
   public TlsMethod getTlsMethod() {
     if (this.protocol == Protocol.TCP) {
       return this.tlsMethod;
     } else if (this.tlsMethod == TlsMethod.STARTTLS) {
       return this.tlsMethod;
     } else {
-      return isTlsEnabled() ? TlsMethod.DIRECT : null;
+      return isTlsEnabled() ? TlsMethod.DIRECT : TlsMethod.NONE;
     }
   }
 

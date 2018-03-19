@@ -43,18 +43,17 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.reactivex.Completable;
 import io.reactivex.Observable;
+import io.reactivex.annotations.SchedulerSupport;
+import io.reactivex.schedulers.Schedulers;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
-import javax.annotation.CheckReturnValue;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
 import javax.xml.transform.TransformerException;
 import org.apache.commons.lang3.StringUtils;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
@@ -64,14 +63,14 @@ import org.xml.sax.SAXException;
  * <p>This class does not support any compression.</p>
  */
 @ThreadSafe
+@StandardSession.ProtocolSupport(Connection.Protocol.TCP)
 public class NettyTcpSession extends StandardSession {
 
   private class StreamClosingDetector extends ByteToMessageDecoder {
 
     @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out)
-        throws Exception {
-      if (in.equals(NettyTcpSession.this.serverStreamClosing)) {
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
+      if (in.equals(serverStreamClosing)) {
         try {
           in.clear();
           feedXmlPipeline(DomUtils.readDocument(String.format(
@@ -94,7 +93,7 @@ public class NettyTcpSession extends StandardSession {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, XmlElementStart msg)
         throws Exception {
-      NettyTcpSession.this.nettyChannel.pipeline().replace(
+      nettyChannel.pipeline().replace(
           PIPE_DECODER_XML,
           PIPE_DECODER_XML,
           new ChannelDuplexHandler()
@@ -146,13 +145,16 @@ public class NettyTcpSession extends StandardSession {
       .protocols("TLSv1.2");
 
   private final EventLoopGroup nettyEventLoopGroup = new NioEventLoopGroup();
-  private SocketChannel nettyChannel;
-  private SslHandler tlsHandler;
-  private ByteBuf serverStreamClosing;
+  private @MonotonicNonNull SocketChannel nettyChannel;
+  private @MonotonicNonNull SslHandler tlsHandler;
+  private @MonotonicNonNull ByteBuf serverStreamClosing;
   private String serverStreamPrefix = "";
 
   public NettyTcpSession() {
-    getXmlPipelineOutboundStream().subscribe(it ->  {
+    getXmlPipelineOutboundStream().observeOn(Schedulers.io()).subscribe(it ->  {
+      if (nettyChannel == null) {
+        return;
+      }
       final String data = preprocessOutboundXml(it);
       nettyChannel.writeAndFlush(data);
       final String rootName = it.getDocumentElement().getLocalName();
@@ -167,8 +169,7 @@ public class NettyTcpSession extends StandardSession {
     });
   }
 
-  private Document preprocessInboundXml(@Nonnull final String xml)
-      throws SAXException {
+  private Document preprocessInboundXml(final String xml) throws SAXException {
     final StringBuilder builder = new StringBuilder(xml);
     final String openingPrefixBlock = '<' + serverStreamPrefix + ':';
     final String closingPrefixBlock = "</" + serverStreamPrefix + ':';
@@ -206,8 +207,7 @@ public class NettyTcpSession extends StandardSession {
     return DomUtils.readDocument(builder.toString());
   }
 
-  private String preprocessOutboundXml(@Nonnull final Document xml)
-      throws TransformerException {
+  private String preprocessOutboundXml(final Document xml) throws TransformerException {
     final String streamHeaderXmlnsBlock = String.format(
         "xmlns=\"%1s\"",
         CommonXmlns.STREAM_HEADER
@@ -240,8 +240,7 @@ public class NettyTcpSession extends StandardSession {
     }
   }
 
-  @Nonnull
-  private String convertToTcpStreamOpening(@Nonnull final Document xml) {
+  private String convertToTcpStreamOpening(final Document xml) {
     final StringBuilder result = new StringBuilder();
     result.append("<stream:stream xmlns=\"")
         .append(CommonXmlns.STANZA_CLIENT)
@@ -273,12 +272,15 @@ public class NettyTcpSession extends StandardSession {
     return result.toString();
   }
 
-  @CheckReturnValue
-  @Nonnull
+  @SchedulerSupport(SchedulerSupport.CUSTOM)
   @Override
-  protected Completable
-  openConnection(@Nullable final Compression connectionCompression,
-                 @Nullable final Compression tlsCompression) {
+  protected Completable openConnection(final Compression connectionCompression,
+                                       final Compression tlsCompression) {
+    final Connection connection = getConnection();
+    if (connection == null) {
+      throw new IllegalStateException();
+    }
+
     final Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(nettyEventLoopGroup);
     bootstrap.channel(NioSocketChannel.class);
@@ -286,7 +288,7 @@ public class NettyTcpSession extends StandardSession {
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel channel) throws Exception {
-        if (getConnection().getTlsMethod() == Connection.TlsMethod.DIRECT) {
+        if (connection.getTlsMethod() == Connection.TlsMethod.DIRECT) {
           tlsHandler = TLS_CONTEXT_BUILDER.build().newHandler(channel.alloc());
           channel.pipeline().addLast(PIPE_TLS, tlsHandler);
         } else {
@@ -348,14 +350,12 @@ public class NettyTcpSession extends StandardSession {
     });
 
     final ChannelFuture channelFuture = bootstrap.connect(
-        getConnection().getDomain(),
-        getConnection().getPort()
+        connection.getDomain(),
+        connection.getPort()
     );
     return Completable.fromFuture(channelFuture).andThen(Completable.fromAction(() -> {
       this.nettyChannel = (SocketChannel) channelFuture.channel();
-      this.nettyChannel.closeFuture().addListener(it -> {
-        triggerEvent(new ConnectionTerminatedEvent());
-      });
+      nettyChannel.closeFuture().addListener(it -> changeStateToDisconnected());
     }));
   }
 
@@ -367,22 +367,24 @@ public class NettyTcpSession extends StandardSession {
   }
 
   @Override
-  protected void deployStreamCompression(@Nonnull final Compression compression) {
+  protected void deployStreamCompression(final Compression compression) {
     throw new UnsupportedOperationException(
         "This class does not support stream compression."
     );
   }
 
-  @Nonnull
   @Override
   protected Completable deployTls() {
+    if (nettyChannel == null) {
+      throw new IllegalStateException();
+    }
     try {
-      this.tlsHandler = TLS_CONTEXT_BUILDER.build().newHandler(nettyChannel.alloc());
+      tlsHandler = TLS_CONTEXT_BUILDER.build().newHandler(nettyChannel.alloc());
+      nettyChannel.pipeline().replace(PIPE_TLS, PIPE_TLS, this.tlsHandler);
+      return Completable.fromFuture(tlsHandler.handshakeFuture());
     } catch (SSLException ex) {
       return Completable.error(ex);
     }
-    nettyChannel.pipeline().replace(PIPE_TLS, PIPE_TLS, this.tlsHandler);
-    return Completable.fromFuture(this.tlsHandler.handshakeFuture());
   }
 
   @Override
@@ -390,51 +392,24 @@ public class NettyTcpSession extends StandardSession {
     nettyEventLoopGroup.shutdownGracefully();
   }
 
-  @Nullable
   @Override
   public Compression getConnectionCompression() {
-    return null;
+    return Compression.NONE;
   }
 
-  @Nonnull
-  @Override
-  public Set<Compression> getSupportedConnectionCompression() {
-    return Collections.emptySet();
-  }
-
-  @Nullable
   @Override
   public Compression getTlsCompression() {
-    return null;
+    return Compression.NONE;
   }
 
-  @Nonnull
-  @Override
-  public Set<Compression> getSupportedTlsCompression() {
-    return Collections.emptySet();
-  }
-
-  @Nullable
   @Override
   public Compression getStreamCompression() {
-    return null;
-  }
-
-  @Nonnull
-  @Override
-  public Set<Compression> getSupportedStreamCompression() {
-    return Collections.emptySet();
+    return Compression.NONE;
   }
 
   @Nullable
   @Override
   public SSLSession getTlsSession() {
     return tlsHandler == null ? null : tlsHandler.engine().getSession();
-  }
-
-  @Nonnull
-  @Override
-  public Set<Connection.Protocol> getSupportedProtocols() {
-    return Collections.singleton(Connection.Protocol.TCP);
   }
 }

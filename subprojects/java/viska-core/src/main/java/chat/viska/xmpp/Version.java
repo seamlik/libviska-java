@@ -16,9 +16,9 @@
 
 package chat.viska.xmpp;
 
-import javax.annotation.Nonnull;
 import java.util.Objects;
 import org.apache.commons.lang3.Validate;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Version of the XMPP standard.
@@ -28,6 +28,11 @@ public class Version implements Comparable<Version> {
   private int major;
   private int minor;
 
+  /**
+   * Constructs with parts specified.
+   * @param major
+   * @param minor
+   */
   public Version(int major, int minor) {
     Validate.isTrue(major >= 0);
     Validate.isTrue(minor >= 0);
@@ -35,6 +40,9 @@ public class Version implements Comparable<Version> {
     this.minor = minor;
   }
 
+  /**
+   * Constructs with a literal.
+   */
   public Version(String version) {
     String[] parts = version.split("\\.");
     major = Integer.parseInt(parts[0]);
@@ -43,10 +51,16 @@ public class Version implements Comparable<Version> {
     Validate.isTrue(minor >= 0);
   }
 
+  /**
+   * Gets the major version.
+   */
   public int getMajor() {
     return major;
   }
 
+  /**
+   * Gets the minor version.
+   */
   public int getMinor() {
     return minor;
   }
@@ -61,7 +75,7 @@ public class Version implements Comparable<Version> {
   }
 
   @Override
-  public boolean equals(final Object obj) {
+  public boolean equals(@Nullable final Object obj) {
     if (this == obj) {
       return true;
     }
@@ -78,7 +92,6 @@ public class Version implements Comparable<Version> {
   }
 
   @Override
-  @Nonnull
   public String toString() {
     return major + "." + minor;
   }

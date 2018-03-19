@@ -19,30 +19,33 @@ package chat.viska.xmpp;
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.ExceptionCaughtEvent;
 import chat.viska.commons.pipelines.BlankPipe;
-import chat.viska.commons.pipelines.Pipe;
 import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.sasl.CredentialRetriever;
 import io.reactivex.Completable;
 import io.reactivex.Flowable;
-import io.reactivex.functions.Action;
+import io.reactivex.schedulers.Schedulers;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.security.NoSuchProviderException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.EventObject;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.logging.Level;
+import java.util.stream.Stream;
 import javax.annotation.CheckReturnValue;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import javax.annotation.WillCloseWhenClosed;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import javax.xml.transform.TransformerException;
-import org.apache.commons.lang3.Validate;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 
 /**
@@ -74,16 +77,47 @@ import org.w3c.dom.Document;
 public abstract class StandardSession extends Session {
 
   /**
-   * Indicates the network connection is terminated.
+   * Indicates what {@link Compression} does a {@link StandardSession} implementation
+   * support for network connections, ranked in priority.
    */
-  public class ConnectionTerminatedEvent extends EventObject {
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.TYPE)
+  @interface ConnectionCompressionSupport {
+    Compression[] value();
+  }
 
-    /**
-     * Default constructor.
-     */
-    public ConnectionTerminatedEvent() {
-      super(StandardSession.this);
-    }
+  /**
+   * Indicates what {@link Compression} does a {@link StandardSession} implementation
+   * support for TLS connections, ranked in priority.
+   */
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.TYPE)
+  @interface TlsCompressionSupport {
+    Compression[] value();
+  }
+
+  /**
+   * Indicates what {@link Compression} does a {@link StandardSession} implementation support for
+   * <a href="https://xmpp.org/extensions/xep-0138.html">Stream Compression</a>, ranked in priority.
+   */
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.TYPE)
+  @interface StreamCompressionSupport {
+    Compression[] value();
+  }
+
+  /**
+   * Indicates what {@link Connection.Protocol}s does a {@link StandardSession} implementation
+   * support.
+   */
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.TYPE)
+  @interface ProtocolSupport {
+    Connection.Protocol[] value();
   }
 
   /**
@@ -92,7 +126,7 @@ public abstract class StandardSession extends Session {
    */
   public class TlsDeployedEvent extends EventObject {
 
-    private final Throwable error;
+    private final @Nullable Throwable error;
 
     /**
      * Default constructor.
@@ -113,7 +147,6 @@ public abstract class StandardSession extends Session {
   }
 
   private static final String PIPE_HANDSHAKER = "handshaker";
-  private static final String PIPE_VALIDATOR = "validator";
   private static final String PIPE_UNSUPPORTED_STANZAS_BLOCKER = "unsupported-stanzas-blocker";
 
   private final List<String> saslMechanisms = new ArrayList<>();
@@ -121,17 +154,16 @@ public abstract class StandardSession extends Session {
   private final Flowable<Stanza> inboundStanzaStream = xmlPipeline.getInboundStream().map(
       XmlWrapperStanza::new
   );
-  private Connection connection;
+  private @MonotonicNonNull Connection connection;
+  private @MonotonicNonNull HandshakerPipe handshakerPipe;
 
   /**
    * Gets an instance of {@link Session} which supports all {@link Connection.Protocol}s specified.
    */
-  @Nonnull
-  public static StandardSession
-  getInstance(@Nullable final Collection<Connection.Protocol> protocols)
+  public static StandardSession newInstance(final Collection<Connection.Protocol> protocols)
       throws NoSuchProviderException {
     for (StandardSession it : ServiceLoader.load(StandardSession.class)) {
-      if (protocols == null) {
+      if (protocols.isEmpty()) {
         return it;
       } else if (it.getSupportedProtocols().containsAll(protocols)) {
         return it;
@@ -140,9 +172,11 @@ public abstract class StandardSession extends Session {
     throw new NoSuchProviderException();
   }
 
-  public static void verifyCertificate(@Nonnull final Jid jid,
-                                       @Nullable final SSLSession tlsSession)
-      throws SSLPeerUnverifiedException{
+  /**
+   * Verifies the domain name of the certificate of a TLS session.
+   */
+  public static void verifyCertificate(final Jid jid, @Nullable final SSLSession tlsSession)
+      throws SSLPeerUnverifiedException {
     if (tlsSession == null) {
       return;
     } else {
@@ -151,16 +185,20 @@ public abstract class StandardSession extends Session {
   }
 
   protected StandardSession() {
-    getEventStream().ofType(ConnectionTerminatedEvent.class).subscribe(event -> {
-      changeState(State.DISCONNECTED);
-      this.xmlPipeline.stopNow();
+    stateProperty().getStream().filter(it -> it == State.DISCONNECTED).subscribe(
+        it -> xmlPipeline.stopNow()
+    );
+    stateProperty().getStream().filter(it -> it == State.DISCONNECTING).subscribe(it -> {
+      if (handshakerPipe == null) {
+        killConnection();
+      } else {
+        handshakerPipe.closeStream();
+      }
     });
 
-
     // XML Pipeline
-    stateProperty().getStream().filter(it -> it == State.CONNECTED).subscribe(it -> xmlPipeline.start());
-    stateProperty().getStream().filter(it -> it == State.DISPOSED).subscribe(
-        it -> this.xmlPipeline.dispose()
+    stateProperty().getStream().filter(it -> it == State.CONNECTED).subscribe(
+        it -> xmlPipeline.start()
     );
     this.xmlPipeline.getInboundExceptionStream().subscribe(
         cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
@@ -168,9 +206,10 @@ public abstract class StandardSession extends Session {
     this.xmlPipeline.getOutboundExceptionStream().subscribe(
         cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
     );
-    this.xmlPipeline.getOutboundStream().filter(
-        it -> getLogger().getLevel().intValue() <= Level.FINE.intValue()
-    ).subscribe(
+    xmlPipeline.getOutboundStream().filter(it -> {
+      final Level level = getLogger().getLevel();
+      return level != null && level.intValue() <= Level.FINE.intValue();
+    }).subscribe(
         it -> getLogger().fine("[XML sent] " + DomUtils.writeString(it)),
         ex -> triggerEvent(new ExceptionCaughtEvent(this, ex))
     );
@@ -178,7 +217,7 @@ public abstract class StandardSession extends Session {
         PIPE_UNSUPPORTED_STANZAS_BLOCKER,
         new UnsupportedStanzasBlockerPipe()
     );
-    this.xmlPipeline.addAtInboundEnd(PIPE_HANDSHAKER, BlankPipe.getInstance());
+    xmlPipeline.addAtInboundEnd(PIPE_HANDSHAKER, BlankPipe.INSTANCE);
   }
 
   /**
@@ -208,11 +247,8 @@ public abstract class StandardSession extends Session {
    *   </li>
    * </ul>
    */
-  @Nonnull
-  @CheckReturnValue
-  protected abstract Completable
-  openConnection(@Nullable Compression connectionCompression,
-                 @Nullable Compression tlsCompression);
+  protected abstract Completable openConnection(Compression connectionCompression,
+                                                Compression tlsCompression);
 
   /**
    * Kills the network connection.
@@ -224,7 +260,6 @@ public abstract class StandardSession extends Session {
    * and the client is supposed to start a TLS handshake.
    * @return Token that notifies when the TLS handshake completes.
    */
-  @Nonnull
   @CheckReturnValue
   protected abstract Completable deployTls();
 
@@ -233,18 +268,11 @@ public abstract class StandardSession extends Session {
    * Always invoked right after a stream negotiation and before a stream
    * restart.
    */
-  protected abstract void deployStreamCompression(@Nonnull Compression compression);
-
-  /**
-   * Invoked when this class is being disposed of. This method should clean up
-   * system resources and return immediately.
-   */
-  protected abstract void onDisposing();
+  protected abstract void deployStreamCompression(Compression compression);
 
   /**
    * Gets the outbound stream of the XML {@link Pipeline}.
    */
-  @Nonnull
   protected Flowable<Document> getXmlPipelineOutboundStream() {
     return xmlPipeline.getOutboundStream();
   }
@@ -252,8 +280,9 @@ public abstract class StandardSession extends Session {
   /**
    * Feeds an XML into the XML {@link Pipeline}.
    */
-  protected void feedXmlPipeline(@Nonnull final Document xml) {
-    if (getLogger().getLevel().intValue() <= Level.FINE.intValue()) {
+  protected void feedXmlPipeline(final Document xml) {
+    final Level level = getLogger().getLevel();
+    if (level != null && level.intValue() <= Level.FINE.intValue()) {
       try {
         getLogger().fine("[XML received] " + DomUtils.writeString(xml));
       } catch (TransformerException ex) {
@@ -264,34 +293,61 @@ public abstract class StandardSession extends Session {
   }
 
   @Override
-  protected void sendError(@Nonnull final StreamErrorException error) {
+  protected void sendError(final StreamErrorException error) {
+    if (handshakerPipe == null) {
+      throw new IllegalStateException();
+    }
     triggerEvent(new ExceptionCaughtEvent(this, error));
-    final HandshakerPipe handshakerPipe = (HandshakerPipe)
-        this.xmlPipeline.get(PIPE_HANDSHAKER);
     handshakerPipe.sendStreamError(error);
   }
 
   @Override
-  protected void sendStanza(@Nonnull Stanza stanza) {
+  protected void sendStanza(Stanza stanza) {
     this.xmlPipeline.write(stanza.getXml());
   }
 
   /**
-   * Gets all supported {@link chat.viska.xmpp.Connection.Protocol}s.
+   * Gets all supported {@link Connection.Protocol}s.
    */
-  @Nonnull
-  public abstract Set<Connection.Protocol> getSupportedProtocols();
+  public Set<Connection.Protocol> getSupportedProtocols() {
+    final Set<Connection.Protocol> protocols = new HashSet<>();
+    Class<?> clazz = getClass();
+    while (clazz != null) {
+      final @Nullable ProtocolSupport annotation = clazz.getAnnotation(ProtocolSupport.class);
+      if (annotation != null) {
+        protocols.addAll(Arrays.asList(annotation.value()));
+      }
+      clazz = clazz.getSuperclass();
+    }
+    return protocols;
+  }
 
   /**
    * Gets the connection level {@link Compression}.
-   * @return {@code null} is no {@link Compression} is used, always {@code null}
-   *         if it is not implemented.
    */
-  @Nullable
   public abstract Compression getConnectionCompression();
 
-  @Nonnull
-  public abstract Set<Compression> getSupportedConnectionCompression();
+  /**
+   * Gets a {@link List} of supported {@link Compression} for network connection, ranked in
+   * priority.
+   */
+  public List<Compression> getSupportedConnectionCompression() {
+    final List<Compression> compressions = new ArrayList<>();
+    Class<?> clazz = getClass();
+    while (clazz != null) {
+      final @Nullable ConnectionCompressionSupport annotation = clazz.getAnnotation(
+          ConnectionCompressionSupport.class
+      );
+      if (annotation != null) {
+        Stream
+            .of(annotation.value())
+            .filter(it -> !compressions.contains(it))
+            .forEach(compressions::add);
+      }
+      clazz = clazz.getSuperclass();
+    }
+    return compressions;
+  }
 
   /**
    * Gets the
@@ -300,22 +356,58 @@ public abstract class StandardSession extends Session {
    * @return {@code null} if no {@link Compression} is used, always {@code null}
    *         if it is not implemented.
    */
-  @Nullable
   public abstract Compression getTlsCompression();
 
-  @Nonnull
-  public abstract Set<Compression> getSupportedTlsCompression();
+  /**
+   * Gets a {@link List} of supported {@link Compression} for TLS connections, ranked in
+   * priority.
+   */
+  public List<Compression> getSupportedTlsCompression() {
+    final List<Compression> compressions = new ArrayList<>();
+    Class<?> clazz = getClass();
+    while (clazz != null) {
+      final @Nullable TlsCompressionSupport annotation = clazz.getAnnotation(
+          TlsCompressionSupport.class
+      );
+      if (annotation != null) {
+        Stream
+            .of(annotation.value())
+            .filter(it -> !compressions.contains(it))
+            .forEach(compressions::add);
+      }
+      clazz = clazz.getSuperclass();
+    }
+    return compressions;
+  }
 
   /**
    * Gets the stream level {@link Compression} which is defined in
    * <a href="https://xmpp.org/extensions/xep-0138.html">XEP-0138: Stream
    * Compression</a>.
    */
-  @Nullable
   public abstract Compression getStreamCompression();
 
-  @Nonnull
-  public abstract Set<Compression> getSupportedStreamCompression();
+  /**
+   * Gets a {@link List} of supported {@link Compression} for
+   * <a href="https://xmpp.org/extensions/xep-0138.html">Stream Compression</a>, ranked in priority.
+   */
+  public List<Compression> getSupportedStreamCompression() {
+    final List<Compression> compressions = new ArrayList<>();
+    Class<?> clazz = getClass();
+    while (clazz != null) {
+      final @Nullable StreamCompressionSupport annotation = clazz.getAnnotation(
+          StreamCompressionSupport.class
+      );
+      if (annotation != null) {
+        Stream
+            .of(annotation.value())
+            .filter(it -> !compressions.contains(it))
+            .forEach(compressions::add);
+      }
+      clazz = clazz.getSuperclass();
+    }
+    return compressions;
+  }
 
   /**
    * Gets the
@@ -326,16 +418,34 @@ public abstract class StandardSession extends Session {
   @Nullable
   public abstract SSLSession getTlsSession();
 
-
   /**
-   * Starts logging in.
-   * @return Token to track the completion.
-   * @throws IllegalStateException If this {@link Session} is not disconnected.
+   * Starts logging in. In order to perform anonymous login, use an empty password and loginJid.
    */
-  @CheckReturnValue
-  @Nonnull
-  public Completable login(@Nonnull final String password) {
-    Validate.notBlank(password, "password");
+  public void login(final String password) {
+    if (connection == null) {
+      throw new IllegalStateException("No connection method specified.");
+    }
+
+    final List<Compression> connectionCompressions = getSupportedConnectionCompression();
+    final List<Compression> streamCompressions = getSupportedStreamCompression();
+
+    final Compression defaultConnectionCompression = connectionCompressions.isEmpty()
+        ? Compression.NONE
+        : connectionCompressions.get(0);
+    final Compression defaultStreamCompression = streamCompressions.isEmpty()
+        ? Compression.NONE
+        : streamCompressions.get(0);
+
+    final Compression connectionCompression = connection.getProtocol() == Connection.Protocol.TCP
+        ? Compression.NONE
+        : defaultConnectionCompression;
+    final Compression streamCompression = connection.getProtocol() == Connection.Protocol.TCP
+        ? defaultStreamCompression
+        : Compression.NONE;
+
+    if (!getLoginJid().isEmpty() && password.isEmpty()) {
+      throw new IllegalArgumentException("Empty password.");
+    }
     final CredentialRetriever retriever = (authnId, mechanism, key) -> {
       if (getLoginJid().getLocalPart().equals(authnId) && "password".equals(key)) {
         return password;
@@ -343,135 +453,77 @@ public abstract class StandardSession extends Session {
         return null;
       }
     };
-    return login(
-        retriever,
-        null,
+    login(
+        getLoginJid().isEmpty() ? null : retriever,
+        "",
         false,
-        this.connection.getProtocol() == Connection.Protocol.TCP ? null : Compression.AUTO,
-        null,
-        this.connection.getProtocol() == Connection.Protocol.TCP ? Compression.AUTO : null
-    );
-  }
-
-  /**
-   * Starts logging in anonymously.
-   * @throws IllegalStateException If this {@link Session} is not disconnected.
-   */
-  @Nonnull
-  @CheckReturnValue
-  public Completable login() {
-    return login(
-        null,
-        null,
-        false,
-        this.connection.getProtocol() == Connection.Protocol.TCP ? null : Compression.AUTO,
-        null,
-        this.connection.getProtocol() == Connection.Protocol.TCP ? Compression.AUTO : null
+        connectionCompression,
+        Compression.NONE,
+        streamCompression
     );
   }
 
   /**
    * Starts logging in.
-   * @return Token to track the completion.
    */
-  @Nonnull
-  public Completable login(@Nullable final CredentialRetriever retriever,
-                           @Nullable final String resource,
-                           final boolean registering,
-                           @Nullable Compression connectionCompression,
-                           @Nullable Compression tlsCompression,
-                           @Nullable Compression streamCompression) {
-    if (!getLoginJid().isEmpty()) {
-      Objects.requireNonNull(retriever, "retriever");
+  public void login(@Nullable final CredentialRetriever retriever,
+                    final String resource,
+                    final boolean registering,
+                    Compression connectionCompression,
+                    Compression tlsCompression,
+                    Compression streamCompression) {
+    if (connection == null) {
+      throw new IllegalStateException();
     }
-    if (registering) {
-      Objects.requireNonNull(getLoginJid(), "loginJid");
-      Objects.requireNonNull(retriever, "retriever");
-    }
-    Objects.requireNonNull(this.connection, "connection");
 
-    final Action preAction = () -> {
-      stateProperty().getAndDo(state -> {
-        if (state == State.DISCONNECTED) {
-          changeState(State.CONNECTING);
-        } else {
-          throw new IllegalStateException();
-        }
-      });
-    };
+    stateProperty().getAndDo(state -> {
+      changeStateToConnecting();
 
-    final HandshakerPipe handshakerPipe = new HandshakerPipe(
-        this,
-        getLoginJid(),
-        getAutorizationId(),
-        retriever,
-        this.saslMechanisms,
-        resource,
-        registering
-    );
-    handshakerPipe.stateProperty().getStream().subscribe(it -> getLogger().fine(
-        "HandshakerPipe is now " + it.name()
-    ));
+      final HandshakerPipe handshakerPipe = new HandshakerPipe(
+          this,
+          getLoginJid(),
+          getAutorizationId(),
+          retriever,
+          this.saslMechanisms,
+          resource,
+          registering
+      );
+      this.handshakerPipe = handshakerPipe;
+      handshakerPipe.stateProperty().getStream().subscribe(it -> getLogger().fine(
+          "HandshakerPipe is now " + it.name()
+      ));
+      handshakerPipe
+          .stateProperty()
+          .getStream()
+          .filter(it -> it == HandshakerPipe.State.STREAM_CLOSED)
+          .observeOn(Schedulers.io())
+          .subscribe(it -> killConnection());
+      handshakerPipe.getEventStream()
+          .ofType(HandshakerPipe.FeatureNegotiatedEvent.class)
+          .filter(it -> it.getFeature() == StreamFeature.STARTTLS)
+          .subscribe(it -> deployTls().subscribe(
+              () -> {
+                triggerEvent(new TlsDeployedEvent(null));
+                verifyCertificate(getLoginJid(), getTlsSession());
+              },
+              ex -> triggerEvent(new TlsDeployedEvent(ex))
+          ));
+      xmlPipeline.replace("handshaker", handshakerPipe).blockingGet();
 
-    handshakerPipe.getEventStream()
-        .ofType(HandshakerPipe.FeatureNegotiatedEvent.class)
-        .filter(it -> it.getFeature() == StreamFeature.STARTTLS)
-        .subscribe(it -> deployTls().subscribe(
-            () -> {
-              triggerEvent(new TlsDeployedEvent(null));
-              verifyCertificate(getLoginJid(), getTlsSession());
-            },
-            ex -> triggerEvent(new TlsDeployedEvent(ex))
-        ));
-    this.xmlPipeline.replace("handshaker", handshakerPipe);
-
-    final Completable result = Completable.fromAction(preAction).andThen(
-        openConnection(connectionCompression, tlsCompression)
-    ).doOnComplete(() -> {
-      stateProperty().getAndDoUnsafe(state -> {
-        changeState(State.CONNECTED);
-        if (getConnection().getTlsMethod() == Connection.TlsMethod.DIRECT) {
-          verifyCertificate(getLoginJid(), getTlsSession());
-        }
-        changeState(State.HANDSHAKING);
-      });
-    }).andThen(handshakerPipe.getHandshakeResult()).doOnComplete(() -> {
-      changeState(State.ONLINE);
+      openConnection(connectionCompression, tlsCompression).doOnComplete(() -> {
+        stateProperty().getAndDoUnsafe(SSLPeerUnverifiedException.class, (it) -> {
+          changeStateToConnected();
+          if (connection.getTlsMethod() == Connection.TlsMethod.DIRECT) {
+            verifyCertificate(getLoginJid(), getTlsSession());
+          }
+          changeStateToHandshaking();
+        });
+      }).andThen(handshakerPipe.getHandshakeResult()).doOnComplete(
+          // Once CONNECTED, the pipeline starts rolling, and HandshakerPipe starts working, all
+          // automatically.
+          this::changeStateToOnline
+      ).doOnError(it -> killConnection()).subscribeOn(Schedulers.io()).subscribe();
     });
-    final Action cancelling = this::killConnection;
-    return result.doOnError(it -> cancelling.run()).doOnDispose(cancelling);
-  }
-
-  /**
-   * Starts closing the XMPP stream and the network connection.
-   */
-  @Nonnull
-  @CheckReturnValue
-  public Completable disconnect() {
-    switch (stateProperty().get()) {
-      case DISCONNECTING:
-        return stateProperty()
-            .getStream()
-            .filter(it -> it == State.DISCONNECTED)
-            .firstOrError()
-            .toCompletable();
-      case DISCONNECTED:
-        return Completable.complete();
-      case DISPOSED:
-        return Completable.complete();
-      default:
-        break;
-    }
-    final Pipe handshakerPipe = this.xmlPipeline.get("handshaker");
-    final Completable action = Completable.fromAction(() -> changeState(State.DISCONNECTING));
-    final Completable finalAct = Completable.fromAction(this::killConnection);
-    if (handshakerPipe instanceof HandshakerPipe) {
-      return action.andThen(
-          ((HandshakerPipe) handshakerPipe).closeStream()
-      ).andThen(finalAct);
-    } else {
-      return action.andThen(finalAct);
-    }
   }
 
   /**
@@ -487,69 +539,36 @@ public abstract class StandardSession extends Session {
    * @throws IllegalStateException If it is not disconnected.
    * @throws IllegalArgumentException If the {@link Connection.Protocol} is unsupported.
    */
-  public void setConnection(@Nonnull final Connection connection) {
-    if (!getSupportedProtocols().contains(connection.getProtocol())) {
-      throw new IllegalArgumentException();
-    }
-    if (stateProperty().get() == State.DISCONNECTED) {
+  public void setConnection(final Connection connection) {
+    stateProperty().getAndDo(state -> {
+      if (state != State.DISCONNECTED) {
+        throw new IllegalStateException();
+      }
+      if (!getSupportedProtocols().contains(connection.getProtocol())) {
+        throw new IllegalArgumentException();
+      }
       this.connection = connection;
-    } else {
-      throw new IllegalStateException();
-    }
+    });
   }
 
-  @Nonnull
-  @CheckReturnValue
-  @WillCloseWhenClosed
-  @Override
-  public Completable dispose() {
-    final Action action = () -> {
-      onDisposing();
-      xmlPipeline.dispose();
-      changeState(State.DISPOSED);
-    };
-    switch (stateProperty().get()) {
-      case DISPOSED:
-        return Completable.complete();
-      case DISCONNECTING:
-        return stateProperty()
-            .getStream()
-            .filter(it -> it == State.DISCONNECTED)
-            .firstOrError()
-            .toCompletable()
-            .andThen(Completable.fromAction(action));
-      case DISCONNECTED:
-        return Completable.fromAction(action);
-      case ONLINE:
-        return disconnect().andThen(Completable.fromAction(action));
-      default:
-        return Completable.fromAction(this::killConnection).andThen(Completable.fromAction(action));
-    }
-  }
-
-  @Nonnull
   @Override
   public Set<StreamFeature> getStreamFeatures() {
-    final Pipe handshaker = this.xmlPipeline.get(PIPE_HANDSHAKER);
-    if (handshaker instanceof HandshakerPipe) {
-      return ((HandshakerPipe) handshaker).getStreamFeatures();
+    if (handshakerPipe == null) {
+      throw new IllegalStateException();
     } else {
-      return Collections.emptySet();
+      return handshakerPipe.getStreamFeatures();
     }
   }
 
-  @Nonnull
   @Override
   public Jid getNegotiatedJid() {
-    final Pipe handshaker = this.xmlPipeline.get(PIPE_HANDSHAKER);
-    if (handshaker instanceof HandshakerPipe) {
-      return ((HandshakerPipe) handshaker).getNegotiatedJid();
+    if (handshakerPipe == null) {
+      throw new IllegalStateException();
     } else {
-      return Jid.EMPTY;
+      return handshakerPipe.getNegotiatedJid();
     }
   }
 
-  @Nonnull
   @Override
   public Flowable<Stanza> getInboundStanzaStream() {
     return inboundStanzaStream;

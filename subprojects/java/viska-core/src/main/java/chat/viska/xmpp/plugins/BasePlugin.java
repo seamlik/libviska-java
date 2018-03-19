@@ -23,10 +23,10 @@ import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
 import chat.viska.xmpp.Stanza;
+import chat.viska.xmpp.StreamErrorException;
 import chat.viska.xmpp.XmlWrapperStanza;
 import io.reactivex.Completable;
 import io.reactivex.Maybe;
-import io.reactivex.Observable;
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Collection;
@@ -35,11 +35,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import org.apache.commons.lang3.StringUtils;
+import java.util.stream.Collectors;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -59,6 +59,8 @@ import rxbeans.StandardProperty;
  */
 @Plugin.Features({
     CommonXmlns.PING,
+    CommonXmlns.SERVICE_DISCOVERY + "#info",
+    CommonXmlns.SERVICE_DISCOVERY + "#items",
     CommonXmlns.SOFTWARE_VERSION
 })
 public class BasePlugin implements Plugin {
@@ -79,80 +81,123 @@ public class BasePlugin implements Plugin {
   private final MutableProperty<String> softwareName = new StandardProperty<>("");
   private final MutableProperty<String> softwareVersion = new StandardProperty<>("");
   private final MutableProperty<String> operatingSystem = new StandardProperty<>("");
-  private final MutableProperty<String> softwareType = new StandardProperty<>("");
-  private Session.PluginContext context;
+  private final MutableProperty<String> identityType = new StandardProperty<>("");
+  private final MutableProperty<String> identityCategory = new StandardProperty<>("client");
+  private Session.@MonotonicNonNull PluginContext context;
 
-  @Nullable
-  private static List<DiscoItem> convertToDiscoItems(@Nonnull final Document xml) {
-    final Element queryElement = (Element) xml.getDocumentElement().getFirstChild();
-    return Observable.fromIterable(DomUtils.convertToList(
-        queryElement.getElementsByTagName("item")
-    )).filter(it -> it.getParentNode() == queryElement).cast(Element.class).map(it -> new DiscoItem(
-        new Jid(it.getAttribute("jid")),
-        it.getAttribute("name"),
-        it.getAttribute("node")
-    )).toList().blockingGet();
+  private static List<DiscoItem> convertToDiscoItems(final Stanza stanza)
+      throws StreamErrorException {
+    final Element queryElement = stanza.getIqElement(CommonXmlns.SERVICE_DISCOVERY + "#items", "query");
+    return DomUtils
+        .convertToList(queryElement.getChildNodes())
+        .stream()
+        .map(it -> (Element) it)
+        .map(it -> new DiscoItem(
+            new Jid(it.getAttribute("jid")),
+            it.getAttribute("name"),
+            it.getAttribute("node")
+        ))
+        .collect(Collectors.toList());
   }
 
-  @Nonnull
-  private static DiscoInfo convertToDiscoInfo(@Nonnull final Document xml) {
-    final Element queryElement = (Element) xml.getDocumentElement().getFirstChild();
-    final List<DiscoInfo.Identity> identities = Observable.fromIterable(
-        DomUtils.convertToList(queryElement.getElementsByTagName("identity"))
-    ).cast(Element.class).filter(it -> it.getParentNode() == queryElement).map(
-        it -> new DiscoInfo.Identity(
+  private static DiscoInfo convertToDiscoInfo(final Stanza stanza) throws StreamErrorException {
+    final Element queryElement = stanza.getIqElement(CommonXmlns.SERVICE_DISCOVERY + "#info", "query");
+    final List<DiscoInfo.Identity> identities = DomUtils
+        .convertToList(queryElement.getChildNodes())
+        .stream()
+        .map(it -> (Element) it)
+        .filter(it -> "identity".equals(it.getLocalName()))
+        .filter(it -> (CommonXmlns.SERVICE_DISCOVERY + "#info").equals(it.getNamespaceURI()))
+        .map(it -> new DiscoInfo.Identity(
             it.getAttribute("category"),
             it.getAttribute("name"),
             it.getAttribute("type")
-    )).toList().blockingGet();
-    final List<String> features = Observable.fromIterable(
-        DomUtils.convertToList(queryElement.getElementsByTagName("feature"))
-    ).cast(Element.class).filter(it -> it.getParentNode() == queryElement).map(
-        it -> it.getAttribute("var")
-    ).toList().blockingGet();
+        ))
+        .collect(Collectors.toList());
+    final List<String> features = DomUtils
+        .convertToList(queryElement.getChildNodes())
+        .stream()
+        .map(it -> (Element) it)
+        .filter(it -> "feature".equals(it.getLocalName()))
+        .filter(it -> (CommonXmlns.SERVICE_DISCOVERY + "#info").equals(it.getNamespaceURI()))
+        .map(it -> it.getAttribute("var"))
+        .collect(Collectors.toList());
     return new DiscoInfo(identities, features);
   }
 
-  @Nonnull
-  private static SoftwareInfo convertToSoftwareInfo(@Nonnull final Stanza stanza) {
-    final Element queryElement = (Element) stanza.getXml().getDocumentElement().getFirstChild();
-    final Element nameElement = (Element)
-        queryElement.getElementsByTagName("name").item(0);
-    final Element versionElement = (Element)
-        queryElement.getElementsByTagName("version").item(0);
-    final Element osElement = (Element)
-        queryElement.getElementsByTagName("os").item(0);
-    return new SoftwareInfo(
-        nameElement == null ? null : nameElement.getTextContent(),
-        versionElement == null ? null : versionElement.getTextContent(),
-        osElement == null ? null : osElement.getTextContent()
-    );
+  private static SoftwareInfo convertToSoftwareInfo(final Stanza stanza) throws StreamErrorException {
+    final Element queryElement = stanza.getIqElement(CommonXmlns.SOFTWARE_VERSION, "query");
+    final String name = DomUtils
+        .convertToList(queryElement.getChildNodes())
+        .stream()
+        .map(it -> (Element) it)
+        .filter(it -> "name".equals(it.getLocalName()))
+        .filter(it -> CommonXmlns.SOFTWARE_VERSION.equals(it.getNamespaceURI()))
+        .map(Node::getTextContent)
+        .findFirst()
+        .orElse("");
+    final String version = DomUtils
+        .convertToList(queryElement.getChildNodes())
+        .stream()
+        .map(it -> (Element) it)
+        .filter(it -> "version".equals(it.getLocalName()))
+        .filter(it -> CommonXmlns.SOFTWARE_VERSION.equals(it.getNamespaceURI()))
+        .map(Node::getTextContent)
+        .findFirst()
+        .orElse("");
+    final String os = DomUtils
+        .convertToList(queryElement.getChildNodes())
+        .stream()
+        .map(it -> (Element) it)
+        .filter(it -> "os".equals(it.getLocalName()))
+        .filter(it -> CommonXmlns.SOFTWARE_VERSION.equals(it.getNamespaceURI()))
+        .map(Node::getTextContent)
+        .findFirst()
+        .orElse("");
+    return new SoftwareInfo(name, version, os);
   }
 
-  @Nonnull
-  private static List<RosterItem> convertToRosterItems(@Nonnull final Document xml) {
-    final Element queryElement = (Element) xml
-        .getDocumentElement()
-        .getElementsByTagNameNS(CommonXmlns.ROSTER, "query")
-        .item(0);
-    return Observable.fromIterable(
-        DomUtils.convertToList(queryElement.getElementsByTagName("item"))
-    ).filter(it -> it.getParentNode() == queryElement).cast(Element.class).map(it -> new RosterItem(
-        new Jid(it.getAttribute("jid")),
-        EnumUtils.fromXmlValue(
-            RosterItem.Subscription.class,
-            it.getAttribute("subscription")
-        ),
-        it.getAttribute("name"),
-        Observable
-            .fromIterable(DomUtils.convertToList(it.getElementsByTagName("group")))
-            .map(Node::getTextContent)
-            .toList().blockingGet()
-    )).toList().blockingGet();
+  private static List<RosterItem> convertToRosterItems(final Document xml)
+      throws StreamErrorException {
+    final Optional<Element> queryElement = DomUtils
+        .convertToList(xml.getDocumentElement().getChildNodes())
+        .stream()
+        .map(it -> (Element) it)
+        .filter(it -> "query".equals(it.getLocalName()))
+        .filter(it -> CommonXmlns.ROSTER.equals(it.getNamespaceURI()))
+        .findFirst();
+    if (!queryElement.isPresent()) {
+      throw new StreamErrorException(
+          StreamErrorException.Condition.INVALID_XML,
+          "Malformed roster query result."
+      );
+    }
+    return DomUtils
+        .convertToList(queryElement.get().getChildNodes())
+        .stream()
+        .map(it -> (Element) it)
+        .filter(it -> "item".equals(it.getLocalName()))
+        .filter(it -> CommonXmlns.ROSTER.equals(it.getNamespaceURI()))
+        .map(it -> {
+          final Collection<String> groups = DomUtils
+              .convertToList(it.getChildNodes())
+              .parallelStream()
+              .map(Node::getTextContent)
+              .collect(Collectors.toList());
+          return new RosterItem(
+              new Jid(it.getAttribute("jid")),
+              EnumUtils.fromXmlValue(
+                  RosterItem.Subscription.class,
+                  it.getAttribute("subscription")
+              ),
+              it.getAttribute("name"),
+              groups
+          );
+        })
+        .collect(Collectors.toList());
   }
 
-  @Nonnull
-  private Document getSoftwareVersionResult(@Nonnull final Stanza query) {
+  private Document generateSoftwareVersionResult(final Stanza query) {
     final Document result = query.getResultTemplate();
     final Node queryElement = result.getDocumentElement().appendChild(result.createElementNS(
         CommonXmlns.SOFTWARE_VERSION,
@@ -170,8 +215,11 @@ public class BasePlugin implements Plugin {
     return result;
   }
 
-  @Nonnull
-  private Document getDiscoInfoResult(@Nonnull final Stanza query) {
+  private Document generateDiscoInfoResult(final Stanza query) {
+    if (context == null) {
+      throw new IllegalStateException();
+    }
+
     final Document result = query.getResultTemplate();
     final Node queryElement = result.getDocumentElement().appendChild(result.createElementNS(
         CommonXmlns.SERVICE_DISCOVERY + "#info",
@@ -181,20 +229,19 @@ public class BasePlugin implements Plugin {
         result.createElement("identity")
     );
     identityElement.setAttribute("category", "client");
-    identityElement.setAttribute("type", softwareType.get());
+    identityElement.setAttribute("type", identityType.get());
     identityElement.setAttribute("name", softwareName.get());
-    Observable.fromIterable(
-        getSession().getPluginManager().getAllFeatures()
-    ).subscribe(it -> {
-      final Element featureElement = (Element)
-          queryElement.appendChild(result.createElement("feature"));
+    context.getSession().getPluginManager().getAllFeatures().stream().sorted().forEach(it -> {
+      final Element featureElement = (Element) queryElement.appendChild(
+          result.createElement("feature")
+      );
       featureElement.setAttribute("var", it);
     });
     return result;
   }
 
-  @Nonnull
-  private Document getDiscoItemsResult(@Nonnull final Stanza query) {
+  private Document generateDiscoItemsResult(final Stanza query) {
+    // TODO: Figure out what's happening here
     final Document result = query.getResultTemplate();
     final Element queryElement = result.createElementNS(
         CommonXmlns.SERVICE_DISCOVERY + "#items",
@@ -210,86 +257,127 @@ public class BasePlugin implements Plugin {
     return result;
   }
 
-  @Nonnull
+  /**
+   * Software name.
+   * @see <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>
+   */
   public MutableProperty<String> softwareNameProperty() {
     return softwareName;
   }
 
-  @Nonnull
+  /**
+   * Software version.
+   * @see <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>
+   */
   public MutableProperty<String> softwareVersionProperty() {
     return softwareVersion;
   }
 
-  @Nonnull
+  /**
+   * Operating system name.
+   * @see <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>
+   */
   public MutableProperty<String> operatingSystemProperty() {
     return operatingSystem;
   }
 
   /**
-   * Gets and sets the software type. Possible values are listed on the
+   * Type of the identity. Possible values are listed on the
    * <a href="https://xmpp.org/registrar/disco-categories.html#client">XMPP
    * registrar</a>.
    */
-  @Nonnull
-  public MutableProperty<String> softwareTypeProperty() {
-    return softwareType;
+  public MutableProperty<String> identityTypeProperty() {
+    return identityType;
   }
 
-  @Nonnull
-  public Maybe<DiscoInfo> queryDiscoInfo(@Nonnull final Jid jid) {
-    return this.context.sendIq(
-        CommonXmlns.SERVICE_DISCOVERY + "#info",
-        jid,
-        null
-    ).getResponse().map(Stanza::getXml).map(BasePlugin::convertToDiscoInfo);
+  /**
+   * Category of the identity. Possible values are listed on the
+   * <a href="https://xmpp.org/registrar/disco-categories.html">XMPP
+   * registrar</a>.
+   *
+   * <p>Default: {@code client}</p>
+   */
+  public MutableProperty<String> identityCategoryProperty() {
+    return identityCategory;
   }
 
   /**
    * Queries {@link DiscoItem}s associated with a {@link Jid}.
    */
-  @Nonnull
-  public Maybe<List<DiscoItem>> queryDiscoItems(@Nonnull final Jid jid,
-                                                @Nullable final String node) {
-    final Map<String, String> param;
-    if (StringUtils.isBlank(node)) {
-      param = null;
-    } else {
-      param = new HashMap<>(1);
+  public Maybe<DiscoInfo> queryDiscoInfo(final Jid jid) {
+    if (context == null) {
+      throw new IllegalStateException();
+    }
+    return context.sendIq(
+        CommonXmlns.SERVICE_DISCOVERY + "#info",
+        jid,
+        Collections.emptyMap()
+    ).getResponse().map(BasePlugin::convertToDiscoInfo);
+  }
+
+  /**
+   * Queries {@link DiscoItem}s associated with a {@link Jid}.
+   */
+  public Maybe<List<DiscoItem>> queryDiscoItems(final Jid jid, final String node) {
+    if (context == null) {
+      throw new IllegalStateException();
+    }
+    final Map<String, String> param = new HashMap<>();
+    if (!node.isEmpty()) {
       param.put("node", node);
     }
-
-    return this.context.sendIq(
+    return context.sendIq(
         CommonXmlns.SERVICE_DISCOVERY + "#items",
         jid,
         param
-    ).getResponse().map(Stanza::getXml).map(BasePlugin::convertToDiscoItems);
+    ).getResponse().map(BasePlugin::convertToDiscoItems).doOnError(it -> {
+      if (it instanceof StreamErrorException) {
+        context.sendError((StreamErrorException) it);
+      }
+    });
   }
 
   /**
    * Queries information of the XMPP software.
    */
-  @Nonnull
-  public Maybe<SoftwareInfo> querySoftwareInfo(@Nonnull final Jid jid) {
-    return this.context.sendIq(
+  public Maybe<SoftwareInfo> querySoftwareInfo(final Jid jid) {
+    if (context == null) {
+      throw new IllegalStateException();
+    }
+    return context.sendIq(
         CommonXmlns.SOFTWARE_VERSION, jid,
-        null
-    ).getResponse().map(BasePlugin::convertToSoftwareInfo);
+        Collections.emptyMap()
+    ).getResponse().map(BasePlugin::convertToSoftwareInfo).doOnError(it -> {
+      if (it instanceof StreamErrorException) {
+        context.sendError((StreamErrorException) it);
+      }
+    });
   }
 
-  @Nonnull
+  /**
+   * Queries roster.
+   */
   public Maybe<List<RosterItem>> queryRoster() {
-    return this
-        .context
-        .sendIq(CommonXmlns.ROSTER, null, null)
+    if (context == null) {
+      throw new IllegalStateException();
+    }
+    return context
+        .sendIq(CommonXmlns.ROSTER, Jid.EMPTY, Collections.emptyMap())
         .getResponse()
         .map(Stanza::getXml)
-        .map(BasePlugin::convertToRosterItems);
+        .map(BasePlugin::convertToRosterItems)
+        .doOnError(it -> {
+          if (it instanceof StreamErrorException) {
+            context.sendError((StreamErrorException) it);
+          }
+        });
   }
 
-  @Nonnull
-  public Maybe<List<RosterItem>>
-  queryRoster(@Nonnull final String version,
-              @Nonnull final Collection<RosterItem> cached) {
+  /**
+   * Quries roster.
+   */
+  public Maybe<List<RosterItem>> queryRoster(final String version,
+                                             final Collection<RosterItem> cached) {
     final Map<String, String> param = new HashMap<>();
     param.put("ver", version);
     throw new UnsupportedOperationException();
@@ -297,13 +385,13 @@ public class BasePlugin implements Plugin {
 
   /**
    * Pings an entity. Signals a {@link java.util.NoSuchElementException} if the remote entity never
-   * responds before the {@link Session} is disposed of. Signals a
-   * {@link chat.viska.xmpp.StreamErrorException} if a stream error is received.
+   * responds before the {@link Session} is disposed of.
    * @param jid The entity address. If {@code null} is specified, the server will be pinged.
-   * @throws IllegalStateException If the plugin is not applied to any {@link Session}.
    */
-  @Nonnull
-  public Completable ping(@Nullable Jid jid) {
+  public Completable ping(final Jid jid) {
+    if (context == null) {
+      throw new IllegalStateException();
+    }
     final Document iq = Stanza.getIqTemplate(
         Stanza.IqType.GET,
         UUID.randomUUID().toString(),
@@ -315,13 +403,12 @@ public class BasePlugin implements Plugin {
   }
 
   @Override
-  @Nonnull
   public Set<Map.Entry<String, String>> getSupportedIqs() {
     return Collections.unmodifiableSet(SUPPORTED_IQS);
   }
 
   @Override
-  public void onApplying(@Nonnull final Session.PluginContext context) {
+  public void onApplying(final Session.PluginContext context) {
     this.context = context;
 
     // Software Version
@@ -330,7 +417,7 @@ public class BasePlugin implements Plugin {
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(CommonXmlns.SOFTWARE_VERSION))
-        .subscribe(it -> context.sendIq(new XmlWrapperStanza(getSoftwareVersionResult(it))));
+        .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateSoftwareVersionResult(it))));
 
     // disco#info
     context
@@ -338,7 +425,7 @@ public class BasePlugin implements Plugin {
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(CommonXmlns.SERVICE_DISCOVERY + "#info"))
-        .subscribe(it -> context.sendIq(new XmlWrapperStanza(getDiscoInfoResult(it))));
+        .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoInfoResult(it))));
 
     // disco#items
     context
@@ -346,7 +433,7 @@ public class BasePlugin implements Plugin {
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqName().equals("query"))
         .filter(it -> it.getIqNamespace().equals(CommonXmlns.SERVICE_DISCOVERY + "#items"))
-        .subscribe(it -> context.sendIq(new XmlWrapperStanza(getDiscoItemsResult(it))));
+        .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoItemsResult(it))));
 
     // Ping
     context
@@ -355,14 +442,5 @@ public class BasePlugin implements Plugin {
         .filter(it -> "ping".equals(it.getIqName()))
         .filter(it -> CommonXmlns.PING.equals(it.getIqNamespace()))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(it.getResultTemplate())));
-  }
-
-  @Nonnull
-  @Override
-  public Session getSession() {
-    if (context == null) {
-      throw new IllegalStateException();
-    }
-    return context.getSession();
   }
 }

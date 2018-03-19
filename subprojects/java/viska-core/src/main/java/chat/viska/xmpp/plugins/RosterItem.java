@@ -17,14 +17,15 @@
 package chat.viska.xmpp.plugins;
 
 import chat.viska.xmpp.Jid;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
+/**
+ * Roster item.
+ */
 public class RosterItem {
 
   public enum Subscription {
@@ -35,38 +36,49 @@ public class RosterItem {
   }
 
   private final Jid jid;
-  private final Set<String> groups = new HashSet<>();
-  private final Subscription subscription;
+  private final Set<String> groups;
+  private final @Nullable Subscription subscription;
   private final String name;
 
-  public RosterItem(@Nonnull final Jid jid,
+  /**
+   * Default contructor.
+   */
+  public RosterItem(final Jid jid,
                     @Nullable final Subscription subscription,
-                    @Nullable final String name,
-                    @Nullable final Collection<String> groups) {
-    Objects.requireNonNull(jid);
+                    final String name,
+                    final Collection<String> groups) {
     this.jid = jid;
     this.subscription = subscription;
-    this.name = name == null ? "" : name;
-    if (groups != null) {
-      this.groups.addAll(groups);
-    }
+    this.name = name;
+    this.groups = Collections.unmodifiableSet(new HashSet<>(groups));
   }
 
+  /**
+   * Gets the JID.
+   */
   public Jid getJid() {
     return jid;
   }
 
+  /**
+   * Gets the group names.
+   */
   public Set<String> getGroups() {
-    return Collections.unmodifiableSet(groups);
+    return groups;
   }
 
+  /**
+   * Gets the contact name.
+   */
   public String getName() {
     return name;
   }
 
+  /**
+   * Gets the subscription.
+   */
+  @Nullable
   public Subscription getSubscription() {
     return subscription;
   }
-
-
 }

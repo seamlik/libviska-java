@@ -16,9 +16,8 @@
 
 package chat.viska.xmpp.plugins;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.Objects;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Information of an XMPP software. This class is part of
@@ -31,18 +30,18 @@ public class SoftwareInfo {
   private String version;
   private String operatingSystem;
 
-  public SoftwareInfo(final @Nullable String name,
-                      final @Nullable String version,
-                      final @Nullable String operatingSystem) {
-    this.name = name == null ? "" : name;
-    this.version = version == null ? "" : version;
-    this.operatingSystem = operatingSystem == null ? "" : operatingSystem;
+  /**
+   * Default constructor.
+   */
+  public SoftwareInfo(final String name, final String version, final String operatingSystem) {
+    this.name = name;
+    this.version = version;
+    this.operatingSystem = operatingSystem;
   }
 
   /**
    * Gets the software name.
    */
-  @Nonnull
   public String getName() {
     return name;
   }
@@ -50,7 +49,6 @@ public class SoftwareInfo {
   /**
    * Gets the software version.
    */
-  @Nonnull
   public String getVersion() {
     return version;
   }
@@ -58,13 +56,12 @@ public class SoftwareInfo {
   /**
    * Gets the operating system name.
    */
-  @Nonnull
   public String getOperatingSystem() {
     return operatingSystem;
   }
 
   @Override
-  public boolean equals(Object obj) {
+  public boolean equals(@Nullable final Object obj) {
     if (this == obj) {
       return true;
     }

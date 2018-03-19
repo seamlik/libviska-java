@@ -18,10 +18,14 @@ package chat.viska.xmpp;
 
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import java.util.Optional;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
+/**
+ * XML data being transferred during a {@link Session}.
+ */
 public abstract class Stanza {
 
   /**
@@ -46,11 +50,10 @@ public abstract class Stanza {
   /**
    * Generates a {@link Document} template for an {@code <iq/>}.
    */
-  @Nonnull
-  public static Document getIqTemplate(@Nonnull final IqType type,
-                                       @Nonnull final String id,
-                                       @Nullable final Jid sender,
-                                       @Nullable final Jid recipient) {
+  public static Document getIqTemplate(final IqType type,
+                                       final String id,
+                                       final Jid sender,
+                                       final Jid recipient) {
     final String iq = String.format(
         "<iq type=\"%1s\" id=\"%2s\"></iq>",
         EnumUtils.toXmlValue(type),
@@ -74,31 +77,26 @@ public abstract class Stanza {
   /**
    * Gets the XML data.
    */
-  @Nonnull
   public abstract Document getXml();
 
   /**
    * Gets the ID.
    */
-  @Nonnull
   public abstract String getId();
 
   /**
    * Gets the recipient.
    */
-  @Nonnull
   public abstract Jid getRecipient();
 
   /**
    * Gets the sender.
    */
-  @Nonnull
   public abstract Jid getSender();
 
   /**
    * Gets the type.
    */
-  @Nonnull
   public abstract Type getType();
 
   /**
@@ -110,19 +108,41 @@ public abstract class Stanza {
   /**
    * Gets the local name of the sub-element of this {@code <iq/>}.
    */
-  @Nonnull
   public abstract String getIqName();
 
   /**
    * Gets the namespace URI of te sub-element of this {@code <iq/>}.
    */
-  @Nonnull
   public abstract String getIqNamespace();
+
+  /**
+   * Gets the main {@link Element} contained by this {@link <iq/>}.
+   * @throws StreamErrorException If the XML is invalid.
+   */
+  public Element getIqElement(final String namespace, String name) throws StreamErrorException {
+    if (getType() != Type.IQ) {
+      throw new IllegalStateException();
+    }
+    final Optional<Element> queryElement = DomUtils
+        .convertToList(getXml().getDocumentElement().getChildNodes())
+        .stream()
+        .map(it -> (Element) it)
+        .filter(it -> name.equals(it.getLocalName()))
+        .filter(it -> namespace.equals(it.getNamespaceURI()))
+        .findFirst();
+    if (!queryElement.isPresent()) {
+      throw new StreamErrorException(
+          StreamErrorException.Condition.INVALID_XML,
+          "Malformed <iq/>."
+      );
+    } else {
+      return queryElement.get();
+    }
+  }
 
   /**
    * Generates a template of a result to this {@code <iq/>}.
    */
-  @Nonnull
   public Document getResultTemplate() {
     if (getType() != Type.IQ) {
       throw new IllegalStateException("This stanza is not an <iq/>.");
