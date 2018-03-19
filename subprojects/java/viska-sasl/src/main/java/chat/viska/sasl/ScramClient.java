@@ -19,6 +19,7 @@ package chat.viska.sasl;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
@@ -166,56 +167,48 @@ public class ScramClient implements Client {
     }
   }
 
-  private String getFinalResponse() {
+  private String getFinalResponse() throws AuthenticationException {
 
     // Retrieving password or salted-password
     try {
-      final byte[] saltedPassword = (byte[]) retriever.retrieve(
+      final Object retrievedSaltedPassword = retriever.retrieve(
           authnId,
           getMechanism(),
           "salted-password"
       );
-      if (saltedPassword == null) {
-        this.saltedPassword = scram.getSaltedPassword(
-            (String) retriever.retrieve(
-                authnId, getMechanism(), "password"
-            ),
-            this.salt,
-            this.iteration
-        );
-      } else {
-        final byte[] salt = (byte[]) retriever.retrieve(
-            authnId, getMechanism(), ScramMechanism.KEY_SALT
-        );
-        final int iteration = (Integer) retriever.retrieve(
-            authnId, getMechanism(), ScramMechanism.KEY_ITERATION
-        );
-        if (Arrays.equals(salt, this.salt) && Objects.equals(iteration, this.iteration)) {
-          this.saltedPassword = saltedPassword;
-        } else {
-          this.saltedPassword = scram.getSaltedPassword(
-              (String) retriever.retrieve(
-                  authnId, getMechanism(), "password"
-              ),
-              this.salt,
-              this.iteration
-          );
-        }
+      final Object retrievedPassword = retriever.retrieve(authnId, getMechanism(), "password");
+      final Object retrievedSalt = retriever.retrieve(
+          authnId,
+          getMechanism(),
+          ScramMechanism.KEY_SALT
+      );
+      final Object retrievedIteration = retriever.retrieve(
+          authnId,
+          getMechanism(),
+          ScramMechanism.KEY_ITERATION
+      );
+
+      final boolean saltMatched = retrievedSalt instanceof byte[]
+          && Arrays.equals((byte[]) retrievedSalt, salt)
+          && Objects.equals(retrievedIteration, iteration);
+
+      if (retrievedPassword instanceof String) {
+        saltedPassword = scram.getSaltedPassword((String) retrievedPassword, salt, iteration);
+      } else if (retrievedSaltedPassword instanceof byte[] && saltMatched){
+        saltedPassword = (byte[]) retrievedSaltedPassword;
       }
-      if (this.saltedPassword == null) {
+      if (saltedPassword == null) {
         throw new AuthenticationException(
             AuthenticationException.Condition.CREDENTIALS_NOT_FOUND
         );
       }
-    } catch (AuthenticationException ex) {
-      this.error = ex;
-      return "";
-    } catch (Exception ex) {
-      this.error = new AuthenticationException(
+    } catch (InvalidKeySpecException ex) {
+      throw new RuntimeException(ex);
+    } catch (SecurityException ex) {
+      throw new AuthenticationException(
           AuthenticationException.Condition.CREDENTIALS_NOT_FOUND,
           ex
       );
-      return "";
     }
 
     // Calculating proof
@@ -328,17 +321,27 @@ public class ScramClient implements Client {
   }
 
   @Override
-  public byte[] respond() {
-    switch (state) {
-      case INITIALIZED:
-        state = State.INITIAL_RESPONSE_SENT;
-        return getInitialResponse().getBytes(StandardCharsets.UTF_8);
-      case CHALLENGE_RECEIVED:
-        state = State.FINAL_RESPONSE_SENT;
-        return getFinalResponse().getBytes(StandardCharsets.UTF_8);
-      default:
-        throw new IllegalStateException("Not about to respond.");
+  public byte[] respond() throws AuthenticationException {
+    try {
+      switch (state) {
+        case INITIALIZED: {
+          final byte[] response = getInitialResponse().getBytes(StandardCharsets.UTF_8);
+          state = State.INITIAL_RESPONSE_SENT;
+          return response;
+        }
+        case CHALLENGE_RECEIVED: {
+          final byte[] response = getFinalResponse().getBytes(StandardCharsets.UTF_8);
+          state = State.FINAL_RESPONSE_SENT;
+          return response;
+        }
+        default:
+          throw new IllegalStateException("Not about to respond.");
+      }
+    } catch (AuthenticationException ex) {
+      error = ex;
+      throw ex;
     }
+
   }
 
   @Override

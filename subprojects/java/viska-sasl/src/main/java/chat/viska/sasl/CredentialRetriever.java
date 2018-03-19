@@ -17,6 +17,7 @@
 package chat.viska.sasl;
 
 import java.io.IOException;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Function that retrieves credential data during an
@@ -30,8 +31,7 @@ public interface CredentialRetriever {
    * @param authnId Authentication ID.
    * @param mechanism Name of the SASL Mechanism.
    * @param key The name for the property.
-   * @throws IOException If any error occurred during the retrieval.
    */
-  Object retrieve(String authnId, String mechanism, String key)
-      throws IOException;
+  @Nullable
+  Object retrieve(String authnId, String mechanism, String key) throws SecurityException;
 }
