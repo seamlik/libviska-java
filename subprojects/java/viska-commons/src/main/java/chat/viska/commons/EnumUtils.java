@@ -17,8 +17,6 @@
 package chat.viska.commons;
 
 import java.util.Locale;
-import org.apache.commons.lang3.StringUtils;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Provides utility functions for working with {@link Enum}s.
@@ -30,17 +28,10 @@ public final class EnumUtils {
    * @param type Type of the enum.
    * @param value XML value.
    * @param <T> Tyle of the enum.
-   * @return {@code null} if {@code value} is {@code null}.
    * @throws IllegalArgumentException If the conversion cannot be done.
    */
-  @Nullable
-  public static <T extends Enum<T>> T fromXmlValue(final Class<T> type, final String value)
-      throws IllegalArgumentException {
-    if (StringUtils.isBlank(value)) {
-      return null;
-    } else {
-      return Enum.valueOf(type, value.replace('-', '_').toUpperCase(Locale.ENGLISH));
-    }
+  public static <T extends Enum<T>> T fromXmlValue(final Class<T> type, final String value) {
+    return Enum.valueOf(type, value.replace('-', '_').toUpperCase(Locale.ENGLISH));
   }
 
   /**
