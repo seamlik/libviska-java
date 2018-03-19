@@ -14,38 +14,7 @@
  * limitations under the License.
  */
 
-apply plugin: 'checkstyle'
-apply plugin: 'org.junit.platform.gradle.plugin'
-apply plugin: 'pmd'
-
-checkstyle {
-  toolVersion = '8.8'
-  File styleFile = file("${rootProject.buildDir}/config.xml")
-  if (!styleFile.exists()) {
-    mkdir styleFile.parent
-    styleFile.createNewFile()
-    styleFile.write(new URL(
-        "https://raw.githubusercontent.com/checkstyle/checkstyle/checkstyle-${toolVersion}/src/main/resources/google_checks.xml"
-    ).text)
-  }
-  config = resources.text.fromFile(styleFile)
-}
-
-pmd {
-  toolVersion = '6.1.0'
-  consoleOutput = true
-  ignoreFailures = true
-  ruleSets = [
-      'category/java/bestpractices.xml',
-      'category/java/codestyle.xml',
-      'category/java/design.xml',
-      'category/java/errorprone.xml',
-      'category/java/multithreading.xml',
-      'category/java/performance.xml'
-  ]
-}
-
-rootProject.ext {
+ext {
   checkerFrameworkProcessors = [
       'org.checkerframework.checker.interning.InterningChecker',
       'org.checkerframework.checker.nullness.NullnessChecker',
@@ -57,4 +26,39 @@ rootProject.ext {
       '^java\\.net\\.URI',
       '^org\\.apache\\.commons\\.lang3\\.'
   ]
+}
+
+subprojects {
+  if (!subprojects.isEmpty()) { return }
+
+  apply plugin: 'checkstyle'
+  apply plugin: 'org.junit.platform.gradle.plugin'
+  apply plugin: 'pmd'
+
+  checkstyle {
+    toolVersion = '8.8'
+    File styleFile = file("${rootProject.buildDir}/config.xml")
+    if (!styleFile.exists()) {
+      mkdir styleFile.parent
+      styleFile.createNewFile()
+      styleFile.write(new URL(
+          "https://raw.githubusercontent.com/checkstyle/checkstyle/checkstyle-${toolVersion}/src/main/resources/google_checks.xml"
+      ).text)
+    }
+    config = resources.text.fromFile(styleFile)
+  }
+
+  pmd {
+    toolVersion = '6.1.0'
+    consoleOutput = true
+    ignoreFailures = true
+    ruleSets = [
+        'category/java/bestpractices.xml',
+        'category/java/codestyle.xml',
+        'category/java/design.xml',
+        'category/java/errorprone.xml',
+        'category/java/multithreading.xml',
+        'category/java/performance.xml'
+    ]
+  }
 }

@@ -28,9 +28,10 @@ buildscript {
   }
 }
 
+apply from: 'gradle/quality.gradle'
+
 subprojects {
   if (!subprojects.isEmpty()) { return }
-  apply from: "${rootDir}/gradle/quality.gradle"
   group = 'chat.viska'
   version = file("${rootDir}/VERSION").text
   configurations {
