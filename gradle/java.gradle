@@ -39,6 +39,7 @@ tasks.withType(JavaCompile) {
       '-processorpath', "${configurations.checkerFrameworkCheckerJar.asPath}".toString(),
       "-Xbootclasspath/p:${configurations.checkerFrameworkAnnotatedJDK.asPath}".toString(),
       '-processor', rootProject.checkerFrameworkProcessors.join(','),
-      "-AskipUses=${rootProject.checkerFrameworkSkipUses.join('|')}".toString()
+      "-AskipUses=${rootProject.checkerFrameworkSkipUses.join('|')}".toString(),
+      '-Awarns' // Too many false positives, counter-productive...
   ])
 }
