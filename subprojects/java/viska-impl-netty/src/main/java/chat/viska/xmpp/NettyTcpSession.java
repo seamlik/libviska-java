@@ -52,6 +52,7 @@ import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
 import javax.xml.transform.TransformerException;
 import org.apache.commons.lang3.StringUtils;
+import org.checkerframework.checker.initialization.qual.UnknownInitialization;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
@@ -69,7 +70,9 @@ public class NettyTcpSession extends StandardSession {
   private class StreamClosingDetector extends ByteToMessageDecoder {
 
     @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
+    protected void decode(final ChannelHandlerContext ctx,
+                          final ByteBuf in,
+                          final List<Object> out) {
       if (in.equals(serverStreamClosing)) {
         try {
           in.clear();
@@ -78,7 +81,7 @@ public class NettyTcpSession extends StandardSession {
               CommonXmlns.STREAM_OPENING_WEBSOCKET
           )));
         } catch (SAXException ex) {
-          throw new RuntimeException();
+          throw new RuntimeException(ex);
         } catch (IllegalStateException ex) {
           triggerEvent(new ExceptionCaughtEvent(this, ex));
         }
@@ -93,6 +96,10 @@ public class NettyTcpSession extends StandardSession {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, XmlElementStart msg)
         throws Exception {
+      final SocketChannel nettyChannel = NettyTcpSession.this.nettyChannel;
+      if (nettyChannel == null) {
+        throw new IllegalStateException();
+      }
       nettyChannel.pipeline().replace(
           PIPE_DECODER_XML,
           PIPE_DECODER_XML,
@@ -121,7 +128,7 @@ public class NettyTcpSession extends StandardSession {
           "<open xmlns=\"%1s\"/>",
           CommonXmlns.STREAM_OPENING_WEBSOCKET
       ));
-      for (XmlAttribute it : msg.attributes()) {
+      for (final XmlAttribute it : msg.attributes()) {
         if (it.prefix().isEmpty()) {
           xml.getDocumentElement().setAttribute(it.name(), it.value());
         } else {
@@ -150,6 +157,9 @@ public class NettyTcpSession extends StandardSession {
   private @MonotonicNonNull ByteBuf serverStreamClosing;
   private String serverStreamPrefix = "";
 
+  /**
+   * Default constructor.
+   */
   public NettyTcpSession() {
     getXmlPipelineOutboundStream().observeOn(Schedulers.io()).subscribe(it ->  {
       if (nettyChannel == null) {
@@ -207,7 +217,10 @@ public class NettyTcpSession extends StandardSession {
     return DomUtils.readDocument(builder.toString());
   }
 
-  private String preprocessOutboundXml(final Document xml) throws TransformerException {
+  private String preprocessOutboundXml(
+      @UnknownInitialization(NettyTcpSession.class)NettyTcpSession this,
+      final Document xml
+  ) throws TransformerException {
     final String streamHeaderXmlnsBlock = String.format(
         "xmlns=\"%1s\"",
         CommonXmlns.STREAM_HEADER
@@ -240,7 +253,7 @@ public class NettyTcpSession extends StandardSession {
     }
   }
 
-  private String convertToTcpStreamOpening(final Document xml) {
+  private static String convertToTcpStreamOpening(final Document xml) {
     final StringBuilder result = new StringBuilder();
     result.append("<stream:stream xmlns=\"")
         .append(CommonXmlns.STANZA_CLIENT)
@@ -268,7 +281,7 @@ public class NettyTcpSession extends StandardSession {
     if (StringUtils.isNotBlank(lang)) {
       result.append("xml:lang=\"").append(lang).append("\" ");
     }
-    result.append(">");
+    result.append('>');
     return result.toString();
   }
 
@@ -276,19 +289,14 @@ public class NettyTcpSession extends StandardSession {
   @Override
   protected Completable openConnection(final Compression connectionCompression,
                                        final Compression tlsCompression) {
-    final Connection connection = getConnection();
-    if (connection == null) {
-      throw new IllegalStateException();
-    }
-
     final Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(nettyEventLoopGroup);
     bootstrap.channel(NioSocketChannel.class);
 
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
-      protected void initChannel(SocketChannel channel) throws Exception {
-        if (connection.getTlsMethod() == Connection.TlsMethod.DIRECT) {
+      protected void initChannel(final SocketChannel channel) throws SSLException {
+        if (getConnection().getTlsMethod() == Connection.TlsMethod.DIRECT) {
           tlsHandler = TLS_CONTEXT_BUILDER.build().newHandler(channel.alloc());
           channel.pipeline().addLast(PIPE_TLS, tlsHandler);
         } else {
@@ -309,7 +317,7 @@ public class NettyTcpSession extends StandardSession {
         channel.pipeline().addLast(PIPE_DECODER_XML, new XmlDecoder());
         channel.pipeline().addLast(new SimpleChannelInboundHandler<XmlDocumentStart>() {
           @Override
-          protected void channelRead0(ChannelHandlerContext ctx, XmlDocumentStart msg)
+          protected void channelRead0(final ChannelHandlerContext ctx, final XmlDocumentStart msg)
               throws Exception {
             if (!"UTF-8".equalsIgnoreCase(msg.encoding())) {
               sendError(new StreamErrorException(
@@ -324,7 +332,7 @@ public class NettyTcpSession extends StandardSession {
         channel.pipeline().addLast(new StringDecoder(StandardCharsets.UTF_8));
         channel.pipeline().addLast(new SimpleChannelInboundHandler<String>() {
           @Override
-          protected void channelRead0(ChannelHandlerContext ctx, String msg)
+          protected void channelRead0(final ChannelHandlerContext ctx, final String msg)
               throws Exception {
             try {
               feedXmlPipeline(preprocessInboundXml(msg));
@@ -337,12 +345,11 @@ public class NettyTcpSession extends StandardSession {
         });
         channel.pipeline().addLast(new StringEncoder(StandardCharsets.UTF_8));
         channel.pipeline().addLast(new SimpleChannelInboundHandler<Object>() {
+          @Override
+          protected void channelRead0(final ChannelHandlerContext ctx, final Object msg) {}
 
           @Override
-          protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {}
-
-          @Override
-          public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+          public void exceptionCaught(final ChannelHandlerContext ctx, final Throwable cause) {
             triggerEvent(new ExceptionCaughtEvent(NettyTcpSession.this, cause));
           }
         });
@@ -350,8 +357,8 @@ public class NettyTcpSession extends StandardSession {
     });
 
     final ChannelFuture channelFuture = bootstrap.connect(
-        connection.getDomain(),
-        connection.getPort()
+        getConnection().getDomain(),
+        getConnection().getPort()
     );
     return Completable.fromFuture(channelFuture).andThen(Completable.fromAction(() -> {
       this.nettyChannel = (SocketChannel) channelFuture.channel();
