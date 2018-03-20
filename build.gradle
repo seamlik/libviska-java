@@ -16,6 +16,20 @@
 
 apply from: 'gradle/dependencies.gradle'
 
+ext {
+  checkerFrameworkProcessors = [
+      'org.checkerframework.checker.interning.InterningChecker',
+      'org.checkerframework.checker.nullness.NullnessChecker',
+      'org.checkerframework.checker.optional.OptionalChecker'
+  ]
+  checkerFrameworkSkipUses = [
+      '^io\\.netty\\.',
+      '^io\\.reactivex\\.',
+      '^java\\.net\\.URI',
+      '^org\\.apache\\.commons\\.lang3\\.'
+  ]
+}
+
 buildscript {
   repositories {
     jcenter()
@@ -28,19 +42,13 @@ buildscript {
   }
 }
 
-apply from: 'gradle/quality.gradle'
-
 subprojects {
   if (!subprojects.isEmpty()) { return }
   group = 'chat.viska'
   version = file("${rootDir}/VERSION").text
   configurations {
-    checkerFrameworkCheckerJar {
-      description = 'the Checker Framework, including the Type Annotations compiler'
-    }
-    checkerFrameworkAnnotatedJDK {
-      description = 'a copy of JDK classes with Checker Framework type qualifers inserted'
-    }
+    checkerFrameworkCheckerJar
+    checkerFrameworkAnnotatedJDK
     all {
       resolutionStrategy {
         preferProjectModules()
