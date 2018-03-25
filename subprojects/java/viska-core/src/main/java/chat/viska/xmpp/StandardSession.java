@@ -570,7 +570,7 @@ public abstract class StandardSession extends Session {
   }
 
   @Override
-  public Flowable<Stanza> getInboundStanzaStream() {
+  protected Flowable<Stanza> getInboundStanzaStream() {
     return inboundStanzaStream;
   }
 }
