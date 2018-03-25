@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp.plugins;
+package chat.viska.xmpp.plugins.base;
 
 import java.util.Objects;
 import org.checkerframework.checker.nullness.qual.Nullable;

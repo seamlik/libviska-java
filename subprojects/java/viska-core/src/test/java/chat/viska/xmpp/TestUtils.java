@@ -1,6 +1,6 @@
 package chat.viska.xmpp;
 
-import chat.viska.xmpp.plugins.BasePlugin;
+import chat.viska.xmpp.plugins.base.BasePlugin;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 

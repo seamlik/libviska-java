@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp.plugins;
+package chat.viska.xmpp.plugins.base;
 
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;

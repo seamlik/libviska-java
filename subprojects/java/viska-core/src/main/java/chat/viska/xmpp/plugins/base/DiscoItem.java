@@ -14,43 +14,28 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp.plugins;
+package chat.viska.xmpp.plugins.base;
 
 import chat.viska.xmpp.Jid;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Objects;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
- * Roster item.
+ * Result of an {@code #items} query defined in
+ * <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>.
  */
-public class RosterItem {
-
-  public enum Subscription {
-    BOTH,
-    FROM,
-    NONE,
-    TO
-  }
+public class DiscoItem {
 
   private final Jid jid;
-  private final Set<String> groups;
-  private final @Nullable Subscription subscription;
   private final String name;
+  private final String node;
 
-  /**
-   * Default contructor.
-   */
-  public RosterItem(final Jid jid,
-                    @Nullable final Subscription subscription,
-                    final String name,
-                    final Collection<String> groups) {
+  public DiscoItem(final Jid jid,
+                   final String name,
+                   final String node) {
     this.jid = jid;
-    this.subscription = subscription;
     this.name = name;
-    this.groups = Collections.unmodifiableSet(new HashSet<>(groups));
+    this.node = node;
   }
 
   /**
@@ -61,24 +46,35 @@ public class RosterItem {
   }
 
   /**
-   * Gets the group names.
-   */
-  public Set<String> getGroups() {
-    return groups;
-  }
-
-  /**
-   * Gets the contact name.
+   * Gets the name.
    */
   public String getName() {
     return name;
   }
 
   /**
-   * Gets the subscription.
+   * Gets the node.
    */
-  @Nullable
-  public Subscription getSubscription() {
-    return subscription;
+  public String getNode() {
+    return node;
+  }
+
+  @Override
+  public boolean equals(@Nullable Object obj) {
+    if (this == obj) {
+      return true;
+    }
+    if (obj == null || getClass() != obj.getClass()) {
+      return false;
+    }
+    final DiscoItem item = (DiscoItem) obj;
+    return Objects.equals(jid, item.jid)
+        && Objects.equals(name, item.name)
+        && Objects.equals(node, item.node);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(jid, name, node);
   }
 }

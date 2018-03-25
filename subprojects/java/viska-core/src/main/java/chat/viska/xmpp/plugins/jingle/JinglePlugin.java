@@ -19,7 +19,7 @@ package chat.viska.xmpp.plugins.jingle;
 import chat.viska.xmpp.CommonXmlns;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
-import chat.viska.xmpp.plugins.BasePlugin;
+import chat.viska.xmpp.plugins.base.BasePlugin;
 import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.HashSet;
