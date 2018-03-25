@@ -36,6 +36,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
+import org.checkerframework.checker.initialization.qual.UnknownInitialization;
 import org.checkerframework.checker.lock.qual.GuardedBy;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
@@ -544,14 +545,14 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   /**
    * Gets the logger.
    */
-  public Logger getLogger() {
+  public final Logger getLogger(@UnknownInitialization(Session.class) Session this) {
     return logger;
   }
 
   /**
    * Gets the current {@link State}.
    */
-  public Property<State> stateProperty() {
+  public final Property<State> stateProperty(@UnknownInitialization(Session.class) Session this) {
     return state;
   }
 

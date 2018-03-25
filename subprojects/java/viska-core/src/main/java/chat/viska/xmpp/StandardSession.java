@@ -44,6 +44,7 @@ import javax.annotation.CheckReturnValue;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import javax.xml.transform.TransformerException;
+import org.checkerframework.checker.initialization.qual.UnknownInitialization;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
@@ -273,7 +274,9 @@ public abstract class StandardSession extends Session {
   /**
    * Gets the outbound stream of the XML {@link Pipeline}.
    */
-  protected Flowable<Document> getXmlPipelineOutboundStream() {
+  protected final Flowable<Document> getXmlPipelineOutboundStream(
+      @UnknownInitialization(StandardSession.class) StandardSession this
+  ) {
     return xmlPipeline.getOutboundStream();
   }
 
