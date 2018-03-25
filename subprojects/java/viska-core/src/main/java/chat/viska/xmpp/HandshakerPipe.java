@@ -204,7 +204,9 @@ public class HandshakerPipe extends BlankPipe implements rxbeans.Object {
   private final Base64.Decoder base64Decoder = Base64.getDecoder();
   private final String presetResource;
   private final List<String> saslMechanisms = new ArrayList<>();
-  private final FlowableProcessor<EventObject> eventStream;
+  private final FlowableProcessor<EventObject> eventStream = PublishProcessor
+      .<EventObject>create()
+      .toSerialized();
   private final CompositeDisposable bin = new CompositeDisposable();
   private final CompletableSubject handshakeResult = CompletableSubject.create();
   private @MonotonicNonNull Pipeline<?, ?> pipeline;
@@ -610,9 +612,6 @@ public class HandshakerPipe extends BlankPipe implements rxbeans.Object {
       this.saslMechanisms.addAll(saslMechanisms);
     }
     presetResource = resource;
-
-    final FlowableProcessor<EventObject> unsafeEventStream = PublishProcessor.create();
-    this.eventStream = unsafeEventStream.toSerialized();
 
     state.getStream().filter(
         it -> it == State.STREAM_CLOSED || it == State.COMPLETED || it == State.DISPOSED

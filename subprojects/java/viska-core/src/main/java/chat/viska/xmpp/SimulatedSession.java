@@ -15,8 +15,12 @@ import javax.xml.transform.TransformerException;
  */
 public class SimulatedSession extends Session {
 
-  private final FlowableProcessor<Stanza> inboundStream;
-  private final FlowableProcessor<Stanza> outboundStream;
+  private final FlowableProcessor<Stanza> inboundStream = PublishProcessor
+      .<Stanza>create()
+      .toSerialized();
+  private final FlowableProcessor<Stanza> outboundStream = PublishProcessor
+      .<Stanza>create()
+      .toSerialized();
   private final Set<StreamFeature> features = new CopyOnWriteArraySet<>();
   private Jid jid = Jid.EMPTY;
 
@@ -43,11 +47,6 @@ public class SimulatedSession extends Session {
   }
 
   public SimulatedSession() {
-    final FlowableProcessor<Stanza> unsafeInboundStream = PublishProcessor.create();
-    this.inboundStream = unsafeInboundStream.toSerialized();
-    final FlowableProcessor<Stanza> unsafeOutboundStream = PublishProcessor.create();
-    this.outboundStream = unsafeOutboundStream.toSerialized();
-
     outboundStream.subscribe(
         it -> System.out.println("[XML sent] " + DomUtils.writeString(it.getXml())),
         ex -> triggerEvent(new ExceptionCaughtEvent(this, ex))

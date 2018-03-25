@@ -89,10 +89,14 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
 
   @GuardedBy("pipeLock")
   private final LinkedList<Map.Entry<String, Pipe>> pipes = new LinkedList<>();
-  private final FlowableProcessor<I> inboundStream;
-  private final FlowableProcessor<Throwable> inboundExceptionStream;
-  private final FlowableProcessor<O> outboundStream;
-  private final FlowableProcessor<Throwable> outboundExceptionStream;
+  private final FlowableProcessor<I> inboundStream = PublishProcessor.<I>create().toSerialized();
+  private final FlowableProcessor<Throwable> inboundExceptionStream = PublishProcessor
+      .<Throwable>create()
+      .toSerialized();
+  private final FlowableProcessor<O> outboundStream = PublishProcessor.<O>create().toSerialized();
+  private final FlowableProcessor<Throwable> outboundExceptionStream = PublishProcessor
+      .<Throwable>create()
+      .toSerialized();
   private final BlockingQueue<Object> readQueue = new LinkedBlockingQueue<>();
   private final BlockingQueue<Object> writeQueue = new LinkedBlockingQueue<>();
   private final ReadWriteLock pipeLock = new ReentrantReadWriteLock(true);
@@ -197,17 +201,6 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
       }
     }
     return null;
-  }
-
-  public Pipeline() {
-    final FlowableProcessor<I> unsafeInboundStream = PublishProcessor.create();
-    inboundStream = unsafeInboundStream.toSerialized();
-    final FlowableProcessor<Throwable> unsafeInboundExceptionStream = PublishProcessor.create();
-    inboundExceptionStream = unsafeInboundExceptionStream.toSerialized();
-    final FlowableProcessor<O> unsafeOutboundStream = PublishProcessor.create();
-    outboundStream = unsafeOutboundStream.toSerialized();
-    final FlowableProcessor<Throwable> unsafeOutboundExceptionStream = PublishProcessor.create();
-    outboundExceptionStream = unsafeOutboundExceptionStream.toSerialized();
   }
 
   /**

@@ -274,13 +274,13 @@ public abstract class Session extends StandardObject implements AutoCloseable {
         enabled.get() && stateProperty().get() == State.ONLINE
     );
     private final Plugin plugin;
-    private final FlowableProcessor<Stanza> inboundStanzaStream;
+    private final FlowableProcessor<Stanza> inboundStanzaStream = PublishProcessor
+        .<Stanza>create()
+        .toSerialized();
     private final Disposable stanzaSubscription;
 
     private PluginContext(final Plugin plugin) {
       this.plugin = plugin;
-      final FlowableProcessor<Stanza> unsafeStream = PublishProcessor.create();
-      inboundStanzaStream = unsafeStream.toSerialized();
 
       Flowable.combineLatest(
           this.enabled.getStream(),
