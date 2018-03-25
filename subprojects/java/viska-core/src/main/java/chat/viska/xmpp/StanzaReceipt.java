@@ -17,33 +17,22 @@
 package chat.viska.xmpp;
 
 import io.reactivex.Maybe;
-import javax.annotation.Nonnull;
 
 /**
  * Receipt of sending a stanza.
  */
-public class StanzaReceipt implements SessionAware {
+public class StanzaReceipt {
 
-  private final Session session;
   private final Maybe<?> serverAck;
 
   /**
    * Default constructor.
    */
-  public StanzaReceipt(@Nonnull final Session session,
-                       @Nonnull final Maybe<?> serverAck) {
-    this.session = session;
+  public StanzaReceipt(final Maybe<?> serverAck) {
     this.serverAck = serverAck;
   }
 
-  @Nonnull
   public Maybe<?> getServerAcknowledment() {
     return serverAck;
-  }
-
-  @Override
-  @Nonnull
-  public Session getSession() {
-    return session;
   }
 }

@@ -38,7 +38,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
 import org.checkerframework.checker.lock.qual.GuardedBy;
-import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import rxbeans.MutableProperty;
@@ -270,7 +269,6 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   @ThreadSafe
   public class PluginContext implements SessionAware {
 
-    @GuardedBy("itself")
     private final MutableProperty<Boolean> enabled = new StandardProperty<>(true);
     private final MutableProperty<Boolean> available = new StandardProperty<>(
         enabled.get() && stateProperty().get() == State.ONLINE
@@ -309,13 +307,11 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       this.available.getStream().filter(it -> it).firstElement().subscribe(
           it -> Session.this.sendStanza(stanza)
       );
-      return new StanzaReceipt(Session.this, Maybe.empty());
+      return new StanzaReceipt(Maybe.empty());
     }
 
     /**
      * Sends an {@code <iq/>}.
-     * @return {@link IqReceipt} whose {@link IqReceipt#getResponse()} will signal a completion
-     *         immediately if the provided {@code iq} is a result or error.
      */
     public IqReceipt sendIq(final Stanza iq) {
       if (StringUtils.isBlank(iq.getId())) {
@@ -329,12 +325,11 @@ public abstract class Session extends StandardObject implements AutoCloseable {
             it -> iq.getId().equals(it.getId())
         ).firstElement().doOnSuccess(it -> {
           if (it.getIqType() == Stanza.IqType.ERROR) {
-            final StanzaErrorException error;
             try {
-              error = StanzaErrorException.fromXml(it.getXml());
-              throw error;
+              throw StanzaErrorException.fromXml(it.getXml());
             } catch (StreamErrorException ex) {
               sendError(ex);
+              throw ex;
             }
           }
         });
@@ -343,7 +338,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       } else {
         response = Maybe.empty();
       }
-      return new IqReceipt(Session.this, sendStanza(iq).getServerAcknowledment(), response);
+      return new IqReceipt(sendStanza(iq).getServerAcknowledment(), response);
     }
 
     /**

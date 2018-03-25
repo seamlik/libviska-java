@@ -17,8 +17,6 @@
 package chat.viska.xmpp;
 
 import io.reactivex.Maybe;
-import java.util.Objects;
-import javax.annotation.Nonnull;
 
 /**
  * Receipt of sending an {@code <iq/>}.
@@ -30,10 +28,8 @@ public class IqReceipt extends StanzaReceipt {
   /**
    * Default constructor.
    */
-  public IqReceipt(@Nonnull Session session,
-                   @Nonnull Maybe<?> serverAck,
-                   @Nonnull Maybe<Stanza> response) {
-    super(session, serverAck);
+  public IqReceipt(Maybe<?> serverAck, Maybe<Stanza> response) {
+    super(serverAck);
     this.response = response;
   }
 
@@ -43,7 +39,6 @@ public class IqReceipt extends StanzaReceipt {
    * signals a completion immediately. Signals a completion if no result is ever received before the
    * {@link Session} is disposed of. Signals an error if a stanza error is received.
    */
-  @Nonnull
   public Maybe<Stanza> getResponse() {
     return response;
   }
