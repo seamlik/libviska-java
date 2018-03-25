@@ -15,6 +15,6 @@
  */
 
 /**
- * Provides classes of the {@code viska-cmd-java} utility program.
+ * Provides classes of the {@code viska-cmd} utility program.
  */
 package chat.viska.cmd;

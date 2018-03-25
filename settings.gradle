@@ -1,6 +1,6 @@
 rootProject.name = 'viska'
 
-include ':java:viska-cmd-java'
+include ':java:viska-cmd'
 include ':java:viska-commons'
 include ':java:viska-core'
 include ':java:viska-impl-netty'
