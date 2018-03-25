@@ -844,10 +844,6 @@ public class HandshakerPipe extends BlankPipe implements rxbeans.Object {
     if (state.get() != State.INITIALIZED) {
       throw new IllegalStateException();
     }
-    final Connection connection = session.getConnection();
-    if (connection == null) {
-      throw new IllegalStateException();
-    }
 
     /* Resource Binding implicitly means completion of negotiation. See
      * <https://mail.jabber.org/pipermail/jdev/2017-August/090324.html> */
@@ -858,7 +854,7 @@ public class HandshakerPipe extends BlankPipe implements rxbeans.Object {
         it -> checkIfAllMandatoryFeaturesNegotiated()
     ).observeOn(Schedulers.io()).subscribe(it -> state.change(State.COMPLETED));
 
-    if (connection.getTlsMethod() == Connection.TlsMethod.STARTTLS) {
+    if (session.getConnection().getTlsMethod() == Connection.TlsMethod.STARTTLS) {
       final Disposable subscription = session.getEventStream().ofType(
           StandardSession.TlsDeployedEvent.class
       ).firstElement().observeOn(Schedulers.io()).subscribe(it -> {

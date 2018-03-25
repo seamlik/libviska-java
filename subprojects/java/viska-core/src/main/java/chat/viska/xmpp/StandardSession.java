@@ -425,10 +425,6 @@ public abstract class StandardSession extends Session {
    * Starts logging in. In order to perform anonymous login, use an empty password and loginJid.
    */
   public void login(final String password) {
-    if (connection == null) {
-      throw new IllegalStateException("No connection method specified.");
-    }
-
     final List<Compression> connectionCompressions = getSupportedConnectionCompression();
     final List<Compression> streamCompressions = getSupportedStreamCompression();
 
@@ -439,10 +435,10 @@ public abstract class StandardSession extends Session {
         ? Compression.NONE
         : streamCompressions.get(0);
 
-    final Compression connectionCompression = connection.getProtocol() == Connection.Protocol.TCP
+    final Compression connectionCompression = getConnection().getProtocol() == Connection.Protocol.TCP
         ? Compression.NONE
         : defaultConnectionCompression;
-    final Compression streamCompression = connection.getProtocol() == Connection.Protocol.TCP
+    final Compression streamCompression = getConnection().getProtocol() == Connection.Protocol.TCP
         ? defaultStreamCompression
         : Compression.NONE;
 
@@ -475,10 +471,6 @@ public abstract class StandardSession extends Session {
                     Compression connectionCompression,
                     Compression tlsCompression,
                     Compression streamCompression) {
-    if (connection == null) {
-      throw new IllegalStateException();
-    }
-
     stateProperty().getAndDo(state -> {
       changeStateToConnecting();
 
@@ -516,7 +508,7 @@ public abstract class StandardSession extends Session {
       openConnection(connectionCompression, tlsCompression).doOnComplete(() -> {
         stateProperty().getAndDoUnsafe(SSLPeerUnverifiedException.class, (it) -> {
           changeStateToConnected();
-          if (connection.getTlsMethod() == Connection.TlsMethod.DIRECT) {
+          if (getConnection().getTlsMethod() == Connection.TlsMethod.DIRECT) {
             verifyCertificate(getLoginJid(), getTlsSession());
           }
           changeStateToHandshaking();
@@ -532,9 +524,12 @@ public abstract class StandardSession extends Session {
   /**
    * Gets the {@link Connection} that is currently using or will be used.
    */
-  @Nullable
   public Connection getConnection() {
-    return connection;
+    if (connection == null) {
+      throw new IllegalStateException();
+    } else {
+      return connection;
+    }
   }
 
   /**
