@@ -29,13 +29,15 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
 import com.beust.jcommander.converters.URIConverter;
-import io.reactivex.Observable;
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Handler;
 import java.util.logging.Level;
+import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class Cmd {
 
@@ -43,9 +45,10 @@ public class Cmd {
   private class InfoCommand {
 
     @Parameter(converter = JidConverter.class, required = true)
-    private List<Jid> entities;
+    private List<Jid> entities = Collections.emptyList();
 
     public void run() {
+      initialize();
       final BasePlugin basePlugin = session.getPluginManager().getPlugin(BasePlugin.class);
       for (Jid it : entities) {
         System.out.println("<" + it + ">");
@@ -90,6 +93,7 @@ public class Cmd {
   private class RosterCommand {
 
     public void run() {
+      initialize();
       final BasePlugin plugin = session.getPluginManager().getPlugin(BasePlugin.class);
       List<RosterItem> roster = plugin.queryRoster().blockingGet();
       roster.forEach(it -> {
@@ -153,13 +157,13 @@ public class Cmd {
   }
 
   @Parameter(names = "--jid", description = "JID", converter = JidConverter.class)
-  private Jid jid;
+  private Jid jid = Jid.EMPTY;
 
   @Parameter(names = "--password", description = "Password", password = true)
-  private String password;
+  private String password = "";
 
   @Parameter(names = "--websocket", description = "WebSocket URI", converter = URIConverter.class)
-  private URI websocket;
+  private @Nullable URI websocket;
 
   @Parameter(names = "--debug", description = "Display debug infomation")
   private boolean debug;
@@ -167,12 +171,13 @@ public class Cmd {
   @Parameter(names = { "-h", "--help", "help" }, description = "Display help", help = true)
   private boolean help;
 
-  private StandardSession session;
+  private @MonotonicNonNull StandardSession session;
 
   public static void main(String[] args) throws Throwable {
     new Cmd().run(args);
   }
 
+  @EnsuresNonNull("session")
   private void initialize() {
     final Connection connection;
     if (this.websocket != null) {
@@ -244,11 +249,9 @@ public class Cmd {
     try {
       switch (jcommander.getParsedCommand()) {
         case "info":
-          initialize();
           infoCommand.run();
           break;
         case "roster":
-          initialize();
           rosterCommand.run();
           break;
         case "connections":
