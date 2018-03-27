@@ -148,7 +148,6 @@ public abstract class StandardSession extends Session {
   }
 
   private static final String PIPE_HANDSHAKER = "handshaker";
-  private static final String PIPE_UNSUPPORTED_STANZAS_BLOCKER = "unsupported-stanzas-blocker";
 
   private final List<String> saslMechanisms = new ArrayList<>();
   private final Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
@@ -213,10 +212,6 @@ public abstract class StandardSession extends Session {
     }).subscribe(
         it -> getLogger().fine("[XML sent] " + DomUtils.writeString(it)),
         ex -> triggerEvent(new ExceptionCaughtEvent(this, ex))
-    );
-    this.xmlPipeline.addAtInboundEnd(
-        PIPE_UNSUPPORTED_STANZAS_BLOCKER,
-        new UnsupportedStanzasBlockerPipe()
     );
     xmlPipeline.addAtInboundEnd(PIPE_HANDSHAKER, BlankPipe.INSTANCE);
   }
