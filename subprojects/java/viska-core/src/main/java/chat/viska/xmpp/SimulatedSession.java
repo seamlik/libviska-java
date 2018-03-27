@@ -7,7 +7,6 @@ import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.logging.Level;
 import javax.xml.transform.TransformerException;
 
 /**
@@ -15,8 +14,8 @@ import javax.xml.transform.TransformerException;
  */
 public class SimulatedSession extends Session {
 
-  private final FlowableProcessor<Stanza> inboundStream = PublishProcessor
-      .<Stanza>create()
+  private final FlowableProcessor<XmlWrapperStanza> inboundStream = PublishProcessor
+      .<XmlWrapperStanza>create()
       .toSerialized();
   private final FlowableProcessor<Stanza> outboundStream = PublishProcessor
       .<Stanza>create()
@@ -31,7 +30,7 @@ public class SimulatedSession extends Session {
   }
 
   @Override
-  protected Flowable<Stanza> getInboundStanzaStream() {
+  protected Flowable<XmlWrapperStanza> getInboundStanzaStream() {
     return inboundStream;
   }
 
@@ -48,7 +47,7 @@ public class SimulatedSession extends Session {
 
   public SimulatedSession() {
     outboundStream.subscribe(
-        it -> System.out.println("[XML sent] " + DomUtils.writeString(it.getXml())),
+        it -> System.out.println("[XML sent] " + DomUtils.writeString(it.toXml())),
         ex -> triggerEvent(new ExceptionCaughtEvent(this, ex))
     );
   }
@@ -63,16 +62,16 @@ public class SimulatedSession extends Session {
   /**
    * Gets the inbound {@link Stanza} stream.
    */
-  public Flowable<Stanza> getInboundStream() {
+  public Flowable<XmlWrapperStanza> getInboundStream() {
     return inboundStream;
   }
 
   /**
    * Reads a {@link Stanza} as if it is received from a server.
    */
-  public void readStanza(final Stanza stanza) {
+  public void readStanza(final XmlWrapperStanza stanza) {
     try {
-      System.out.println("[XML received] " + DomUtils.writeString(stanza.getXml()));
+      System.out.println("[XML received] " + DomUtils.writeString(stanza.toXml()));
     } catch (TransformerException ex) {
       throw new RuntimeException(ex);
     }

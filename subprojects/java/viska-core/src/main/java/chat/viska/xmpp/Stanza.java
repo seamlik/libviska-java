@@ -26,12 +26,12 @@ import org.w3c.dom.Element;
 /**
  * XML data being transferred during a {@link Session}.
  */
-public abstract class Stanza {
+public interface Stanza {
 
   /**
    * Stanza type.
    */
-  public enum Type {
+  enum Type {
     IQ,
     MESSAGE,
     PRESENCE
@@ -40,7 +40,7 @@ public abstract class Stanza {
   /**
    * Type of an {@code <iq/>}
    */
-  public enum IqType {
+  enum IqType {
     ERROR,
     GET,
     RESULT,
@@ -48,83 +48,86 @@ public abstract class Stanza {
   }
 
   /**
-   * Generates a {@link Document} template for an {@code <iq/>}.
-   */
-  public static Document getIqTemplate(final IqType type,
-                                       final String id,
-                                       final Jid sender,
-                                       final Jid recipient) {
-    final String iq = String.format(
-        "<iq type=\"%1s\" id=\"%2s\"></iq>",
-        EnumUtils.toXmlValue(type),
-        id
-    );
-    final Document xml;
-    try {
-      xml = DomUtils.readDocument(iq);
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
-    }
-    if (!Jid.isEmpty(sender)) {
-      xml.getDocumentElement().setAttribute("from", sender.toString());
-    }
-    if (!Jid.isEmpty(recipient)) {
-      xml.getDocumentElement().setAttribute("to", recipient.toString());
-    }
-    return xml;
-  }
-
-  /**
    * Gets the XML data.
    */
-  public abstract Document getXml();
+  Document toXml();
 
   /**
    * Gets the ID.
    */
-  public abstract String getId();
+  default String getId() {
+    return toXml().getDocumentElement().getAttribute("id");
+  }
 
   /**
    * Gets the recipient.
    */
-  public abstract Jid getRecipient();
+  default Jid getRecipient() {
+    return new Jid(toXml().getDocumentElement().getAttribute("to"));
+  }
 
   /**
    * Gets the sender.
    */
-  public abstract Jid getSender();
+  default Jid getSender() {
+    return new Jid(toXml().getDocumentElement().getAttribute("from"));
+  }
 
   /**
    * Gets the type.
    */
-  public abstract Type getType();
+  default Type getType() {
+    return EnumUtils.fromXmlValue(
+        Type.class,
+        toXml().getDocumentElement().getLocalName()
+    );
+  }
 
   /**
    * Gets the type of the {@code <iq/>}.
    */
   @Nullable
-  public abstract IqType getIqType();
+  default IqType getIqType() {
+    return EnumUtils.fromXmlValue(
+        IqType.class,
+        toXml().getDocumentElement().getAttribute("type")
+    );
+  }
 
   /**
    * Gets the local name of the sub-element of this {@code <iq/>}.
    */
-  public abstract String getIqName();
+  default String getIqName() {
+    final Element iqElement = (Element) toXml().getDocumentElement().getFirstChild();
+    return iqElement == null ? "" : iqElement.getLocalName();
+  }
 
   /**
    * Gets the namespace URI of te sub-element of this {@code <iq/>}.
    */
-  public abstract String getIqNamespace();
+  default String getIqNamespace() {
+    final Element iqElement = (Element) toXml()
+        .getDocumentElement()
+        .getFirstChild();
+    if (iqElement == null) {
+      return "";
+    } else {
+      final String namespace = iqElement.getNamespaceURI();
+      return namespace == null ? "" : namespace;
+    }
+  }
 
   /**
    * Gets the main {@link Element} contained by this {@link <iq/>}.
    * @throws StreamErrorException If the XML is invalid.
    */
-  public Element getIqElement(final String namespace, String name) throws StreamErrorException {
+  default Element getIqElement(final String namespace, final String name)
+      throws StreamErrorException {
     if (getType() != Type.IQ) {
       throw new IllegalStateException();
     }
     final Optional<Element> queryElement = DomUtils
-        .convertToList(getXml().getDocumentElement().getChildNodes())
+        .convertToList(toXml().getDocumentElement().getChildNodes())
         .stream()
         .map(it -> (Element) it)
         .filter(it -> name.equals(it.getLocalName()))
@@ -138,23 +141,5 @@ public abstract class Stanza {
     } else {
       return queryElement.get();
     }
-  }
-
-  /**
-   * Generates a template of a result to this {@code <iq/>}.
-   */
-  public Document getResultTemplate() {
-    if (getType() != Type.IQ) {
-      throw new IllegalStateException("This stanza is not an <iq/>.");
-    }
-    if (getIqType() == IqType.RESULT || getIqType() == null) {
-      throw new IllegalStateException("This stanza is already an <iq/> result.");
-    }
-    return getIqTemplate(
-        IqType.RESULT,
-        getId(),
-        getRecipient(),
-        getSender()
-    );
   }
 }

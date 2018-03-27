@@ -152,7 +152,7 @@ public abstract class StandardSession extends Session {
 
   private final List<String> saslMechanisms = new ArrayList<>();
   private final Pipeline<Document, Document> xmlPipeline = new Pipeline<>();
-  private final Flowable<Stanza> inboundStanzaStream = xmlPipeline.getInboundStream().map(
+  private final Flowable<XmlWrapperStanza> inboundStanzaStream = xmlPipeline.getInboundStream().map(
       XmlWrapperStanza::new
   );
   private @MonotonicNonNull Connection connection;
@@ -306,7 +306,7 @@ public abstract class StandardSession extends Session {
 
   @Override
   protected void sendStanza(Stanza stanza) {
-    this.xmlPipeline.write(stanza.getXml());
+    this.xmlPipeline.write(stanza.toXml());
   }
 
   /**
@@ -568,7 +568,7 @@ public abstract class StandardSession extends Session {
   }
 
   @Override
-  protected Flowable<Stanza> getInboundStanzaStream() {
+  protected Flowable<XmlWrapperStanza> getInboundStanzaStream() {
     return inboundStanzaStream;
   }
 }

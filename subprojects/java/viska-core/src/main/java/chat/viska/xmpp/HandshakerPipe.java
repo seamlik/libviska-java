@@ -376,7 +376,7 @@ public class HandshakerPipe extends BlankPipe implements rxbeans.Object {
       throw new IllegalStateException();
     }
     this.resourceBindingIqId = UUID.randomUUID().toString();
-    final Document iq = Stanza.getIqTemplate(
+    final Document iq = XmlWrapperStanza.createIq(
         Stanza.IqType.SET,
         resourceBindingIqId,
         Jid.EMPTY,

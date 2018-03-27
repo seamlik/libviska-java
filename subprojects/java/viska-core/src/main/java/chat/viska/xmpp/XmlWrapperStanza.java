@@ -16,30 +16,60 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
-import org.w3c.dom.Element;
 
 /**
  * Raw XML data wrapper.
  */
-public class XmlWrapperStanza extends Stanza {
+public class XmlWrapperStanza implements Stanza {
 
   private final Document xml;
 
   /**
-   * Checks if a {@link Document} is a stanza.
+   * Generates a {@link Document} template for an {@code <iq/>}.
    */
-  public static boolean isStanza(@Nullable final Document document) {
-    if (document == null) {
-      return false;
+  public static Document createIq(final IqType type,
+                                  final String id,
+                                  final Jid sender,
+                                  final Jid recipient) {
+    final String iq = String.format(
+        "<iq type=\"%1s\" id=\"%2s\"></iq>",
+        EnumUtils.toXmlValue(type),
+        id
+    );
+    final Document xml;
+    try {
+      xml = DomUtils.readDocument(iq);
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
     }
-    final String rootName = document.getDocumentElement().getLocalName();
-    return "iq".equals(rootName)
-        || "message".equals(rootName)
-        || "presence".equals(rootName);
+    if (!Jid.isEmpty(sender)) {
+      xml.getDocumentElement().setAttribute("from", sender.toString());
+    }
+    if (!Jid.isEmpty(recipient)) {
+      xml.getDocumentElement().setAttribute("to", recipient.toString());
+    }
+    return xml;
+  }
+
+  /**
+   * Generates a template of a result to this {@code <iq/>}.
+   */
+  public static Document createIqResult(final Stanza stanza) {
+    if (stanza.getType() != Type.IQ) {
+      throw new IllegalStateException("This stanza is not an <iq/>.");
+    }
+    if (stanza.getIqType() == IqType.RESULT || stanza.getIqType() == null) {
+      throw new IllegalStateException("This stanza is already an <iq/> result.");
+    }
+    return XmlWrapperStanza.createIq(
+        IqType.RESULT,
+        stanza.getId(),
+        stanza.getRecipient(),
+        stanza.getSender()
+    );
   }
 
   /**
@@ -50,58 +80,7 @@ public class XmlWrapperStanza extends Stanza {
   }
 
   @Override
-  public Document getXml() {
+  public Document toXml() {
     return xml;
-  }
-
-  @Override
-  public String getId() {
-    return xml.getDocumentElement().getAttribute("id");
-  }
-
-  @Override
-  public Jid getRecipient() {
-    return new Jid(xml.getDocumentElement().getAttribute("to"));
-  }
-
-  @Override
-  public Jid getSender() {
-    return new Jid(xml.getDocumentElement().getAttribute("from"));
-  }
-
-  @Override
-  public Type getType() {
-    return EnumUtils.fromXmlValue(
-        Type.class,
-        xml.getDocumentElement().getLocalName()
-    );
-  }
-
-  @Override
-  @Nullable
-  public IqType getIqType() {
-    return EnumUtils.fromXmlValue(
-        IqType.class,
-        xml.getDocumentElement().getAttribute("type")
-    );
-  }
-
-  @Override
-  public String getIqName() {
-    final Element iqElement = (Element) this.xml.getDocumentElement().getFirstChild();
-    return iqElement == null ? "" : StringUtils.defaultIfBlank(iqElement.getLocalName(), "");
-  }
-
-  @Override
-  public String getIqNamespace() {
-    final Element iqElement = (Element) this.xml
-        .getDocumentElement()
-        .getFirstChild();
-    if (iqElement == null) {
-      return "";
-    } else {
-      final String namespace = iqElement.getNamespaceURI();
-      return namespace == null ? "" : namespace;
-    }
   }
 }

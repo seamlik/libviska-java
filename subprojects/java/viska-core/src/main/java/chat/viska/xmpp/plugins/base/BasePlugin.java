@@ -198,7 +198,7 @@ public class BasePlugin implements Plugin {
   }
 
   private Document generateSoftwareVersionResult(final Stanza query) {
-    final Document result = query.getResultTemplate();
+    final Document result = XmlWrapperStanza.createIqResult(query);
     final Node queryElement = result.getDocumentElement().appendChild(result.createElementNS(
         CommonXmlns.SOFTWARE_VERSION,
         "query"
@@ -220,7 +220,7 @@ public class BasePlugin implements Plugin {
       throw new IllegalStateException();
     }
 
-    final Document result = query.getResultTemplate();
+    final Document result = XmlWrapperStanza.createIqResult(query);
     final Node queryElement = result.getDocumentElement().appendChild(result.createElementNS(
         CommonXmlns.SERVICE_DISCOVERY + "#info",
         "query"
@@ -242,13 +242,13 @@ public class BasePlugin implements Plugin {
 
   private Document generateDiscoItemsResult(final Stanza query) {
     // TODO: Figure out what's happening here
-    final Document result = query.getResultTemplate();
+    final Document result = XmlWrapperStanza.createIqResult(query);
     final Element queryElement = result.createElementNS(
         CommonXmlns.SERVICE_DISCOVERY + "#items",
         "query"
     );
     final String node = (
-        (Element) query.getXml().getDocumentElement().getFirstChild()
+        (Element) query.toXml().getDocumentElement().getFirstChild()
     ).getAttribute("node");
     if (!node.isEmpty()) {
       queryElement.setAttribute("node", node);
@@ -364,7 +364,7 @@ public class BasePlugin implements Plugin {
     return context
         .sendIq(CommonXmlns.ROSTER, Jid.EMPTY, Collections.emptyMap())
         .getResponse()
-        .map(Stanza::getXml)
+        .map(Stanza::toXml)
         .map(BasePlugin::convertToRosterItems)
         .doOnError(it -> {
           if (it instanceof StreamErrorException) {
@@ -392,7 +392,7 @@ public class BasePlugin implements Plugin {
     if (context == null) {
       throw new IllegalStateException();
     }
-    final Document iq = Stanza.getIqTemplate(
+    final Document iq = XmlWrapperStanza.createIq(
         Stanza.IqType.GET,
         UUID.randomUUID().toString(),
         this.context.getSession().getNegotiatedJid(),
@@ -441,6 +441,6 @@ public class BasePlugin implements Plugin {
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> "ping".equals(it.getIqName()))
         .filter(it -> CommonXmlns.PING.equals(it.getIqNamespace()))
-        .subscribe(it -> context.sendIq(new XmlWrapperStanza(it.getResultTemplate())));
+        .subscribe(it -> context.sendIq(new XmlWrapperStanza(XmlWrapperStanza.createIqResult(it))));
   }
 }

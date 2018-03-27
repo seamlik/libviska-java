@@ -330,7 +330,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
         ).firstElement().doOnSuccess(it -> {
           if (it.getIqType() == Stanza.IqType.ERROR) {
             try {
-              throw StanzaErrorException.fromXml(it.getXml());
+              throw StanzaErrorException.fromXml(it.toXml());
             } catch (StreamErrorException ex) {
               sendError(ex);
               throw ex;
@@ -353,7 +353,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
                             final Jid recipient,
                             final Map<String, String> attributes) {
       final String id = UUID.randomUUID().toString();
-      final Document iq =  Stanza.getIqTemplate(
+      final Document iq =  XmlWrapperStanza.createIq(
           Stanza.IqType.GET,
           id,
           getNegotiatedJid(),
@@ -440,7 +440,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   /**
    * Gets a stream of inbound {@link Stanza}s. It is usually subscribed by {@link PluginContext}s.
    */
-  protected abstract Flowable<Stanza> getInboundStanzaStream();
+  protected abstract Flowable<XmlWrapperStanza> getInboundStanzaStream();
 
   /**
    * Sends a {@link Stanza} into the XMPP stream. Usually invoked by {@link PluginContext}s.
