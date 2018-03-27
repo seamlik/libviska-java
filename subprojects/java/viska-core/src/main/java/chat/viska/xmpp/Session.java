@@ -20,6 +20,7 @@ import chat.viska.commons.ExceptionCaughtEvent;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
+import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
@@ -277,27 +278,30 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     private final FlowableProcessor<Stanza> inboundStanzaStream = PublishProcessor
         .<Stanza>create()
         .toSerialized();
-    private final Disposable stanzaSubscription;
+    private CompositeDisposable rxTokens = new CompositeDisposable();
 
     private PluginContext(final Plugin plugin) {
       this.plugin = plugin;
 
-      Flowable.combineLatest(
-          this.enabled.getStream(),
-          stateProperty().getStream(),
-          (enabled, state) -> enabled && state == State.ONLINE
-      ).observeOn(Schedulers.io()).subscribe(this.available::change);
-      stanzaSubscription = Session
+      rxTokens.add(
+          Flowable.combineLatest(
+              enabled.getStream(),
+              stateProperty().getStream(),
+              (enabled, state) -> enabled && state == State.ONLINE
+          ).observeOn(Schedulers.io()).subscribe(available::change)
+      );
+
+      final Disposable stanzaToken = Session
           .this
           .getInboundStanzaStream()
           .filter(it -> this.enabled.get())
           .observeOn(Schedulers.io())
           .subscribe(this.inboundStanzaStream::onNext);
+      rxTokens.add(stanzaToken);
     }
 
     private void onDestroying() {
-      this.stanzaSubscription.dispose();
-      this.inboundStanzaStream.onComplete();
+      rxTokens.dispose();
     }
 
     /**
