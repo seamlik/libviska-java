@@ -17,6 +17,7 @@
 package chat.viska.xmpp.plugins.jingle;
 
 import chat.viska.xmpp.CommonXmlns;
+import chat.viska.xmpp.IqSignature;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Stanza;
@@ -112,9 +113,9 @@ public class JinglePlugin extends StandardObject implements Plugin {
   }
 
   @Override
-  public Set<Map.Entry<String, String>> getSupportedIqs() {
+  public Set<IqSignature> getSupportedIqs() {
     return Collections.singleton(
-        new AbstractMap.SimpleImmutableEntry<>(CommonXmlns.JINGLE, "jingle")
+        new IqSignature(CommonXmlns.JINGLE, "jingle")
     );
   }
 

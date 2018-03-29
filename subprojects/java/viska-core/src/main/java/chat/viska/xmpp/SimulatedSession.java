@@ -14,8 +14,8 @@ import javax.xml.transform.TransformerException;
  */
 public class SimulatedSession extends Session {
 
-  private final FlowableProcessor<XmlWrapperStanza> inboundStream = PublishProcessor
-      .<XmlWrapperStanza>create()
+  private final FlowableProcessor<Stanza> inboundStream = PublishProcessor
+      .<Stanza>create()
       .toSerialized();
   private final FlowableProcessor<Stanza> outboundStream = PublishProcessor
       .<Stanza>create()
@@ -30,7 +30,7 @@ public class SimulatedSession extends Session {
   }
 
   @Override
-  protected Flowable<XmlWrapperStanza> getInboundStanzaStream() {
+  protected Flowable<Stanza> getInboundStanzaStream() {
     return inboundStream;
   }
 
@@ -62,7 +62,7 @@ public class SimulatedSession extends Session {
   /**
    * Gets the inbound {@link Stanza} stream.
    */
-  public Flowable<XmlWrapperStanza> getInboundStream() {
+  public Flowable<Stanza> getInboundStream() {
     return inboundStream;
   }
 

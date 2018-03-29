@@ -22,6 +22,7 @@ import java.util.Optional;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 /**
  * XML data being transferred during a {@link Session}.
@@ -95,51 +96,41 @@ public interface Stanza {
   }
 
   /**
-   * Gets the local name of the sub-element of this {@code <iq/>}.
+   * Gets the signature of an {@code <iq/>}.
    */
-  default String getIqName() {
-    final Element iqElement = (Element) toXml().getDocumentElement().getFirstChild();
-    return iqElement == null ? "" : iqElement.getLocalName();
-  }
-
-  /**
-   * Gets the namespace URI of te sub-element of this {@code <iq/>}.
-   */
-  default String getIqNamespace() {
-    final Element iqElement = (Element) toXml()
-        .getDocumentElement()
-        .getFirstChild();
-    if (iqElement == null) {
-      return "";
-    } else {
-      final String namespace = iqElement.getNamespaceURI();
-      return namespace == null ? "" : namespace;
+  default IqSignature getIqSignature() throws StreamErrorException {
+    if (getType() != Type.IQ) {
+      throw new IllegalArgumentException();
     }
+    final Element iqElement = getIqElement();
+    final @Nullable String name = iqElement.getLocalName();
+    final @Nullable String namespace = iqElement.getNamespaceURI();
+    if (name == null || namespace == null) {
+      throw new StreamErrorException(
+          StreamErrorException.Condition.INVALID_XML,
+          "Empty namespace for an <iq/> sub-element."
+      );
+    }
+    return new IqSignature(namespace, name);
   }
 
   /**
-   * Gets the main {@link Element} contained by this {@link <iq/>}.
+   * Gets the main {@link Element} contained in this {@link <iq/>}.
    * @throws StreamErrorException If the XML is invalid.
+   * @throws IllegalStateException If this {@link Stanza} is not an {@code <iq/>}.
    */
-  default Element getIqElement(final String namespace, final String name)
-      throws StreamErrorException {
+  default Element getIqElement() throws StreamErrorException {
     if (getType() != Type.IQ) {
       throw new IllegalStateException();
     }
-    final Optional<Element> queryElement = DomUtils
-        .convertToList(toXml().getDocumentElement().getChildNodes())
-        .stream()
-        .map(it -> (Element) it)
-        .filter(it -> name.equals(it.getLocalName()))
-        .filter(it -> namespace.equals(it.getNamespaceURI()))
-        .findFirst();
-    if (!queryElement.isPresent()) {
+    final @Nullable Node iqElement = toXml().getDocumentElement().getFirstChild();
+    if (iqElement == null) {
       throw new StreamErrorException(
           StreamErrorException.Condition.INVALID_XML,
-          "Malformed <iq/>."
+          "Empty <iq/>."
       );
     } else {
-      return queryElement.get();
+      return (Element) iqElement;
     }
   }
 }

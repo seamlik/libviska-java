@@ -46,10 +46,7 @@ public interface Plugin {
 
   /**
    * Specifies what features the plugin provides by default.
-   *
-   * <p>This API is part of
-   * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
-   * Discovery</a></p>
+   * @see <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service Discovery</a>
    */
   @Documented
   @Retention(RetentionPolicy.RUNTIME)
@@ -96,13 +93,15 @@ public interface Plugin {
 
   /**
    * Gets the {@code <iq/>} sub-element types currently supported by the plugin.
-   * Results of this method are used to identify if an inbound {@code <iq/>} is
-   * supported by this XMPP client. If no plugin handles a particular
-   * {@code <iq/>}, a stream error will be sent.
-   * @return {@link Set} of {@link java.util.Map.Entry}s whose keys are XML
-   *         namespaces and values are {@code <iq/>} sub-element tag names.
+   * The result of this method is used to register any interested {@code <iq/>} type for a
+   * {@link Plugin} so that it will only receive {@code <iq/>} with such signature. If no plugin
+   * handles a particular {@code <iq/>}, a stanza error will be sent.
    */
-  Set<Map.Entry<String, String>> getSupportedIqs();
+  Set<IqSignature> getSupportedIqs();
 
+  /**
+   * Invoked when a {@link Plugin} is being applied to a {@link Session}.
+   * @param context The {@link Session.PluginContext} that holds the {@link Plugin}.
+   */
   void onApplying(final Session.PluginContext context);
 }

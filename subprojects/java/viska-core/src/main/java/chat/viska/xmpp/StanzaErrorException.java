@@ -19,7 +19,6 @@ package chat.viska.xmpp;
 import chat.viska.commons.EnumUtils;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Objects;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;

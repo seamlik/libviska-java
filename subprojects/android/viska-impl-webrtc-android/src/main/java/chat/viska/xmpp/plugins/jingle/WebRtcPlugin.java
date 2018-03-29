@@ -17,10 +17,11 @@
 package chat.viska.xmpp.plugins.jingle;
 
 import chat.viska.xmpp.CommonXmlns;
+import chat.viska.xmpp.IqSignature;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
-import java.util.Map;
+import java.util.Collections;
 import java.util.Set;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.webrtc.PeerConnectionFactory;
@@ -43,8 +44,8 @@ public class WebRtcPlugin implements RtpPlugin {
   }
 
   @Override
-  public Set<Map.Entry<String, String>> getSupportedIqs() {
-    throw new UnsupportedOperationException();
+  public Set<IqSignature> getSupportedIqs() {
+    return Collections.emptySet();
   }
 
   @Override

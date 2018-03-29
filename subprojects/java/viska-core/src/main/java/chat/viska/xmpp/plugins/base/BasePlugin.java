@@ -19,6 +19,7 @@ package chat.viska.xmpp.plugins.base;
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
 import chat.viska.xmpp.CommonXmlns;
+import chat.viska.xmpp.IqSignature;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
@@ -50,7 +51,7 @@ import rxbeans.StandardProperty;
  * Provides the most fundamental features of an XMPP session. This plugin is
  * built-in and needs to be applied manually.
  *
- * <h1>Supported XMPP Extensions</h1>
+ * <p>Supported XMPP Extensions are:</p>
  * <ul>
  *   <li><a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service Discovery</a></li>
  *   <li><a href="https://xmpp.org/extensions/xep-0092.html">XEP-0092: Software Version</a></li>
@@ -65,17 +66,17 @@ import rxbeans.StandardProperty;
 })
 public class BasePlugin implements Plugin {
 
-  private static final Set<Map.Entry<String, String>> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
-      new AbstractMap.SimpleImmutableEntry<>(
+  private static final Set<IqSignature> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
+      new IqSignature(
           CommonXmlns.SERVICE_DISCOVERY + "#info", "query"
       ),
-      new AbstractMap.SimpleImmutableEntry<>(
+      new IqSignature(
           CommonXmlns.SERVICE_DISCOVERY + "#items", "query"
       ),
-      new AbstractMap.SimpleImmutableEntry<>(
+      new IqSignature(
           CommonXmlns.SOFTWARE_VERSION, "query"
       ),
-      new AbstractMap.SimpleImmutableEntry<>(CommonXmlns.ROSTER, "query")
+      new IqSignature(CommonXmlns.ROSTER, "query")
   ));
 
   private final MutableProperty<String> softwareName = new StandardProperty<>("");
@@ -87,7 +88,7 @@ public class BasePlugin implements Plugin {
 
   private static List<DiscoItem> convertToDiscoItems(final Stanza stanza)
       throws StreamErrorException {
-    final Element queryElement = stanza.getIqElement(CommonXmlns.SERVICE_DISCOVERY + "#items", "query");
+    final Element queryElement = stanza.getIqElement();
     return DomUtils
         .convertToList(queryElement.getChildNodes())
         .stream()
@@ -101,7 +102,7 @@ public class BasePlugin implements Plugin {
   }
 
   private static DiscoInfo convertToDiscoInfo(final Stanza stanza) throws StreamErrorException {
-    final Element queryElement = stanza.getIqElement(CommonXmlns.SERVICE_DISCOVERY + "#info", "query");
+    final Element queryElement = stanza.getIqElement();
     final List<DiscoInfo.Identity> identities = DomUtils
         .convertToList(queryElement.getChildNodes())
         .stream()
@@ -126,7 +127,7 @@ public class BasePlugin implements Plugin {
   }
 
   private static SoftwareInfo convertToSoftwareInfo(final Stanza stanza) throws StreamErrorException {
-    final Element queryElement = stanza.getIqElement(CommonXmlns.SOFTWARE_VERSION, "query");
+    final Element queryElement = stanza.getIqElement();
     final String name = DomUtils
         .convertToList(queryElement.getChildNodes())
         .stream()
@@ -303,6 +304,7 @@ public class BasePlugin implements Plugin {
 
   /**
    * Queries {@link DiscoItem}s associated with a {@link Jid}.
+   * @see <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service Discovery</a>
    */
   public Maybe<DiscoInfo> queryDiscoInfo(final Jid jid) {
     if (context == null) {
@@ -317,6 +319,7 @@ public class BasePlugin implements Plugin {
 
   /**
    * Queries {@link DiscoItem}s associated with a {@link Jid}.
+   * @see <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service Discovery</a>
    */
   public Maybe<List<DiscoItem>> queryDiscoItems(final Jid jid, final String node) {
     if (context == null) {
@@ -386,7 +389,8 @@ public class BasePlugin implements Plugin {
   /**
    * Pings an entity. Signals a {@link java.util.NoSuchElementException} if the remote entity never
    * responds before the {@link Session} is disposed of.
-   * @param jid The entity address. If {@code null} is specified, the server will be pinged.
+   * @param jid The entity address. If empty, the server will be pinged.
+   * @see <a href="https://xmpp.org/extensions/xep-0199.html">XEP-0199: XMPP Ping</a>
    */
   public Completable ping(final Jid jid) {
     if (context == null) {
@@ -403,7 +407,7 @@ public class BasePlugin implements Plugin {
   }
 
   @Override
-  public Set<Map.Entry<String, String>> getSupportedIqs() {
+  public Set<IqSignature> getSupportedIqs() {
     return Collections.unmodifiableSet(SUPPORTED_IQS);
   }
 
@@ -415,32 +419,28 @@ public class BasePlugin implements Plugin {
     context
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqName().equals("query"))
-        .filter(it -> it.getIqNamespace().equals(CommonXmlns.SOFTWARE_VERSION))
+        .filter(it -> it.getIqSignature().equals(CommonXmlns.SOFTWARE_VERSION, "query"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateSoftwareVersionResult(it))));
 
     // disco#info
     context
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqName().equals("query"))
-        .filter(it -> it.getIqNamespace().equals(CommonXmlns.SERVICE_DISCOVERY + "#info"))
+        .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY + "#info", "query"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoInfoResult(it))));
 
     // disco#items
     context
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqName().equals("query"))
-        .filter(it -> it.getIqNamespace().equals(CommonXmlns.SERVICE_DISCOVERY + "#items"))
+        .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY + "#items", "query"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoItemsResult(it))));
 
     // Ping
     context
         .getInboundStanzaStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> "ping".equals(it.getIqName()))
-        .filter(it -> CommonXmlns.PING.equals(it.getIqNamespace()))
+        .filter(it -> it.getIqSignature().equals(CommonXmlns.PING, "ping"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(XmlWrapperStanza.createIqResult(it))));
   }
 }

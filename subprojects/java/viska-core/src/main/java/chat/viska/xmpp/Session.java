@@ -22,6 +22,7 @@ import io.reactivex.Maybe;
 import io.reactivex.Observable;
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
@@ -29,12 +30,15 @@ import java.util.Collections;
 import java.util.EventObject;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
@@ -154,10 +158,33 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   @ThreadSafe
   public class PluginManager implements SessionAware {
 
-    @GuardedBy("itself")
-    private final Set<PluginContext> contexts = new HashSet<>();
+    private final Set<PluginContext> contexts = new CopyOnWriteArraySet<>();
 
-    private PluginManager() {}
+    private PluginManager() {
+      final Consumer<Stanza> action = stanza -> {
+        final IqSignature signature = stanza.getIqSignature();
+        final List<PluginContext> interestedContexts = contexts
+            .parallelStream()
+            .filter(it -> it.plugin.getSupportedIqs().contains(signature))
+            .collect(Collectors.toList());
+        if (interestedContexts.isEmpty()) {
+          // TODO: Send stanza error conveniently
+        } else {
+          interestedContexts.parallelStream().forEach(
+              it -> it.feedStanza(stanza)
+          );
+        }
+      };
+      final Consumer<Throwable> handler = it -> {
+        if (it instanceof StreamErrorException) {
+          sendError((StreamErrorException) it);
+        }
+      };
+      getInboundStanzaStream()
+          .filter(it -> it.getType() == Stanza.Type.IQ)
+          .subscribeOn(Schedulers.io())
+          .subscribe(action, handler);
+    }
 
     /**
      * Applies a {@link Plugin}. This method does nothing if the plugin
@@ -231,7 +258,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       synchronized (this.contexts) {
         for (PluginContext it : this.contexts) {
           if (type.isInstance(it.plugin)) {
-            it.onDestroying();
+            it.onRemove();
             toRemove.add(it);
           }
         }
@@ -278,30 +305,22 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     private final FlowableProcessor<Stanza> inboundStanzaStream = PublishProcessor
         .<Stanza>create()
         .toSerialized();
-    private CompositeDisposable rxTokens = new CompositeDisposable();
+    private Disposable availableSubscription = Flowable.combineLatest(
+        enabled.getStream(),
+        stateProperty().getStream(),
+        (enabled, state) -> enabled && state == State.ONLINE
+    ).observeOn(Schedulers.io()).subscribe(available::change);
 
     private PluginContext(final Plugin plugin) {
       this.plugin = plugin;
-
-      rxTokens.add(
-          Flowable.combineLatest(
-              enabled.getStream(),
-              stateProperty().getStream(),
-              (enabled, state) -> enabled && state == State.ONLINE
-          ).observeOn(Schedulers.io()).subscribe(available::change)
-      );
-
-      final Disposable stanzaToken = Session
-          .this
-          .getInboundStanzaStream()
-          .filter(it -> this.enabled.get())
-          .observeOn(Schedulers.io())
-          .subscribe(this.inboundStanzaStream::onNext);
-      rxTokens.add(stanzaToken);
     }
 
-    private void onDestroying() {
-      rxTokens.dispose();
+    private void onRemove() {
+      availableSubscription.dispose();
+    }
+
+    private void feedStanza(final Stanza stanza) {
+      inboundStanzaStream.onNext(stanza);
     }
 
     /**
@@ -392,7 +411,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     }
 
     /**
-     * Indicates if the interacting sending or receiving stanzas is available.
+     * Indicates if the window for sending or receiving {@link Stanza}s is open.
      */
     public Property<Boolean> availableProperty() {
       return available;
@@ -440,7 +459,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   /**
    * Gets a stream of inbound {@link Stanza}s. It is usually subscribed by {@link PluginContext}s.
    */
-  protected abstract Flowable<XmlWrapperStanza> getInboundStanzaStream();
+  protected abstract Flowable<Stanza> getInboundStanzaStream();
 
   /**
    * Sends a {@link Stanza} into the XMPP stream. Usually invoked by {@link PluginContext}s.
