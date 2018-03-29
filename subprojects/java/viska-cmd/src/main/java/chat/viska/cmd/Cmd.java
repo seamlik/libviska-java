@@ -124,7 +124,7 @@ public class Cmd {
       for (String domain : domains) {
         System.out.println('<' + domain + '>');
         final List<Connection> connections = Connection
-            .queryAll(domain, null, Collections.emptyList())
+            .queryDns(domain, Collections.emptyList())
             .blockingGet();
         for (Connection it : connections) {
           System.out.print(it.getProtocol());
@@ -185,7 +185,7 @@ public class Cmd {
     } else {
       try {
         connection = Connection
-            .queryAll(jid.getDomainPart(), null, Collections.emptyList())
+            .queryDns(jid.getDomainPart(), Collections.emptyList())
             .flattenAsObservable(it -> it)
             .filter(Connection::isTlsEnabled)
             .blockingFirst();
