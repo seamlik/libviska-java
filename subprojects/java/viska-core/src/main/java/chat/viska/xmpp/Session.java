@@ -33,13 +33,13 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
+import org.checkerframework.checker.lock.qual.GuardedBy;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import rxbeans.ExceptionCaughtEvent;
@@ -156,7 +156,8 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   @ThreadSafe
   public class PluginManager implements SessionAware {
 
-    private final Set<PluginContext> contexts = new CopyOnWriteArraySet<>();
+    @GuardedBy("this")
+    private final Set<PluginContext> contexts = new LinkedHashSet<>();
 
     private PluginManager() {
       final Consumer<Stanza> action = stanza -> {
@@ -196,38 +197,32 @@ public abstract class Session extends StandardObject implements AutoCloseable {
      * has already been applied.
      * @throws IllegalArgumentException If it fails to apply the {@link Plugin}.
      */
-    public void apply(final Class<? extends Plugin> type) {
-      synchronized (this.contexts) {
-        if (getPlugins().parallelStream().anyMatch(type::isInstance)) {
-          return;
-        }
-        final Plugin plugin;
-        try {
-          plugin = type.getConstructor().newInstance();
-        } catch (Exception ex) {
-          throw new IllegalArgumentException(
-              ex
-          );
-        }
-        for (Class<? extends Plugin> it : plugin.getAllDependencies()) {
-          apply(it);
-        }
-        final PluginContext context = new PluginContext(plugin);
-        this.contexts.add(context);
-        plugin.onApplying(context);
+    public synchronized void apply(final Class<? extends Plugin> type) {
+      if (getPlugins().parallelStream().anyMatch(type::isInstance)) {
+        return;
       }
+      final Plugin plugin;
+      try {
+        plugin = type.getConstructor().newInstance();
+      } catch (Exception ex) {
+        throw new IllegalArgumentException(ex);
+      }
+      for (Class<? extends Plugin> it : plugin.getAllDependencies()) {
+        apply(it);
+      }
+      final PluginContext context = new PluginContext(plugin);
+      this.contexts.add(context);
+      plugin.onApplying(context);
     }
 
     /**
      * Gets an applied plugin which is of a particular type.
      * @throws NoSuchElementException If no such plugin found.
      */
-    public <T extends Plugin> T getPlugin(final Class<T> type) {
-      synchronized (this.contexts) {
-        for (PluginContext it : this.contexts) {
-          if (type.isInstance(it.plugin)) {
-            return type.cast(it.plugin);
-          }
+    public synchronized  <T extends Plugin> T getPlugin(final Class<T> type) {
+      for (PluginContext it : this.contexts) {
+        if (type.isInstance(it.plugin)) {
+          return type.cast(it.plugin);
         }
       }
       throw new NoSuchElementException();
@@ -236,7 +231,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     /**
      * Gets all applied {@link Plugin}.
      */
-    public Set<Plugin> getPlugins() {
+    public synchronized Set<Plugin> getPlugins() {
       final Set<Plugin> results = new HashSet<>();
       Observable.fromIterable(this.contexts).map(it -> it.plugin).subscribe(results::add);
       return Collections.unmodifiableSet(results);
@@ -245,12 +240,10 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     /**
      * Enable or disable a {@link Plugin}.
      */
-    public void setEnabled(final Class<? extends Plugin> type, final boolean enabled) {
-      synchronized (this.contexts) {
-        for (PluginContext it : this.contexts) {
-          if (type.isInstance(it.plugin)) {
-            it.enabled.change(false);
-          }
+    public synchronized void setEnabled(final Class<? extends Plugin> type, final boolean enabled) {
+      for (PluginContext it : contexts) {
+        if (type.isInstance(it.plugin)) {
+          it.enabled.change(false);
         }
       }
     }
@@ -258,29 +251,25 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     /**
      * Removes a {@link Plugin}.
      */
-    public void remove(final Class<? extends Plugin> type) {
+    public synchronized void remove(final Class<? extends Plugin> type) {
       final Set<PluginContext> toRemove = new HashSet<>();
-      synchronized (this.contexts) {
-        for (PluginContext it : this.contexts) {
-          if (type.isInstance(it.plugin)) {
-            it.onRemove();
-            toRemove.add(it);
-          }
+      for (PluginContext it : contexts) {
+        if (type.isInstance(it.plugin)) {
+          it.onRemove();
+          toRemove.add(it);
         }
-        this.contexts.removeAll(toRemove);
       }
+      contexts.removeAll(toRemove);
     }
 
     /**
      * Gets all features provided by the currently applied plugins.
      * @see <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>
      */
-    public Set<String> getAllFeatures() {
+    public synchronized Set<String> getAllFeatures() {
       final Set<String> features = new LinkedHashSet<>();
-      synchronized (contexts) {
-        for (PluginContext it : contexts) {
-          features.addAll(it.plugin.getAllFeatures());
-        }
+      for (PluginContext it : contexts) {
+        features.addAll(it.plugin.getAllFeatures());
       }
       return features;
     }
