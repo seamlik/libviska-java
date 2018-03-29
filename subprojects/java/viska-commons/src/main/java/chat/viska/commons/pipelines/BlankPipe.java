@@ -35,14 +35,14 @@ public class BlankPipe implements Pipe {
   public static final BlankPipe INSTANCE = new BlankPipe();
 
   @Override
-  public void catchInboundException(final Pipeline<?, ?> pipeline, final Throwable cause)
-      throws Throwable {
+  public void catchInboundException(final Pipeline<?, ?> pipeline, final Exception cause)
+      throws Exception {
     throw cause;
   }
 
   @Override
-  public void catchOutboundException(final Pipeline<?, ?> pipeline, final Throwable cause)
-      throws Throwable {
+  public void catchOutboundException(final Pipeline<?, ?> pipeline, final Exception cause)
+      throws Exception {
     throw cause;
   }
 

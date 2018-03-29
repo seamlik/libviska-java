@@ -42,8 +42,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Validate;
 import org.checkerframework.checker.lock.qual.GuardedBy;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import rxbeans.ExceptionCaughtEvent;
 import rxbeans.MutableProperty;
 import rxbeans.Property;
+import rxbeans.StandardObject;
 import rxbeans.StandardProperty;
 
 /**
@@ -65,11 +67,17 @@ import rxbeans.StandardProperty;
  * deadlocks.</p>
  *
  * <p>{@link Pipe}s are uniquely named, but multiple unnamed {@link Pipe}s are allowed.</p>
+ *
+ * <p>This type emits the following events:</p>
+ *
+ * <ul>
+ *   <li>{@link ExceptionCaughtEvent}</li>
+ * </ul>
  * @param <I> Type of the inbound output.
  * @param <O> Type of the outbound output.
  */
 @ThreadSafe
-public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
+public class Pipeline<I, O> extends StandardObject implements Iterable<Map.Entry<String, Pipe>> {
 
   /**
    * States of a {@link Pipeline}.
@@ -90,13 +98,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   @GuardedBy("pipeLock")
   private final LinkedList<Map.Entry<String, Pipe>> pipes = new LinkedList<>();
   private final FlowableProcessor<I> inboundStream = PublishProcessor.<I>create().toSerialized();
-  private final FlowableProcessor<Throwable> inboundExceptionStream = PublishProcessor
-      .<Throwable>create()
-      .toSerialized();
   private final FlowableProcessor<O> outboundStream = PublishProcessor.<O>create().toSerialized();
-  private final FlowableProcessor<Throwable> outboundExceptionStream = PublishProcessor
-      .<Throwable>create()
-      .toSerialized();
   private final BlockingQueue<Object> readQueue = new LinkedBlockingQueue<>();
   private final BlockingQueue<Object> writeQueue = new LinkedBlockingQueue<>();
   private final ReadWriteLock pipeLock = new ReentrantReadWriteLock(true);
@@ -122,7 +124,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
           } else {
             pipe.onWriting(this, it, out);
           }
-        } catch (Throwable cause) {
+        } catch (Exception cause) {
           processException(iterator, cause, isReading);
           return;
         }
@@ -149,7 +151,7 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
   }
 
   private void processException(ListIterator<Map.Entry<String, Pipe>> iterator,
-                                Throwable cause,
+                                Exception cause,
                                 boolean isReading) {
     while (isReading ? iterator.hasNext() : iterator.hasPrevious()) {
       final Pipe pipe = isReading ? iterator.next().getValue() : iterator.previous().getValue();
@@ -160,15 +162,11 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
           pipe.catchOutboundException(this, cause);
         }
         return;
-      } catch (Throwable rethrown) {
+      } catch (Exception rethrown) {
         cause = rethrown;
       }
     }
-    if (isReading) {
-      inboundExceptionStream.onNext(cause);
-    } else {
-      outboundExceptionStream.onNext(cause);
-    }
+    triggerEvent(new ExceptionCaughtEvent(this, cause));
   }
 
   @Nullable
@@ -575,16 +573,8 @@ public class Pipeline<I, O> implements Iterable<Map.Entry<String, Pipe>> {
     return inboundStream;
   }
 
-  public Flowable<Throwable> getInboundExceptionStream() {
-    return inboundExceptionStream;
-  }
-
   public Flowable<O> getOutboundStream() {
     return outboundStream;
-  }
-
-  public Flowable<Throwable> getOutboundExceptionStream() {
-    return outboundExceptionStream;
   }
 
   @Override

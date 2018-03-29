@@ -17,8 +17,6 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.EnumUtils;
-import java.net.URI;
-import java.net.URISyntaxException;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -69,10 +67,10 @@ public class StanzaErrorException extends Exception {
 
   private final Stanza.Type stanzaType;
   private final String id;
-  private final Jid originalSender;
-  private final Jid intendedRecipient;
+  private final Jid sender;
+  private final Jid recipient;
   private final Jid errorGenerator;
-  private final @Nullable URI redirect;
+  private final String redirect;
   private final Type type;
   private final Condition condition;
   private final String text;
@@ -109,10 +107,10 @@ public class StanzaErrorException extends Exception {
         document.getDocumentElement().getLocalName()
     );
     final String id = document.getDocumentElement().getAttribute("id");
-    final Jid originalSender = new Jid(
+    final Jid recipient = new Jid(
         document.getDocumentElement().getAttribute("to")
     );
-    final Jid intendedRecipient = new Jid(
+    final Jid sender = new Jid(
         document.getDocumentElement().getAttribute("from")
     );
     final Jid errorGenerator = new Jid(errorElement.getAttribute("by"));
@@ -138,20 +136,7 @@ public class StanzaErrorException extends Exception {
           "Incorrect condition namespace."
       );
     }
-    final boolean hasRedirect =
-        (condition == Condition.GONE || condition == Condition.REDIRECT)
-        && !conditionElement.getTextContent().isEmpty();
-    final URI redirect;
-    try {
-      redirect = hasRedirect
-          ? new URI(conditionElement.getTextContent())
-          : null;
-    } catch (URISyntaxException ex) {
-      throw new StreamErrorException(
-          StreamErrorException.Condition.INVALID_XML,
-          "Malformed redirect URI."
-      );
-    }
+    final String redirect = conditionElement.getTextContent();
     final String text = textElement == null ? "" : textElement.getTextContent();
     final Element appCondition = hasAppCondition
         ? (Element) errorElement.getChildNodes().item(textElement != null ? 3 : 2)
@@ -163,8 +148,8 @@ public class StanzaErrorException extends Exception {
     return new StanzaErrorException(
         stanzaType,
         id,
-        originalSender,
-        intendedRecipient,
+        sender,
+        recipient,
         condition,
         type,
         text,
@@ -175,50 +160,28 @@ public class StanzaErrorException extends Exception {
     );
   }
 
-  public StanzaErrorException(final Stanza stanza,
-                              final Condition condition,
-                              final Type type,
-                              final String text,
-                              final Jid errorGenerator,
-                              @Nullable final URI redirect,
-                              @Nullable final Element appCondition) {
-    this(
-        stanza.getType(),
-        stanza.getId(),
-        stanza.getSender(),
-        stanza.getRecipient(),
-        condition,
-        type,
-        text,
-        errorGenerator,
-        redirect,
-        appCondition,
-        null
-    );
-  }
-
   /**
    * Default constructor.
    */
-  public StanzaErrorException(final Stanza.Type stanzaType,
-                              final String id,
-                              final Jid originalSender,
-                              final Jid intendedRecipient,
-                              final Condition condition,
-                              final Type errorType,
-                              final String text,
-                              final Jid errorGenerator,
-                              @Nullable final URI redirect,
-                              @Nullable final Element appCondition,
-                              @Nullable final Element stanza) {
+  private StanzaErrorException(final Stanza.Type stanzaType,
+                               final String id,
+                               final Jid sender,
+                               final Jid recipient,
+                               final Condition condition,
+                               final Type errorType,
+                               final String text,
+                               final Jid errorGenerator,
+                               final String redirect,
+                               @Nullable final Element appCondition,
+                               @Nullable final Element stanza) {
     super(
         "[" + EnumUtils.toXmlValue(condition) + "]"
             + (text == null ? "" : " " + text)
     );
     this.stanzaType = stanzaType;
     this.id = id;
-    this.originalSender = originalSender;
-    this.intendedRecipient = intendedRecipient;
+    this.sender = sender;
+    this.recipient = recipient;
     this.errorGenerator = errorGenerator;
     this.redirect = redirect;
     this.type = errorType;
@@ -236,17 +199,17 @@ public class StanzaErrorException extends Exception {
   }
 
   /**
-   * Gets the stanza sender.
+   * Gets the sender.
    */
-  public Jid getOriginalSender() {
-    return originalSender;
+  public Jid getSender() {
+    return sender;
   }
 
   /**
-   * Gets the stanza recipient.
+   * Gets the recipient.
    */
-  public Jid getIntendedRecipient() {
-    return intendedRecipient;
+  public Jid getRecipient() {
+    return recipient;
   }
 
   /**
@@ -297,11 +260,9 @@ public class StanzaErrorException extends Exception {
   }
 
   /**
-   * Gets the redirected {@link URI}. It serves as the <em>gone URI</em> when
-   * the condition is {@link Condition#GONE}.
+   * Gets the redirection.
    */
-  @Nullable
-  public URI getRedirect() {
+  public String getRedirect() {
     return redirect;
   }
 

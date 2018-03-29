@@ -17,7 +17,6 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.DomUtils;
-import chat.viska.commons.ExceptionCaughtEvent;
 import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.sasl.AuthenticationException;
@@ -55,6 +54,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
+import rxbeans.ExceptionCaughtEvent;
 import rxbeans.MutableProperty;
 import rxbeans.Property;
 import rxbeans.StandardProperty;

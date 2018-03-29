@@ -17,7 +17,6 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.DomUtils;
-import chat.viska.commons.ExceptionCaughtEvent;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -57,6 +56,7 @@ import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
+import rxbeans.ExceptionCaughtEvent;
 
 /**
  * XMPP session using TCP connections implemented using Netty.
@@ -350,7 +350,11 @@ public class NettyTcpSession extends StandardSession {
 
           @Override
           public void exceptionCaught(final ChannelHandlerContext ctx, final Throwable cause) {
-            triggerEvent(new ExceptionCaughtEvent(NettyTcpSession.this, cause));
+            if (cause instanceof Exception) {
+              triggerEvent(new ExceptionCaughtEvent(NettyTcpSession.this, (Exception) cause));
+            } else {
+              throw new RuntimeException(cause);
+            }
           }
         });
       }

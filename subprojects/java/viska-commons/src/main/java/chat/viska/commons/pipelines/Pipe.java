@@ -44,7 +44,7 @@ public interface Pipe {
    * @param cause Received exception.
    * @throws Throwable If the Pipe decides to forward the exception.
    */
-  void catchInboundException(Pipeline<?, ?> pipeline, Throwable cause) throws Throwable;
+  void catchInboundException(Pipeline<?, ?> pipeline, Exception cause) throws Exception;
 
   /**
    * Invoked when the Pipe received an exception in the writing direction.
@@ -52,7 +52,7 @@ public interface Pipe {
    * @param cause Received exception.
    * @throws Throwable If the Pipe decides to forward the exception.
    */
-  void catchOutboundException(Pipeline<?, ?> pipeline, Throwable cause) throws Throwable;
+  void catchOutboundException(Pipeline<?, ?> pipeline, Exception cause) throws Exception;
 
   /**
    * Invoked when the Pipe is reading data.

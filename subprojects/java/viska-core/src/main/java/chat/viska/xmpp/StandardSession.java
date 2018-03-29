@@ -17,7 +17,6 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.DomUtils;
-import chat.viska.commons.ExceptionCaughtEvent;
 import chat.viska.commons.pipelines.BlankPipe;
 import chat.viska.commons.pipelines.Pipeline;
 import chat.viska.sasl.CredentialRetriever;
@@ -48,6 +47,7 @@ import org.checkerframework.checker.initialization.qual.UnknownInitialization;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
+import rxbeans.ExceptionCaughtEvent;
 
 /**
  * XMPP session responsible for connecting to an XMPP server, exchanging XMPP
@@ -200,18 +200,16 @@ public abstract class StandardSession extends Session {
     stateProperty().getStream().filter(it -> it == State.CONNECTED).subscribe(
         it -> xmlPipeline.start()
     );
-    this.xmlPipeline.getInboundExceptionStream().subscribe(
-        cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
-    );
-    this.xmlPipeline.getOutboundExceptionStream().subscribe(
-        cause -> triggerEvent(new ExceptionCaughtEvent(this, cause))
-    );
+    xmlPipeline
+        .getEventStream()
+        .ofType(ExceptionCaughtEvent.class)
+        .observeOn(Schedulers.io())
+        .subscribe(this::log);
     xmlPipeline.getOutboundStream().filter(it -> {
       final Level level = getLogger().getLevel();
       return level != null && level.intValue() <= Level.FINE.intValue();
     }).subscribe(
-        it -> getLogger().fine("[XML sent] " + DomUtils.writeString(it)),
-        ex -> triggerEvent(new ExceptionCaughtEvent(this, ex))
+        it -> getLogger().fine("[XML sent] " + DomUtils.writeString(it))
     );
     xmlPipeline.addAtInboundEnd(PIPE_HANDSHAKER, BlankPipe.INSTANCE);
   }

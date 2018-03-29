@@ -16,7 +16,6 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.ExceptionCaughtEvent;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
@@ -43,6 +42,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import rxbeans.ExceptionCaughtEvent;
 import rxbeans.MutableProperty;
 import rxbeans.Property;
 import rxbeans.StandardObject;
@@ -54,7 +54,7 @@ import rxbeans.StandardProperty;
  * <p>This type emits the following types of {@link EventObject}:</p>
  *
  * <ul>
- *   <li>{@link chat.viska.commons.ExceptionCaughtEvent}</li>
+ *   <li>{@link ExceptionCaughtEvent}</li>
  * </ul>
  */
 @ThreadSafe
@@ -166,7 +166,12 @@ public abstract class Session extends StandardObject implements AutoCloseable {
             .filter(it -> it.plugin.getSupportedIqs().contains(signature))
             .collect(Collectors.toList());
         if (interestedContexts.isEmpty()) {
-          // TODO: Send stanza error conveniently
+          sendStanza(new XmlWrapperStanza(XmlWrapperStanza.createIqError(
+              stanza,
+              StanzaErrorException.Condition.SERVICE_UNAVAILABLE,
+              StanzaErrorException.Type.CANCEL,
+              ""
+          )));
         } else {
           interestedContexts.parallelStream().forEach(
               it -> it.feedStanza(stanza)
@@ -176,6 +181,8 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       final Consumer<Throwable> handler = it -> {
         if (it instanceof StreamErrorException) {
           sendError((StreamErrorException) it);
+        } else if (it instanceof Exception){
+          log(new ExceptionCaughtEvent(Session.this, (Exception) it));
         }
       };
       getInboundStanzaStream()
@@ -440,7 +447,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   }
 
   protected void log(final ExceptionCaughtEvent event) {
-    logger.log(Level.SEVERE, event.toString(), event.getCause());
+    logger.log(Level.SEVERE, event.toString(), event.getException());
   }
 
   protected Session() {

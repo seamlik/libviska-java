@@ -19,6 +19,7 @@ package chat.viska.xmpp;
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
 /**
  * Raw XML data wrapper.
@@ -28,7 +29,7 @@ public class XmlWrapperStanza implements Stanza {
   private final Document xml;
 
   /**
-   * Generates a {@link Document} template for an {@code <iq/>}.
+   * Generates a template for an {@code <iq/>}.
    */
   public static Document createIq(final IqType type,
                                   final String id,
@@ -55,21 +56,45 @@ public class XmlWrapperStanza implements Stanza {
   }
 
   /**
-   * Generates a template of a result to this {@code <iq/>}.
+   * Generates a template of a result to an {@code <iq/>}.
    */
   public static Document createIqResult(final Stanza stanza) {
-    if (stanza.getType() != Type.IQ) {
-      throw new IllegalStateException("This stanza is not an <iq/>.");
-    }
-    if (stanza.getIqType() == IqType.RESULT || stanza.getIqType() == null) {
-      throw new IllegalStateException("This stanza is already an <iq/> result.");
-    }
     return XmlWrapperStanza.createIq(
         IqType.RESULT,
         stanza.getId(),
         stanza.getRecipient(),
         stanza.getSender()
     );
+  }
+
+  /**
+   * Generates a template of an {@code <iq/>} error.
+   */
+  public static Document createIqError(final Stanza stanza,
+                                       final StanzaErrorException.Condition condition,
+                                       final StanzaErrorException.Type type,
+                                       final String msg) {
+    final Document xml = createIq(
+        IqType.ERROR,
+        stanza.getId(),
+        stanza.getRecipient(),
+        stanza.getSender()
+    );
+    final Element error = xml.createElement("error");
+    error.setAttribute("type", EnumUtils.toXmlValue(type));
+    xml.getDocumentElement().appendChild(error);
+
+    error.appendChild(
+        xml.createElementNS(CommonXmlns.STANZA_ERROR, EnumUtils.toXmlValue(condition))
+    );
+
+    if (!msg.isEmpty()) {
+      final Element text = xml.createElementNS(CommonXmlns.STANZA_ERROR, "text");
+      text.setTextContent(msg);
+      error.appendChild(text);
+    }
+
+    return xml;
   }
 
   /**

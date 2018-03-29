@@ -1,13 +1,13 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.DomUtils;
-import chat.viska.commons.ExceptionCaughtEvent;
 import io.reactivex.Flowable;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import javax.xml.transform.TransformerException;
+import rxbeans.ExceptionCaughtEvent;
 
 /**
  * Simulated {@link Session} for testing {@link Plugin}s.
@@ -47,8 +47,7 @@ public class SimulatedSession extends Session {
 
   public SimulatedSession() {
     outboundStream.subscribe(
-        it -> System.out.println("[XML sent] " + DomUtils.writeString(it.toXml())),
-        ex -> triggerEvent(new ExceptionCaughtEvent(this, ex))
+        it -> System.out.println("[XML sent] " + DomUtils.writeString(it.toXml()))
     );
   }
 
