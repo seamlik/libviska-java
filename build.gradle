@@ -37,7 +37,7 @@ buildscript {
     google()
   }
   dependencies {
-    classpath 'com.android.tools.build:gradle:3.0.1'
+    classpath 'com.android.tools.build:gradle:3.1.0'
     classpath 'org.junit.platform:junit-platform-gradle-plugin:1.1.0'
   }
 }
@@ -66,11 +66,9 @@ project(':java').subprojects {
   apply from: "${rootDir}/gradle/java.gradle"
 }
 
-/*
 project(':android').subprojects {
   apply from: "${rootDir}/gradle/android.gradle"
 }
-*/
 
 task javadocAll(type: Javadoc) {
   def outputDir = file("${buildDir}/javadocAll")

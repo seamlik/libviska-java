@@ -1,5 +1,6 @@
 rootProject.name = 'viska'
 
+include ':android:viska-impl-webrtc-android'
 include ':java:viska-cmd'
 include ':java:viska-commons'
 include ':java:viska-core'

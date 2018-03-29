@@ -177,7 +177,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
               ex
           );
         }
-        for (Class<? extends Plugin> it : plugin.getDependencies()) {
+        for (Class<? extends Plugin> it : plugin.getAllDependencies()) {
           apply(it);
         }
         final PluginContext context = new PluginContext(plugin);
@@ -247,7 +247,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       final Set<String> features = new LinkedHashSet<>();
       synchronized (contexts) {
         for (PluginContext it : contexts) {
-          features.addAll(it.plugin.getFeatures());
+          features.addAll(it.plugin.getAllFeatures());
         }
       }
       return features;

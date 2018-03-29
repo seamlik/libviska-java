@@ -29,14 +29,3 @@ welcome all kinds of help!
 
 In order to build the project, simply run `gradle` or
 `./gradlew` if you are using Gradle Wrapper.
-
-Since Android Gradle Plugin supports Android Studio only, the build scripts
-by default will not load any Android related subprojects in order to maintain
-compatibility with Intellij IDEA. In order to build all components, use
-`settings-full.gradle` when running Gradle commands. For example:
-
-```bash
-gradle --settings-file settings-full.gradle
-```
-
-Hopefully this will be fixed by a future version of the plugin.

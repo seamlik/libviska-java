@@ -1,5 +1,5 @@
 <!--
-  Copyright (C) 2017 Kai-Chung Yan (殷啟聰)
+  Copyright (C) 2018 Kai-Chung Yan (殷啟聰)
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -11,5 +11,8 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
 -->
-<manifest package="chat.viska.impl">
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="chat.viska.webrtc">
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 </manifest>

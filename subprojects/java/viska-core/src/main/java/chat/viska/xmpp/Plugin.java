@@ -62,7 +62,7 @@ public interface Plugin {
    * Gets all transitive and direct dependencies. When this plugin is being applied, all
    * dependencies will also be applied automatically.
    */
-  default Set<Class<? extends Plugin>> getDependencies() {
+  default Set<Class<? extends Plugin>> getAllDependencies() {
     final Set<Class<? extends Plugin>> dependencies = new LinkedHashSet<>();
     Class<?> clazz = getClass();
     while (clazz != null) {
@@ -76,15 +76,12 @@ public interface Plugin {
   }
 
   /**
-   * Gets the features currently enabled by the plugin. Results of this method
+   * Gets the features enabled by this type and all its parent types. Results of this method
    * are served when another peer entity is querying service info on this XMPP
    * client.
-   *
-   * <p>This API is part of
-   * <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service
-   * Discovery</a></p>
+   * @see <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service Discovery</a>
    */
-  default Set<String> getFeatures() {
+  default Set<String> getAllFeatures() {
     final Set<String> features = new LinkedHashSet<>();
     Class<?> clazz = getClass();
     while (clazz != null) {
