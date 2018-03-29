@@ -16,9 +16,7 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
-import java.util.Optional;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;

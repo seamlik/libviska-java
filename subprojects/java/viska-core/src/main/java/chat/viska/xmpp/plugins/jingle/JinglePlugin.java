@@ -23,7 +23,6 @@ import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Stanza;
 import chat.viska.xmpp.plugins.base.BasePlugin;
 import io.reactivex.Completable;
-import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.EventObject;
 import java.util.Map;

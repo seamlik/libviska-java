@@ -20,7 +20,6 @@ import chat.viska.commons.ExceptionCaughtEvent;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
-import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.processors.FlowableProcessor;
@@ -42,7 +41,6 @@ import java.util.stream.Collectors;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
-import org.checkerframework.checker.lock.qual.GuardedBy;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import rxbeans.MutableProperty;
@@ -302,7 +300,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
         enabled.get() && stateProperty().get() == State.ONLINE
     );
     private final Plugin plugin;
-    private final FlowableProcessor<Stanza> inboundStanzaStream = PublishProcessor
+    private final FlowableProcessor<Stanza> inboundIqStream = PublishProcessor
         .<Stanza>create()
         .toSerialized();
     private Disposable availableSubscription = Flowable.combineLatest(
@@ -320,7 +318,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     }
 
     private void feedStanza(final Stanza stanza) {
-      inboundStanzaStream.onNext(stanza);
+      inboundIqStream.onNext(stanza);
     }
 
     /**
@@ -344,7 +342,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       if (iq.getType() != Stanza.Type.IQ) {
         throw new IllegalArgumentException("Not an <iq/>.");
       } else if (iq.getIqType() == Stanza.IqType.GET || iq.getIqType() == Stanza.IqType.SET) {
-        response = getInboundStanzaStream().filter(
+        response = getInboundIqStream().filter(
             it -> iq.getId().equals(it.getId())
         ).firstElement().doOnSuccess(it -> {
           if (it.getIqType() == Stanza.IqType.ERROR) {
@@ -404,10 +402,11 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     }
 
     /**
-     * Gets a stream of inbound {@link Stanza}s.
+     * Gets a stream of inbound {@code <iq/>}s that only matches the {@link IqSignature}s registered
+     * in {@link Plugin#getSupportedIqs()}.
      */
-    public Flowable<Stanza> getInboundStanzaStream() {
-      return inboundStanzaStream;
+    public Flowable<Stanza> getInboundIqStream() {
+      return inboundIqStream;
     }
 
     /**

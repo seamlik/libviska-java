@@ -28,7 +28,6 @@ import chat.viska.xmpp.StreamErrorException;
 import chat.viska.xmpp.XmlWrapperStanza;
 import io.reactivex.Completable;
 import io.reactivex.Maybe;
-import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -417,28 +416,28 @@ public class BasePlugin implements Plugin {
 
     // Software Version
     context
-        .getInboundStanzaStream()
+        .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqSignature().equals(CommonXmlns.SOFTWARE_VERSION, "query"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateSoftwareVersionResult(it))));
 
     // disco#info
     context
-        .getInboundStanzaStream()
+        .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY + "#info", "query"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoInfoResult(it))));
 
     // disco#items
     context
-        .getInboundStanzaStream()
+        .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY + "#items", "query"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoItemsResult(it))));
 
     // Ping
     context
-        .getInboundStanzaStream()
+        .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
         .filter(it -> it.getIqSignature().equals(CommonXmlns.PING, "ping"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(XmlWrapperStanza.createIqResult(it))));
