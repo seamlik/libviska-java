@@ -197,6 +197,13 @@ public class BasePlugin implements Plugin {
         .collect(Collectors.toList());
   }
 
+  private Session.PluginContext getContext() {
+    if (context == null) {
+      throw new IllegalStateException();
+    }
+    return context;
+  }
+
   private Document generateSoftwareVersionResult(final Stanza query) {
     final Document result = XmlWrapperStanza.createIqResult(query);
     final Node queryElement = result.getDocumentElement().appendChild(result.createElementNS(
@@ -216,10 +223,6 @@ public class BasePlugin implements Plugin {
   }
 
   private Document generateDiscoInfoResult(final Stanza query) {
-    if (context == null) {
-      throw new IllegalStateException();
-    }
-
     final Document result = XmlWrapperStanza.createIqResult(query);
     final Node queryElement = result.getDocumentElement().appendChild(result.createElementNS(
         CommonXmlns.SERVICE_DISCOVERY + "#info",
@@ -231,7 +234,7 @@ public class BasePlugin implements Plugin {
     identityElement.setAttribute("category", "client");
     identityElement.setAttribute("type", identityType.get());
     identityElement.setAttribute("name", softwareName.get());
-    context.getSession().getPluginManager().getAllFeatures().stream().sorted().forEach(it -> {
+    getContext().getSession().getPluginManager().getAllFeatures().stream().sorted().forEach(it -> {
       final Element featureElement = (Element) queryElement.appendChild(
           result.createElement("feature")
       );
@@ -306,10 +309,7 @@ public class BasePlugin implements Plugin {
    * @see <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service Discovery</a>
    */
   public Maybe<DiscoInfo> queryDiscoInfo(final Jid jid) {
-    if (context == null) {
-      throw new IllegalStateException();
-    }
-    return context.sendIq(
+    return getContext().sendIq(
         CommonXmlns.SERVICE_DISCOVERY + "#info",
         jid,
         Collections.emptyMap()
@@ -321,20 +321,17 @@ public class BasePlugin implements Plugin {
    * @see <a href="https://xmpp.org/extensions/xep-0030.html">XEP-0030: Service Discovery</a>
    */
   public Maybe<List<DiscoItem>> queryDiscoItems(final Jid jid, final String node) {
-    if (context == null) {
-      throw new IllegalStateException();
-    }
     final Map<String, String> param = new HashMap<>();
     if (!node.isEmpty()) {
       param.put("node", node);
     }
-    return context.sendIq(
+    return getContext().sendIq(
         CommonXmlns.SERVICE_DISCOVERY + "#items",
         jid,
         param
     ).getResponse().map(BasePlugin::convertToDiscoItems).doOnError(it -> {
       if (it instanceof StreamErrorException) {
-        context.sendError((StreamErrorException) it);
+        getContext().sendError((StreamErrorException) it);
       }
     });
   }
@@ -343,15 +340,12 @@ public class BasePlugin implements Plugin {
    * Queries information of the XMPP software.
    */
   public Maybe<SoftwareInfo> querySoftwareInfo(final Jid jid) {
-    if (context == null) {
-      throw new IllegalStateException();
-    }
-    return context.sendIq(
+    return getContext().sendIq(
         CommonXmlns.SOFTWARE_VERSION, jid,
         Collections.emptyMap()
     ).getResponse().map(BasePlugin::convertToSoftwareInfo).doOnError(it -> {
       if (it instanceof StreamErrorException) {
-        context.sendError((StreamErrorException) it);
+        getContext().sendError((StreamErrorException) it);
       }
     });
   }
@@ -360,17 +354,14 @@ public class BasePlugin implements Plugin {
    * Queries roster.
    */
   public Maybe<List<RosterItem>> queryRoster() {
-    if (context == null) {
-      throw new IllegalStateException();
-    }
-    return context
+    return getContext()
         .sendIq(CommonXmlns.ROSTER, Jid.EMPTY, Collections.emptyMap())
         .getResponse()
         .map(Stanza::toXml)
         .map(BasePlugin::convertToRosterItems)
         .doOnError(it -> {
           if (it instanceof StreamErrorException) {
-            context.sendError((StreamErrorException) it);
+            getContext().sendError((StreamErrorException) it);
           }
         });
   }
@@ -392,17 +383,14 @@ public class BasePlugin implements Plugin {
    * @see <a href="https://xmpp.org/extensions/xep-0199.html">XEP-0199: XMPP Ping</a>
    */
   public Completable ping(final Jid jid) {
-    if (context == null) {
-      throw new IllegalStateException();
-    }
     final Document iq = XmlWrapperStanza.createIq(
         Stanza.IqType.GET,
         UUID.randomUUID().toString(),
-        this.context.getSession().getNegotiatedJid(),
+        getContext().getSession().getNegotiatedJid(),
         jid
     );
     iq.getDocumentElement().appendChild(iq.createElementNS(CommonXmlns.PING, "ping"));
-    return this.context.sendIq(new XmlWrapperStanza(iq)).getResponse().toSingle().toCompletable();
+    return getContext().sendIq(new XmlWrapperStanza(iq)).getResponse().toSingle().toCompletable();
   }
 
   @Override
