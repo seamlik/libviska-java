@@ -80,7 +80,7 @@ task javadocAll(type: Javadoc) {
   inputs.files overviewPath
   options {
     links(
-        'https://docs.oracle.com/javase/10/docs/api',
+        'https://docs.oracle.com/javase/8/docs/api',
         'https://developer.android.com/reference',
         'http://reactivex.io/RxJava/2.x/javadoc',
         'https://checkerframework.org/api',
