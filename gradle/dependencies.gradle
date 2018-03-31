@@ -19,7 +19,8 @@ ext {
   libraryVersions = [:]
 }
 
-libraries.COMMONS_LANG = 'org.apache.commons:commons-lang3:3.6'
-
 libraryVersions.NETTY = '4.1.22.Final'
 libraryVersions.CHECKER_FRAMEWORK = '2.4.0'
+
+libraries.COMMONS_LANG = 'org.apache.commons:commons-lang3:3.6'
+libraries.CHECKER_FRAMEWORK_CHECKER = "org.checkerframework:checker:${libraryVersions.CHECKER_FRAMEWORK}"

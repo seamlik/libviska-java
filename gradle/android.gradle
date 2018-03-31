@@ -39,3 +39,18 @@ publishing {
     }
   }
 }
+
+if (hasProperty('USE_CHECKER_FRAMEWORK')) {
+  dependencies {
+    annotationProcessor rootProject.libraries.CHECKER_FRAMEWORK_CHECKER
+  }
+  afterEvaluate {
+    tasks.withType(JavaCompile) {
+      options.compilerArgs += [
+          "-Xbootclasspath/p:${configurations.checkerFrameworkAnnotatedJDK.asPath}".toString(),
+          '-processor', rootProject.checkerFrameworkProcessors.join(','),
+          "-AskipUses=${rootProject.checkerFrameworkSkipUses.join('|')}".toString()
+      ]
+    }
+  }
+}

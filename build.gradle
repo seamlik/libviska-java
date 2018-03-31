@@ -26,7 +26,8 @@ ext {
       '^io\\.netty\\.',
       '^io\\.reactivex\\.',
       '^java\\.net\\.URI',
-      '^org\\.apache\\.commons\\.lang3\\.'
+      '^org\\.apache\\.commons\\.lang3\\.',
+      '^org\\.webrtc\\.'
   ]
 }
 
@@ -46,8 +47,8 @@ subprojects {
   if (!subprojects.isEmpty()) { return }
   group = 'chat.viska'
   version = file("${rootDir}/VERSION").text
+
   configurations {
-    checkerFrameworkCheckerJar
     checkerFrameworkAnnotatedJDK
     all {
       resolutionStrategy {
@@ -55,11 +56,18 @@ subprojects {
       }
     }
   }
+
+  dependencies {
+    checkerFrameworkAnnotatedJDK "org.checkerframework:jdk8:${rootProject.libraryVersions.CHECKER_FRAMEWORK}"
+  }
+
   repositories {
     mavenLocal()
     jcenter()
     google()
   }
+
+
 }
 
 project(':java').subprojects {

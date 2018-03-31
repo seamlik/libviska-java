@@ -22,9 +22,11 @@ apply plugin: 'pmd'
 
 sourceCompatibility = 8
 
+configurations {
+  checkerFrameworkChecker
+}
+
 dependencies {
-  checkerFrameworkAnnotatedJDK "org.checkerframework:jdk8:${rootProject.libraryVersions.CHECKER_FRAMEWORK}"
-  checkerFrameworkCheckerJar "org.checkerframework:checker:${rootProject.libraryVersions.CHECKER_FRAMEWORK}"
   testImplementation("org.junit.jupiter:junit-jupiter-api:5.1.0")
   testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.1.0")
 }
@@ -37,14 +39,7 @@ publishing {
   }
 }
 
-tasks.withType(JavaCompile) {
-  options.compilerArgs += [
-      '-processorpath', "${configurations.checkerFrameworkCheckerJar.asPath}".toString(),
-      "-Xbootclasspath/p:${configurations.checkerFrameworkAnnotatedJDK.asPath}".toString(),
-      '-processor', rootProject.checkerFrameworkProcessors.join(','),
-      "-AskipUses=${rootProject.checkerFrameworkSkipUses.join('|')}".toString()
-  ]
-}
+
 
 checkstyle {
   toolVersion = '8.8'
@@ -71,4 +66,18 @@ pmd {
       'category/java/multithreading.xml',
       'category/java/performance.xml'
   ]
+}
+
+if (hasProperty('USE_CHECKER_FRAMEWORK')) {
+  dependencies {
+    checkerFrameworkChecker "org.checkerframework:checker:${rootProject.libraryVersions.CHECKER_FRAMEWORK}"
+  }
+  tasks.withType(JavaCompile) {
+    options.compilerArgs += [
+        '-processorpath', "${configurations.checkerFrameworkChecker.asPath}".toString(),
+        "-Xbootclasspath/p:${configurations.checkerFrameworkAnnotatedJDK.asPath}".toString(),
+        '-processor', rootProject.checkerFrameworkProcessors.join(','),
+        "-AskipUses=${rootProject.checkerFrameworkSkipUses.join('|')}".toString()
+    ]
+  }
 }

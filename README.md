@@ -27,5 +27,13 @@ welcome all kinds of help!
 
 ## How to Build
 
-In order to build the project, simply run `gradle` or
-`./gradlew` if you are using Gradle Wrapper.
+The default Gradle tasks are set to build the release-variant binaries and the
+Javadoc.
+
+This project also uses [Checker Framework](https://checkerframework.org) for
+checking type errors. In order to enable it, run Gradle with a project property
+`USE_CHECKER_FRAMEWORK`. For example:
+
+```
+./gradlew assemble -PUSE_CHECKER_FRAMEWORK=true
+```
