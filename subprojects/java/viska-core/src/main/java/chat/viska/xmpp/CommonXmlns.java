@@ -23,6 +23,7 @@ public final class CommonXmlns {
   public static final String JINGLE = "urn:xmpp:jingle:1";
   public static final String JINGLE_GROUPING = "urn:xmpp:jingle:apps:grouping:0";
   public static final String JINGLE_ICE = "urn:xmpp:jingle:transports:ice:0";
+  public static final String JINGLE_RTP = "urn:xmpp:jingle:apps:rtp:1";
   public static final String JINGLE_RTP_AUDIO = "urn:xmpp:jingle:apps:rtp:audio";
   public static final String JINGLE_RTP_VIDEO = "urn:xmpp:jingle:apps:rtp:video";
   public static final String PING = "urn:xmpp:ping";
@@ -31,12 +32,12 @@ public final class CommonXmlns {
   public static final String ROSTER = "jabber:iq:roster";
   public static final String ROSTER_VERSION = "urn:xmpp:features:rosterver";
   public static final String SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
-  public static final String SERVICE_DISCOVERY = "http://jabber.org/protocol/disco";
   public static final String SDP_GROUPING = "urn:ietf:rfc:5888";
+  public static final String SERVICE_DISCOVERY_INFO = "http://jabber.org/protocol/disco#info";
+  public static final String SERVICE_DISCOVERY_ITEMS = "http://jabber.org/protocol/disco#items";
   public static final String SOFTWARE_VERSION = "jabber:iq:version";
   public static final String STANZA_CLIENT = "jabber:client";
   public static final String STANZA_ERROR = "urn:ietf:params:xml:ns:xmpp-stanzas";
-  public static final String STANZA_SERVER = "jabber:server";
   public static final String STARTTLS = "urn:ietf:params:xml:ns:xmpp-tls";
   public static final String STREAM_COMPRESSION = "http://jabber.org/features/compress";
   public static final String STREAM_ERROR = "urn:ietf:params:xml:ns:xmpp-streams";

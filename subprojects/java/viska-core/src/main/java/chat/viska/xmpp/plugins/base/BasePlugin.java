@@ -59,18 +59,18 @@ import rxbeans.StandardProperty;
  */
 @Plugin.Features({
     CommonXmlns.PING,
-    CommonXmlns.SERVICE_DISCOVERY + "#info",
-    CommonXmlns.SERVICE_DISCOVERY + "#items",
+    CommonXmlns.SERVICE_DISCOVERY_INFO,
+    CommonXmlns.SERVICE_DISCOVERY_ITEMS,
     CommonXmlns.SOFTWARE_VERSION
 })
 public class BasePlugin implements Plugin {
 
   private static final Set<IqSignature> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
       new IqSignature(
-          CommonXmlns.SERVICE_DISCOVERY + "#info", "query"
+          CommonXmlns.SERVICE_DISCOVERY_INFO, "query"
       ),
       new IqSignature(
-          CommonXmlns.SERVICE_DISCOVERY + "#items", "query"
+          CommonXmlns.SERVICE_DISCOVERY_ITEMS, "query"
       ),
       new IqSignature(
           CommonXmlns.SOFTWARE_VERSION, "query"
@@ -107,7 +107,7 @@ public class BasePlugin implements Plugin {
         .stream()
         .map(it -> (Element) it)
         .filter(it -> "identity".equals(it.getLocalName()))
-        .filter(it -> (CommonXmlns.SERVICE_DISCOVERY + "#info").equals(it.getNamespaceURI()))
+        .filter(it -> (CommonXmlns.SERVICE_DISCOVERY_INFO).equals(it.getNamespaceURI()))
         .map(it -> new DiscoInfo.Identity(
             it.getAttribute("category"),
             it.getAttribute("name"),
@@ -119,7 +119,7 @@ public class BasePlugin implements Plugin {
         .stream()
         .map(it -> (Element) it)
         .filter(it -> "feature".equals(it.getLocalName()))
-        .filter(it -> (CommonXmlns.SERVICE_DISCOVERY + "#info").equals(it.getNamespaceURI()))
+        .filter(it -> (CommonXmlns.SERVICE_DISCOVERY_INFO).equals(it.getNamespaceURI()))
         .map(it -> it.getAttribute("var"))
         .collect(Collectors.toList());
     return new DiscoInfo(identities, features);
@@ -225,7 +225,7 @@ public class BasePlugin implements Plugin {
   private Document generateDiscoInfoResult(final Stanza query) {
     final Document result = XmlWrapperStanza.createIqResult(query);
     final Node queryElement = result.getDocumentElement().appendChild(result.createElementNS(
-        CommonXmlns.SERVICE_DISCOVERY + "#info",
+        CommonXmlns.SERVICE_DISCOVERY_INFO,
         "query"
     ));
     final Element identityElement = (Element) queryElement.appendChild(
@@ -247,7 +247,7 @@ public class BasePlugin implements Plugin {
     // TODO: Figure out what's happening here
     final Document result = XmlWrapperStanza.createIqResult(query);
     final Element queryElement = result.createElementNS(
-        CommonXmlns.SERVICE_DISCOVERY + "#items",
+        CommonXmlns.SERVICE_DISCOVERY_ITEMS,
         "query"
     );
     final String node = (
@@ -310,7 +310,7 @@ public class BasePlugin implements Plugin {
    */
   public Maybe<DiscoInfo> queryDiscoInfo(final Jid jid) {
     return getContext().sendIq(
-        CommonXmlns.SERVICE_DISCOVERY + "#info",
+        CommonXmlns.SERVICE_DISCOVERY_INFO,
         jid,
         Collections.emptyMap()
     ).getResponse().map(BasePlugin::convertToDiscoInfo);
@@ -326,7 +326,7 @@ public class BasePlugin implements Plugin {
       param.put("node", node);
     }
     return getContext().sendIq(
-        CommonXmlns.SERVICE_DISCOVERY + "#items",
+        CommonXmlns.SERVICE_DISCOVERY_ITEMS,
         jid,
         param
     ).getResponse().map(BasePlugin::convertToDiscoItems).doOnError(it -> {
@@ -413,14 +413,14 @@ public class BasePlugin implements Plugin {
     context
         .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY + "#info", "query"))
+        .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY_INFO, "query"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoInfoResult(it))));
 
     // disco#items
     context
         .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY + "#items", "query"))
+        .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY_ITEMS, "query"))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoItemsResult(it))));
 
     // Ping
