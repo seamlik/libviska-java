@@ -39,6 +39,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import javax.annotation.concurrent.ThreadSafe;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -63,6 +64,7 @@ import rxbeans.StandardProperty;
     CommonXmlns.SERVICE_DISCOVERY_ITEMS,
     CommonXmlns.SOFTWARE_VERSION
 })
+@ThreadSafe
 public class BasePlugin implements Plugin {
 
   private static final Set<IqSignature> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
