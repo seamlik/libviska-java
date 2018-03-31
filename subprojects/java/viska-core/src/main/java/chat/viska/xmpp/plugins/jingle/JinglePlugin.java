@@ -20,15 +20,16 @@ import chat.viska.xmpp.CommonXmlns;
 import chat.viska.xmpp.IqSignature;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
-import chat.viska.xmpp.Stanza;
 import chat.viska.xmpp.plugins.base.BasePlugin;
 import io.reactivex.Completable;
 import java.util.Collections;
 import java.util.EventObject;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import javax.annotation.concurrent.ThreadSafe;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
+import rxbeans.Property;
 import rxbeans.StandardObject;
 import rxbeans.StandardProperty;
 
@@ -36,7 +37,10 @@ import rxbeans.StandardProperty;
  * Provides support for <a href="https://xmpp.org/extensions/xep-0166.html">Jingle</a> sessions.
  */
 @Plugin.DependsOn(BasePlugin.class)
-@Plugin.Features(CommonXmlns.JINGLE)
+@Plugin.Features({
+    CommonXmlns.JINGLE,
+    CommonXmlns.SDP_GROUPING
+})
 @ThreadSafe
 public class JinglePlugin extends StandardObject implements Plugin {
 
@@ -46,20 +50,29 @@ public class JinglePlugin extends StandardObject implements Plugin {
   @ThreadSafe
   public class SessionInitiationReceivedEvent extends EventObject {
 
-    private final Session session;
-    private final Stanza stanza;
+    private final Jid initiator;
+    private final String id;
+    private final Session.Description description;
 
-    private SessionInitiationReceivedEvent(final Session session, final Stanza stanza) {
+    private SessionInitiationReceivedEvent(final Jid initiator,
+                                           final String id,
+                                           final Session.Description description) {
       super(JinglePlugin.this);
-      this.session = session;
-      this.stanza = stanza;
+      this.initiator = initiator;
+      this.id = id;
+      this.description = description;
     }
 
-    /**
-     * Gets the {@link Session} to be created.
-     */
-    public Session getSession() {
-      return session;
+    public Session.Description getDescription() {
+      return description;
+    }
+
+    public Jid getInitiator() {
+      return initiator;
+    }
+
+    public String getId() {
+      return id;
     }
 
     /**
@@ -67,13 +80,6 @@ public class JinglePlugin extends StandardObject implements Plugin {
      * @return Token that notifies once the initiator sends an ACK.
      */
     public Completable accept() {
-      throw new UnsupportedOperationException();
-    }
-
-    /**
-     * Rejects the {@link Session} but sends a redirect message.
-     */
-    public void redirect(final String msg) {
       throw new UnsupportedOperationException();
     }
 
@@ -89,6 +95,17 @@ public class JinglePlugin extends StandardObject implements Plugin {
       Collections.emptyMap()
   );
   private chat.viska.xmpp.Session.@MonotonicNonNull PluginContext context;
+
+  private chat.viska.xmpp.Session.PluginContext getContext() {
+    if (context == null) {
+      throw new IllegalStateException();
+    }
+    return context;
+  }
+
+  public Property<Map<String, Session>> sessionsProperty() {
+    return sessions;
+  }
 
   /**
    * Initiates a {@link Session}.
@@ -107,8 +124,20 @@ public class JinglePlugin extends StandardObject implements Plugin {
     throw new UnsupportedOperationException();
   }
 
-  public Session initiateRtpSession(final Jid responder, final boolean audio, final boolean video) {
-    throw new UnsupportedOperationException();
+  public Session createSession(final Jid peer) {
+    return getContext()
+        .getSession()
+        .getPluginManager()
+        .getPlugins()
+        .parallelStream()
+        .filter(it -> it instanceof SessionPlugin)
+        .map(it -> (SessionPlugin) it)
+        .findFirst()
+        .orElseThrow(UnsupportedOperationException::new)
+        .createSession(
+            UUID.randomUUID().toString(),
+            peer
+        );
   }
 
   @Override

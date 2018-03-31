@@ -16,26 +16,21 @@
 
 package chat.viska.xmpp.plugins.jingle;
 
-import chat.viska.xmpp.Jid;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
- * <a href="https://xmpp.org/extensions/xep-0167.html">Jingle RTP session</a>.
+ * Describes content grouping in a Jingle session.
+ * @see <a href="https://xmpp.org/extensions/xep-0338.html">XEP-0338: Jingle Grouping Framework</a>
  */
-public abstract class RtpSession extends Session {
+public class ContentGroup {
 
-  /**
-   * Description for an {@link RtpSession}.
-   */
-  public static class Description {
+  public final String semantics;
+  public final List<String> names;
 
+  public ContentGroup(final String semantics, final List<String> names) {
+    this.semantics = semantics;
+    this.names = Collections.unmodifiableList(new ArrayList<>(names));
   }
-
-  /**
-   * Default constructor.
-   */
-  protected RtpSession(final String id, final Jid initiator, final Jid responder) {
-    super(id, initiator, responder);
-  }
-
-  public abstract Description generateInitiationOffer();
 }

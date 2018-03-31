@@ -16,25 +16,13 @@
 
 package chat.viska.xmpp.plugins.jingle;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import chat.viska.xmpp.Jid;
+import chat.viska.xmpp.Plugin;
+import javax.annotation.concurrent.ThreadSafe;
 
-/**
- * <a href="https://xmpp.org/extensions/xep-0371.html">Jingle ICE transport method</a>.
- */
-public class IceTransport {
+@Plugin.DependsOn(JinglePlugin.class)
+@ThreadSafe
+public interface SessionPlugin extends Plugin {
 
-  public static class Candidate {
-  }
-
-  public final List<Candidate> candidates;
-  public final String ufrag;
-  public final String pwd;
-
-  public IceTransport(final String ufrag, final String pwd, final List<Candidate> candidates) {
-    this.ufrag = ufrag;
-    this.pwd = pwd;
-    this.candidates = Collections.unmodifiableList(new ArrayList<>(candidates));
-  }
+  Session createSession(String id, Jid peer);
 }

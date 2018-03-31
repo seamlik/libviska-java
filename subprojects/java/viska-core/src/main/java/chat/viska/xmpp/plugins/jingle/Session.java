@@ -17,35 +17,55 @@
 package chat.viska.xmpp.plugins.jingle;
 
 import chat.viska.xmpp.Jid;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import javax.annotation.concurrent.ThreadSafe;
 import rxbeans.Property;
 import rxbeans.StandardProperty;
 
 /**
  * <a href="https://xmpp.org/extensions/xep-0166.html">Jingle</a> session.
  */
+@ThreadSafe
 public abstract class Session {
 
+  public static class Description {
+
+    public final Map<String, Content.Description> contents;
+    public final Set<ContentGroup> groups;
+
+    public Description(Map<String, Content.Description> contents, Set<ContentGroup> groups) {
+      this.contents = Collections.unmodifiableMap(new HashMap<>(contents));
+      this.groups = Collections.unmodifiableSet(new HashSet<>(groups));
+    }
+  }
+
+  private final String name;
+  private final Jid peer;
   private final StandardProperty<Boolean> active = new StandardProperty<>(false);
-  private String id;
-  private Jid initiator;
-  private Jid responder;
 
-  public Session(final String id, final Jid initiator, final Jid responder) {
-    this.id = id;
-    this.initiator = initiator;
-    this.responder = responder;
+  public Session(final String name, final Jid peer) {
+    this.name = name;
+    this.peer = peer;
   }
 
-  public String getId() {
-    return id;
+  public abstract Set<? extends Content> getLocalContents();
+
+  public abstract void applyRemoteDescription(Description description);
+
+  public abstract Description createOffer();
+
+  public abstract Description createAnswer();
+
+  public String getName() {
+    return name;
   }
 
-  public Jid getInitiator() {
-    return initiator;
-  }
-
-  public Jid getResponder() {
-    return responder;
+  public Jid getPeer() {
+    return peer;
   }
 
   public Property<Boolean> activeProperty() {

@@ -16,29 +16,12 @@
 
 package chat.viska.xmpp.plugins.jingle;
 
-import chat.viska.xmpp.Jid;
-import org.webrtc.PeerConnectionFactory;
+public abstract class Content {
 
-/**
- * {@link Session} backed by WebRTC.
- */
-public class WebRtcSession extends RtpSession {
+  interface Description {
 
-  private final PeerConnectionFactory webRtcFactory;
+    String getNamespace();
 
-  /**
-   * Default constructor
-   */
-  public WebRtcSession(final String id,
-                       final Jid initiator,
-                       final Jid responder,
-                       final PeerConnectionFactory webRtcFactory) {
-    super(id, initiator, responder);
-    this.webRtcFactory = webRtcFactory;
-  }
-
-  @Override
-  public Description generateInitiationOffer() {
-    return null;
+    String getName();
   }
 }

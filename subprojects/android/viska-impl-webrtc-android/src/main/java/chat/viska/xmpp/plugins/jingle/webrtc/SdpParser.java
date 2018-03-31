@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp.plugins.jingle;
+package chat.viska.xmpp.plugins.jingle.webrtc;
 
-import chat.viska.xmpp.Jid;
-import chat.viska.xmpp.Plugin;
+import chat.viska.xmpp.plugins.jingle.Session;
 
-public interface RtpPlugin extends Plugin {
+public final class SdpParser {
 
-  RtpSession createRtpSession(String id,
-                              Jid initiator,
-                              Jid responder,
-                              boolean audio,
-                              boolean video);
+  private SdpParser() {}
+
+  public static Session.Description parse(final String sdp) {
+    throw new UnsupportedOperationException();
+  }
+
+  public static String parse(final Session.Description description) {
+    throw new UnsupportedOperationException();
+  }
 }

@@ -14,27 +14,7 @@
  * limitations under the License.
  */
 
-package chat.viska.xmpp.plugins.jingle;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
 /**
- * <a href="https://xmpp.org/extensions/xep-0371.html">Jingle ICE transport method</a>.
+ * Provides plugins for <a href="https://xmpp.org/extensions/xep-0166.html">Jingle</a> protocols.
  */
-public class IceTransport {
-
-  public static class Candidate {
-  }
-
-  public final List<Candidate> candidates;
-  public final String ufrag;
-  public final String pwd;
-
-  public IceTransport(final String ufrag, final String pwd, final List<Candidate> candidates) {
-    this.ufrag = ufrag;
-    this.pwd = pwd;
-    this.candidates = Collections.unmodifiableList(new ArrayList<>(candidates));
-  }
-}
+package chat.viska.xmpp.plugins.jingle;

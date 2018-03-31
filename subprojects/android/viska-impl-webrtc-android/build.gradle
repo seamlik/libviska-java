@@ -16,5 +16,5 @@
 
 dependencies {
   api project(':java:viska-core')
-  implementation 'org.webrtc:google-webrtc:1.0.22512'
+  implementation 'org.webrtc:google-webrtc:1.0.22672'
 }

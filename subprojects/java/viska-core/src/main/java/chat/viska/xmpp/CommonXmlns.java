@@ -21,8 +21,10 @@ package chat.viska.xmpp;
  */
 public final class CommonXmlns {
   public static final String JINGLE = "urn:xmpp:jingle:1";
+  public static final String JINGLE_GROUPING = "urn:xmpp:jingle:apps:grouping:0";
   public static final String JINGLE_ICE = "urn:xmpp:jingle:transports:ice:0";
-  public static final String JINGLE_RTP = "urn:xmpp:jingle:apps:rtp:";
+  public static final String JINGLE_RTP_AUDIO = "urn:xmpp:jingle:apps:rtp:audio";
+  public static final String JINGLE_RTP_VIDEO = "urn:xmpp:jingle:apps:rtp:video";
   public static final String PING = "urn:xmpp:ping";
   public static final String RESOURCE_BINDING = "urn:ietf:params:xml:ns:xmpp-bind";
   public static final String RESOURCE_BINDING_2 = "urn:xmpp:bind2:0";
@@ -30,6 +32,7 @@ public final class CommonXmlns {
   public static final String ROSTER_VERSION = "urn:xmpp:features:rosterver";
   public static final String SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
   public static final String SERVICE_DISCOVERY = "http://jabber.org/protocol/disco";
+  public static final String SDP_GROUPING = "urn:ietf:rfc:5888";
   public static final String SOFTWARE_VERSION = "jabber:iq:version";
   public static final String STANZA_CLIENT = "jabber:client";
   public static final String STANZA_ERROR = "urn:ietf:params:xml:ns:xmpp-stanzas";
