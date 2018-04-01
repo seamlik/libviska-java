@@ -58,7 +58,7 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
 
     @Override
     public void onSignalingChange(final PeerConnection.SignalingState state) {
-      synchronized (Session.this) {
+      synchronized (Session.this.state) {
         final boolean negotiated = Session.this.state.get() == State.NEGOTIATED;
         if (state == PeerConnection.SignalingState.STABLE && negotiated) {
           Session.this.state.change(State.ACTIVE);
@@ -103,11 +103,7 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
   public class AudioContent extends RtpContent {
 
     private AudioContent(final MediaStreamTrack track) {
-      enabledProperty().getStream().subscribe(it -> {
-        synchronized (Session.this) {
-          track.setEnabled(it);
-        }
-      });
+      enabledProperty().getStream().subscribe(track::setEnabled);
     }
 
     @Override
@@ -137,47 +133,56 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
    * Adds a local {@link AudioTrack}.
    * @param lsGroups Lip syncing {@link ContentGroup}s that the {@link AudioTrack} will be added to.
    */
-  public synchronized Content addAudioTrack(final Set<String> lsGroups) {
-    if (state.get() == State.CREATED) {
-      state.change(State.PREPARING_OFFER);
-    } else if (state.get() != State.PREPARING_ANSWER && state.get() != State.PREPARING_OFFER) {
-      throw new IllegalStateException();
-    }
+  public Content addAudioTrack(final Set<String> lsGroups) {
+    return state.getAndDo(state -> {
+      if (state == State.CREATED) {
+        this.state.change(State.PREPARING_OFFER);
+      } else if (state != State.PREPARING_ANSWER && state != State.PREPARING_OFFER) {
+        throw new IllegalStateException();
+      }
 
-    final AudioTrack track = factory.createAudioTrack(
-        UUID.randomUUID().toString(),
-        factory.createAudioSource(new MediaConstraints())
-    );
-    connection.addTrack(track, new ArrayList<>(lsGroups));
-    final Content content = new AudioContent(track);
-    contents.add(content);
-    return content;
+      final AudioTrack track = factory.createAudioTrack(
+          UUID.randomUUID().toString(),
+          factory.createAudioSource(new MediaConstraints())
+      );
+      connection.addTrack(track, new ArrayList<>(lsGroups));
+      final Content content = new AudioContent(track);
+      contents.add(content);
+      return content;
+    });
   }
 
   @Override
-  public synchronized Description createOffer() {
-    if (state.get() != State.PREPARING_OFFER) {
-      throw new IllegalStateException();
-    }
-    final SingleSubject<SessionDescription> sdp = SingleSubject.create();
-    connection.createOffer(new SdpCreationObserver(sdp), new MediaConstraints());
-    final Description description = SdpParser.parse(sdp.blockingGet().description);
+  public Description createOffer() {
+    return state.getAndDo(state -> {
+      if (state != State.PREPARING_OFFER) {
+        throw new IllegalStateException();
+      }
 
-    state.change(State.OFFER_SENT);
-    return description;
+      final SingleSubject<SessionDescription> sdp = SingleSubject.create();
+      connection.createOffer(new SdpCreationObserver(sdp), new MediaConstraints());
+      final Description description = SdpParser.parse(sdp.blockingGet().description);
+
+      this.state.change(State.OFFER_SENT);
+      return description;
+    });
   }
 
   @Override
-  public synchronized Description createAnswer() {
-    if (state.get() != State.PREPARING_ANSWER) {
-      throw new IllegalStateException();
-    }
-    final SingleSubject<SessionDescription> sdp = SingleSubject.create();
-    connection.createAnswer(new SdpCreationObserver(sdp), new MediaConstraints());
-    final Description description = SdpParser.parse(sdp.blockingGet().description);
+  public Description createAnswer() {
+    return state.getAndDo(state -> {
+      if (state != State.PREPARING_ANSWER) {
+        throw new IllegalStateException();
+      }
 
-    state.change(State.NEGOTIATED);
-    return description;
+      final SingleSubject<SessionDescription> sdp = SingleSubject.create();
+      connection.createAnswer(new SdpCreationObserver(sdp), new MediaConstraints());
+      final Description description = SdpParser.parse(sdp.blockingGet().description);
+
+      this.state.change(State.NEGOTIATED);
+      return description;
+    });
+
   }
 
   @Override
@@ -210,7 +215,9 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
   }
 
   @Override
-  public synchronized void terminate() {
-    connection.close();
+  public void terminate() {
+    synchronized (state) {
+      connection.close();
+    }
   }
 }
