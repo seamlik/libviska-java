@@ -18,6 +18,7 @@ package chat.viska.xmpp.plugins.jingle;
 
 import chat.viska.xmpp.Jid;
 import java.util.Collections;
+import java.util.EventObject;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -43,9 +44,89 @@ public abstract class Session {
     }
   }
 
+  /**
+   * State of a {@link Session}.
+   *
+   * <pre>{@code
+   *            modify contents                              createOffer()                    applyRemoteDescription()
+   *                                  +------------------+                    +------------+
+   *      +-------------------------> | PREPARING_OFFER  | +--------------->  | OFFER_SENT | +-------------------------+
+   *      |                           +------------------+                    +------------+                           |
+   *      |                                                                                                            |
+   *      |                                    +                                    +                                  |
+   *      |                                    | terminate()                        |                                  |
+   *      +                                    v                                    |                                  v
+   *                  terminate()                                                   | terminate()
+   * +---------+                         +------------+                             |                            +------------+
+   * | CREATED | +---------------------> | TERMINATED |  <-----------------------------------------------------+ |            |
+   * +---------+                         +------------+                             |                            |            |
+   *                                                                                +                            | NEGOTIATED |
+   *      +                                    ^                                                                 |            |
+   *      |                                    |                                +--------+                       |            |
+   *      |                                    | terminate()                    | ACTIVE | <-------------------+ |            |
+   *      |                                    |                                +--------+                       +------------+
+   *      |                                    +                                               Wait for ICE
+   *      |                                                                                                            ^
+   *      |                           +------------------+                                                             |
+   *      +-------------------------> | PREPARING_ANSWER | +-----------------------------------------------------------+
+   *                                  +------------------+                      createAnswer()
+   *       applyRemoteDescription()
+   * }</pre>
+   */
+  public enum State {
+
+    /**
+     * Media is flowing between peers.
+     */
+    ACTIVE,
+
+    /**
+     * {@link Session} has just been created.
+     */
+    CREATED,
+
+    /**
+     * An offer is generated and might have been sent to the peer, waiting for an answer.
+     */
+    OFFER_SENT,
+
+    /**
+     * Preparing an answer.
+     */
+    PREPARING_ANSWER,
+
+    /**
+     * Preparing an offer.
+     */
+    PREPARING_OFFER,
+
+    /**
+     * Offer and answer have been exchanged but ICE gathering might have not been completed.
+     */
+    NEGOTIATED,
+
+    /**
+     * Terminated.
+     */
+    TERMINATED
+  }
+
+  public class TerminatedWithErrorEvent extends EventObject {
+
+    private final Exception cause;
+
+    public TerminatedWithErrorEvent(final Session source, final Exception cause) {
+      super(source);
+      this.cause = cause;
+    }
+
+    public Exception getCause() {
+      return cause;
+    }
+  }
+
   private final String name;
   private final Jid peer;
-  private final StandardProperty<Boolean> active = new StandardProperty<>(false);
 
   public Session(final String name, final Jid peer) {
     this.name = name;
@@ -60,15 +141,15 @@ public abstract class Session {
 
   public abstract Description createAnswer();
 
+  public abstract Property<State> stateProperty();
+
+  public abstract void terminate();
+
   public String getName() {
     return name;
   }
 
   public Jid getPeer() {
     return peer;
-  }
-
-  public Property<Boolean> activeProperty() {
-    return active;
   }
 }

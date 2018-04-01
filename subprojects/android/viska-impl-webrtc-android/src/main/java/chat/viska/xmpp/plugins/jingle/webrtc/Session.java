@@ -20,6 +20,7 @@ import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.plugins.jingle.Content;
 import chat.viska.xmpp.plugins.jingle.ContentGroup;
 import chat.viska.xmpp.plugins.jingle.RtpContent;
+import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.CompletableSubject;
 import io.reactivex.subjects.SingleSubject;
 import java.util.ArrayList;
@@ -39,6 +40,8 @@ import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
 import org.webrtc.RtpReceiver;
 import org.webrtc.SessionDescription;
+import rxbeans.Property;
+import rxbeans.StandardProperty;
 
 /**
  * {@link chat.viska.xmpp.plugins.jingle.Session} backed by WebRTC.
@@ -49,35 +52,37 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
   private final PeerConnectionFactory factory;
   private final PeerConnection connection;
   private final Set<Content> contents = new HashSet<>();
+  private final StandardProperty<State> state = new StandardProperty<>(State.CREATED);
 
   private final PeerConnection.Observer connectionObserver = new PeerConnection.Observer() {
 
     @Override
-    public void onSignalingChange(final PeerConnection.SignalingState state) { }
-
-    @Override
-    public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
-
-    }
-
-    @Override
-    public void onIceConnectionReceivingChange(boolean b) {
-
-    }
-
-    @Override
-    public void onIceGatheringChange(PeerConnection.IceGatheringState iceGatheringState) {
+    public void onSignalingChange(final PeerConnection.SignalingState state) {
+      synchronized (Session.this) {
+        final boolean negotiated = Session.this.state.get() == State.NEGOTIATED;
+        if (state == PeerConnection.SignalingState.STABLE && negotiated) {
+          Session.this.state.change(State.ACTIVE);
+        } if (state == PeerConnection.SignalingState.CLOSED) {
+          Session.this.state.change(State.TERMINATED);
+        }
+      }
 
     }
 
     @Override
-    public void onIceCandidate(IceCandidate iceCandidate) {
-
-    }
+    public void onIceConnectionChange(final PeerConnection.IceConnectionState state) { }
 
     @Override
-    public void onIceCandidatesRemoved(IceCandidate[] iceCandidates) {
-    }
+    public void onIceConnectionReceivingChange(final boolean recieving) {}
+
+    @Override
+    public void onIceGatheringChange(final PeerConnection.IceGatheringState state) {}
+
+    @Override
+    public void onIceCandidate(final IceCandidate candidate) { }
+
+    @Override
+    public void onIceCandidatesRemoved(IceCandidate[] iceCandidates) {}
 
     @Override
     public void onAddStream(final MediaStream mediaStream) {}
@@ -121,6 +126,11 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
     super(id, peer);
     this.factory = factory;
     connection = factory.createPeerConnection(iceServers, connectionObserver);
+    state
+        .getStream()
+        .filter(it -> it == State.TERMINATED)
+        .observeOn(Schedulers.io())
+        .subscribe(it -> connection.dispose());
   }
 
   /**
@@ -128,8 +138,9 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
    * @param lsGroups Lip syncing {@link ContentGroup}s that the {@link AudioTrack} will be added to.
    */
   public synchronized Content addAudioTrack(final Set<String> lsGroups) {
-    // TODO: Should prohibit from modifying while waiting for answer
-    if (activeProperty().get()) {
+    if (state.get() == State.CREATED) {
+      state.change(State.PREPARING_OFFER);
+    } else if (state.get() != State.PREPARING_ANSWER && state.get() != State.PREPARING_OFFER) {
       throw new IllegalStateException();
     }
 
@@ -144,22 +155,34 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
   }
 
   @Override
-  public Description createOffer() {
+  public synchronized Description createOffer() {
+    if (state.get() != State.PREPARING_OFFER) {
+      throw new IllegalStateException();
+    }
     final SingleSubject<SessionDescription> sdp = SingleSubject.create();
     connection.createOffer(new SdpCreationObserver(sdp), new MediaConstraints());
-    return SdpParser.parse(sdp.blockingGet().description);
+    final Description description = SdpParser.parse(sdp.blockingGet().description);
+
+    state.change(State.OFFER_SENT);
+    return description;
   }
 
   @Override
-  public Description createAnswer() {
+  public synchronized Description createAnswer() {
+    if (state.get() != State.PREPARING_ANSWER) {
+      throw new IllegalStateException();
+    }
     final SingleSubject<SessionDescription> sdp = SingleSubject.create();
     connection.createAnswer(new SdpCreationObserver(sdp), new MediaConstraints());
-    return SdpParser.parse(sdp.blockingGet().description);
+    final Description description = SdpParser.parse(sdp.blockingGet().description);
+
+    state.change(State.NEGOTIATED);
+    return description;
   }
 
   @Override
-  public void applyRemoteDescription(Description description) {
-    if (activeProperty().get()) {
+  public synchronized void applyRemoteDescription(Description description) {
+    if (state.get() != State.CREATED && state.get() != State.OFFER_SENT) {
       throw new IllegalStateException();
     }
 
@@ -168,10 +191,26 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
         new SdpSetObserver(result),
         new SessionDescription(SessionDescription.Type.ANSWER, SdpParser.parse(description))
     );
+
+    if (state.get() == State.CREATED) {
+      state.change(State.PREPARING_ANSWER);
+    } else {
+      state.change(State.NEGOTIATED);
+    }
   }
 
   @Override
   public Set<Content> getLocalContents() {
     return Collections.unmodifiableSet(contents);
+  }
+
+  @Override
+  public Property<State> stateProperty() {
+    return state;
+  }
+
+  @Override
+  public synchronized void terminate() {
+    connection.close();
   }
 }
