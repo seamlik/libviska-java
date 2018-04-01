@@ -26,9 +26,9 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  */
 public class DiscoItem {
 
-  private final Jid jid;
-  private final String name;
-  private final String node;
+  public final Jid jid;
+  public final String name;
+  public final String node;
 
   public DiscoItem(final Jid jid,
                    final String name,
@@ -36,27 +36,6 @@ public class DiscoItem {
     this.jid = jid;
     this.name = name;
     this.node = node;
-  }
-
-  /**
-   * Gets the JID.
-   */
-  public Jid getJid() {
-    return jid;
-  }
-
-  /**
-   * Gets the name.
-   */
-  public String getName() {
-    return name;
-  }
-
-  /**
-   * Gets the node.
-   */
-  public String getNode() {
-    return node;
   }
 
   @Override

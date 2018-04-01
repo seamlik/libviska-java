@@ -54,25 +54,25 @@ public class Cmd {
         System.out.println("<" + it + ">");
         final DiscoInfo discoInfo = basePlugin.queryDiscoInfo(it).blockingGet();
         System.out.println("  Features: ");
-        discoInfo.getFeatures().stream().sorted().forEach(
+        discoInfo.features.stream().sorted().forEach(
             item -> System.out.println("    " + item)
         );
         System.out.println("  Identities:");
-        discoInfo.getIdentities().forEach(identity -> {
-          System.out.println("    Name: " + identity.getName());
-          System.out.println("      Category: " + identity.getCategory());
-          System.out.println("      Type: " + identity.getType());
+        discoInfo.identities.forEach(identity -> {
+          System.out.println("    Name: " + identity.name);
+          System.out.println("      Category: " + identity.category);
+          System.out.println("      Type: " + identity.type);
         });
 
         final List<DiscoItem> items = basePlugin.queryDiscoItems(it, "").blockingGet();
         System.out.println("  Items: ");
         items.forEach(item -> {
-          System.out.println("    JID: " + item.getJid());
-          if (!item.getName().isEmpty()) {
-            System.out.println("      Name: " + item.getName());
+          System.out.println("    JID: " + item.jid);
+          if (!item.name.isEmpty()) {
+            System.out.println("      Name: " + item.name);
           }
-          if (!item.getNode().isEmpty()) {
-            System.out.println("      Node: " + item.getNode());
+          if (!item.node.isEmpty()) {
+            System.out.println("      Node: " + item.node);
           }
         });
 
@@ -81,9 +81,9 @@ public class Cmd {
         }
         final SoftwareInfo softwareInfo = basePlugin.querySoftwareInfo(it).blockingGet();
         System.out.println("  Software Information: ");
-        System.out.println("    Name: " + softwareInfo.getName());
-        System.out.println("    Version: " + softwareInfo.getVersion());
-        System.out.println("    Operating system: " + softwareInfo.getOperatingSystem());
+        System.out.println("    Name: " + softwareInfo.name);
+        System.out.println("    Version: " + softwareInfo.version);
+        System.out.println("    Operating system: " + softwareInfo.operatingSystem);
         session.close();
       }
     }

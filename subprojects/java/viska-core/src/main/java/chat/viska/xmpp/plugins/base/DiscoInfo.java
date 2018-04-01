@@ -34,9 +34,9 @@ public class DiscoInfo {
    */
   public static class Identity {
 
-    private final String category;
-    private final String type;
-    private final String name;
+    public final String category;
+    public final String type;
+    public final String name;
 
     public Identity(final String category,
                     final String type,
@@ -44,27 +44,6 @@ public class DiscoInfo {
       this.category = category;
       this.type = type;
       this.name = name;
-    }
-
-    /**
-     * Gets the category.
-     */
-    public String getCategory() {
-      return category;
-    }
-
-    /**
-     * Gets the type.
-     */
-    public String getType() {
-      return type;
-    }
-
-    /**
-     * Gets the name.
-     */
-    public String getName() {
-      return name;
     }
 
     @Override
@@ -97,32 +76,16 @@ public class DiscoInfo {
     }
   }
 
-  private final List<Identity> identities;
-  private final List<String> features;
+  public final List<Identity> identities;
+  public final List<String> features;
 
   /**
    * Default constructor.
    */
   public DiscoInfo(final Collection<Identity> identities,
                    final Collection<String> features) {
-    this.identities = new ArrayList<>(identities);
-    this.features = new ArrayList<>(features);
-  }
-
-  /**
-   * Gets the identities.
-   * @return Unmodifiable set.
-   */
-  public List<Identity> getIdentities() {
-    return Collections.unmodifiableList(identities);
-  }
-
-  /**
-   * Gets the features.
-   * @return Unmodifiable set.
-   */
-  public List<String> getFeatures() {
-    return Collections.unmodifiableList(features);
+    this.identities = Collections.unmodifiableList(new ArrayList<>(identities));
+    this.features = Collections.unmodifiableList(new ArrayList<>(features));
   }
 
   @Override

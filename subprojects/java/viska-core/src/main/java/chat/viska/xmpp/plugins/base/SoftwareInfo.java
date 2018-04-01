@@ -26,9 +26,9 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  */
 public class SoftwareInfo {
 
-  private String name;
-  private String version;
-  private String operatingSystem;
+  public String name;
+  public String version;
+  public String operatingSystem;
 
   /**
    * Default constructor.
@@ -37,27 +37,6 @@ public class SoftwareInfo {
     this.name = name;
     this.version = version;
     this.operatingSystem = operatingSystem;
-  }
-
-  /**
-   * Gets the software name.
-   */
-  public String getName() {
-    return name;
-  }
-
-  /**
-   * Gets the software version.
-   */
-  public String getVersion() {
-    return version;
-  }
-
-  /**
-   * Gets the operating system name.
-   */
-  public String getOperatingSystem() {
-    return operatingSystem;
   }
 
   @Override
