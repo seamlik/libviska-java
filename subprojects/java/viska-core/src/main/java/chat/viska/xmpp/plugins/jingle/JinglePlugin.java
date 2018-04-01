@@ -39,7 +39,7 @@ import rxbeans.StandardProperty;
 @Plugin.DependsOn(BasePlugin.class)
 @Plugin.Features({
     CommonXmlns.JINGLE,
-    CommonXmlns.SDP_GROUPING
+    CommonXmlns.JINGLE_GROUPING
 })
 @ThreadSafe
 public class JinglePlugin extends StandardObject implements Plugin {

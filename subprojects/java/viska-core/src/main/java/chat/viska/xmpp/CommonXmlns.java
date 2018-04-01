@@ -32,7 +32,6 @@ public final class CommonXmlns {
   public static final String ROSTER = "jabber:iq:roster";
   public static final String ROSTER_VERSION = "urn:xmpp:features:rosterver";
   public static final String SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
-  public static final String SDP_GROUPING = "urn:ietf:rfc:5888";
   public static final String SERVICE_DISCOVERY_INFO = "http://jabber.org/protocol/disco#info";
   public static final String SERVICE_DISCOVERY_ITEMS = "http://jabber.org/protocol/disco#items";
   public static final String SOFTWARE_VERSION = "jabber:iq:version";
