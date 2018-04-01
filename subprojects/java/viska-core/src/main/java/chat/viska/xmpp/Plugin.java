@@ -58,6 +58,9 @@ public interface Plugin {
   /**
    * Gets all transitive and direct dependencies. When this plugin is being applied, all
    * dependencies will also be applied automatically.
+   *
+   * <p>Dependencies can be declared using {@link DependsOn}. Keep in mind to avoid circular
+   * dependencies in any way, since this will cause an infinite loop when applying the plugins.</p>
    */
   default Set<Class<? extends Plugin>> getAllDependencies() {
     final Set<Class<? extends Plugin>> dependencies = new LinkedHashSet<>();

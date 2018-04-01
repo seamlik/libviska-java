@@ -30,8 +30,6 @@ public class Version implements Comparable<Version> {
 
   /**
    * Constructs with parts specified.
-   * @param major
-   * @param minor
    */
   public Version(int major, int minor) {
     Validate.isTrue(major >= 0);

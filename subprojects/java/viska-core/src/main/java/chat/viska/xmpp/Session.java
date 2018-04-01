@@ -63,7 +63,6 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   /**
    * State of a {@link Session}.
    *
-   * <h1>State diagram</h1>
    * <pre>{@code
    *             +--------------+
    *             |              |
