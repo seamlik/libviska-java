@@ -57,20 +57,30 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
   private final PeerConnection.Observer connectionObserver = new PeerConnection.Observer() {
 
     @Override
-    public void onSignalingChange(final PeerConnection.SignalingState state) {
-      synchronized (Session.this.state) {
-        final boolean negotiated = Session.this.state.get() == State.NEGOTIATED;
-        if (state == PeerConnection.SignalingState.STABLE && negotiated) {
-          Session.this.state.change(State.ACTIVE);
-        } if (state == PeerConnection.SignalingState.CLOSED) {
-          Session.this.state.change(State.TERMINATED);
-        }
-      }
-
-    }
+    public void onSignalingChange(final PeerConnection.SignalingState state) {}
 
     @Override
-    public void onIceConnectionChange(final PeerConnection.IceConnectionState state) { }
+    public void onIceConnectionChange(final PeerConnection.IceConnectionState state) {
+      Session.this.state.getAndDo(sessionState -> {
+        switch (state) {
+          case CLOSED:
+            Session.this.state.change(State.TERMINATED);
+            break;
+          case FAILED:
+            Session.this.state.change(State.TERMINATED);
+            triggerEvent(new TerminatedWithErrorEvent(new Exception()));
+            break;
+          case DISCONNECTED:
+            Session.this.state.change(State.DISCONNECTED);
+            break;
+          case CONNECTED:
+            Session.this.state.change(State.ACTIVE);
+            break;
+          default:
+            break;
+        }
+      });
+    }
 
     @Override
     public void onIceConnectionReceivingChange(final boolean recieving) {}
@@ -216,8 +226,11 @@ public class Session extends chat.viska.xmpp.plugins.jingle.Session {
 
   @Override
   public void terminate() {
-    synchronized (state) {
-      connection.close();
-    }
+    connection.close();
+  }
+
+  @Override
+  public void reconnect() {
+    throw new UnsupportedOperationException();
   }
 }

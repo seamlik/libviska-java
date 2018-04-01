@@ -25,13 +25,13 @@ import java.util.Map;
 import java.util.Set;
 import javax.annotation.concurrent.ThreadSafe;
 import rxbeans.Property;
-import rxbeans.StandardProperty;
+import rxbeans.StandardObject;
 
 /**
  * <a href="https://xmpp.org/extensions/xep-0166.html">Jingle</a> session.
  */
 @ThreadSafe
-public abstract class Session {
+public abstract class Session extends StandardObject {
 
   public static class Description {
 
@@ -86,6 +86,11 @@ public abstract class Session {
     CREATED,
 
     /**
+     * Previously active but now disconnected accidentally.
+     */
+    DISCONNECTED,
+
+    /**
      * An offer is generated and might have been sent to the peer, waiting for an answer.
      */
     OFFER_SENT,
@@ -115,8 +120,8 @@ public abstract class Session {
 
     private final Exception cause;
 
-    public TerminatedWithErrorEvent(final Session source, final Exception cause) {
-      super(source);
+    public TerminatedWithErrorEvent(final Exception cause) {
+      super(Session.this);
       this.cause = cause;
     }
 
@@ -144,6 +149,8 @@ public abstract class Session {
   public abstract Property<State> stateProperty();
 
   public abstract void terminate();
+
+  public abstract void reconnect();
 
   public String getName() {
     return name;
