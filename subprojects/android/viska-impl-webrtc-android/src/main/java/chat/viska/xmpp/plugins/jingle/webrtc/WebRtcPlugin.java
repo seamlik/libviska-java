@@ -102,7 +102,5 @@ public class WebRtcPlugin implements SessionPlugin {
   }
 
   @Override
-  public void onApplying(final chat.viska.xmpp.Session.PluginContext context) {
-    jinglePlugin = context.getSession().getPluginManager().getPlugin(JinglePlugin.class);
-  }
+  public void onApply(final chat.viska.xmpp.Session.PluginContext context) {}
 }

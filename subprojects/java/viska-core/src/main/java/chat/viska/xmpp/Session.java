@@ -212,7 +212,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       }
       final PluginContext context = new PluginContext(plugin);
       this.contexts.add(context);
-      plugin.onApplying(context);
+      plugin.onApply(context);
     }
 
     /**

@@ -148,7 +148,7 @@ public class JinglePlugin extends StandardObject implements Plugin {
   }
 
   @Override
-  public void onApplying(chat.viska.xmpp.Session.PluginContext context) {
+  public void onApply(chat.viska.xmpp.Session.PluginContext context) {
     this.context = context;
   }
 }

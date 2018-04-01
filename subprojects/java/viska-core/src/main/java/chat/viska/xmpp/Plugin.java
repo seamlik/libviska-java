@@ -103,5 +103,5 @@ public interface Plugin {
    * Invoked when a {@link Plugin} is being applied to a {@link Session}.
    * @param context The {@link Session.PluginContext} that holds the {@link Plugin}.
    */
-  void onApplying(final Session.PluginContext context);
+  void onApply(final Session.PluginContext context);
 }

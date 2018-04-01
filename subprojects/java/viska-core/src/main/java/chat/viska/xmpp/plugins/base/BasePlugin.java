@@ -401,7 +401,7 @@ public class BasePlugin implements Plugin {
   }
 
   @Override
-  public void onApplying(final Session.PluginContext context) {
+  public void onApply(final Session.PluginContext context) {
     this.context = context;
 
     // Software Version
