@@ -386,9 +386,11 @@ public abstract class Session extends StandardObject implements AutoCloseable {
      * Sends a stream error and closes the connection.
      */
     public void sendError(final StreamErrorException error) {
-      availableProperty().getStream().filter(it -> it).firstElement().subscribe(
-          it -> Session.this.sendError(error)
-      );
+      enabled.getAndDo(enabled -> {
+        if (enabled) {
+          Session.this.sendError(error);
+        }
+      });
     }
 
     /**
