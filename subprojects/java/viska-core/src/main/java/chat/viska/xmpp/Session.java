@@ -19,6 +19,7 @@ package chat.viska.xmpp;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.exceptions.OnErrorNotImplementedException;
 import io.reactivex.functions.Consumer;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
@@ -298,6 +299,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
         stateProperty().getStream(),
         (enabled, state) -> enabled && state == State.ONLINE
     ).observeOn(Schedulers.io()).subscribe(available::change);
+    private final StreamErrorRxHandler streamErrorRxHandler = new StreamErrorRxHandler(this);
 
     private PluginContext(final Plugin plugin) {
       this.plugin = plugin;
@@ -394,9 +396,43 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       return inboundIqStream;
     }
 
+    /**
+     * Gets an instance of an {@link StreamErrorRxHandler} ready for use.
+     */
+    public StreamErrorRxHandler getStreamErrorRxHandler() {
+      return streamErrorRxHandler;
+    }
+
     @Override
     public Session getSession() {
       return Session.this;
+    }
+  }
+
+  /**
+   * Convenient class for using a subscriber to an RxJava stream that might throw a
+   * {@link StreamErrorException}.
+   */
+  public class StreamErrorRxHandler implements Consumer<Throwable> {
+
+    private final PluginContext context;
+
+    /**
+     * Default constructor.
+     */
+    public StreamErrorRxHandler(final PluginContext context) {
+      this.context = context;
+    }
+
+    @Override
+    public void accept(Throwable ex) {
+      if (ex instanceof StreamErrorException) {
+        context.sendError((StreamErrorException) ex);
+      } else if (ex instanceof OnErrorNotImplementedException){
+        log(new ExceptionCaughtEvent(context.plugin, ex.getCause()));
+      } else {
+        log(new ExceptionCaughtEvent(context.plugin, ex));
+      }
     }
   }
 
@@ -418,7 +454,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
   }
 
   protected void log(final ExceptionCaughtEvent event) {
-    logger.log(Level.SEVERE, event.toString(), event.getException());
+    logger.log(Level.SEVERE, event.toString(), event.getCause());
   }
 
   protected Session() {

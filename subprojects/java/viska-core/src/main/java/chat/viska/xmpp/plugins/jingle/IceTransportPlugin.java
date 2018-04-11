@@ -261,6 +261,6 @@ public class IceTransportPlugin extends StandardObject implements TransportPlugi
     context
         .getInboundIqStream()
         .filter(it -> validateTransportInfoStanza(it.getIqElement()))
-        .subscribe(this::processTransportInfoStanza, context.getRxErrorHandler());
+        .subscribe(this::processTransportInfoStanza, context.getStreamErrorRxHandler());
   }
 }
