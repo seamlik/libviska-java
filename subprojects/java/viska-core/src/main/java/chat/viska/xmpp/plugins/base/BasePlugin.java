@@ -19,7 +19,7 @@ package chat.viska.xmpp.plugins.base;
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
 import chat.viska.xmpp.CommonXmlns;
-import chat.viska.xmpp.IqSignature;
+import chat.viska.commons.XmlTagSignature;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
@@ -67,17 +67,17 @@ import rxbeans.StandardProperty;
 @ThreadSafe
 public class BasePlugin implements Plugin {
 
-  private static final Set<IqSignature> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
-      new IqSignature(
+  private static final Set<XmlTagSignature> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
+      new XmlTagSignature(
           CommonXmlns.SERVICE_DISCOVERY_INFO, "query"
       ),
-      new IqSignature(
+      new XmlTagSignature(
           CommonXmlns.SERVICE_DISCOVERY_ITEMS, "query"
       ),
-      new IqSignature(
+      new XmlTagSignature(
           CommonXmlns.SOFTWARE_VERSION, "query"
       ),
-      new IqSignature(CommonXmlns.ROSTER, "query")
+      new XmlTagSignature(CommonXmlns.ROSTER, "query")
   ));
 
   private final MutableProperty<String> softwareName = new StandardProperty<>("");
@@ -396,7 +396,7 @@ public class BasePlugin implements Plugin {
   }
 
   @Override
-  public Set<IqSignature> getSupportedIqs() {
+  public Set<XmlTagSignature> getSupportedIqs() {
     return Collections.unmodifiableSet(SUPPORTED_IQS);
   }
 

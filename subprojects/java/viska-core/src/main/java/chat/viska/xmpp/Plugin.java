@@ -16,6 +16,7 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.XmlTagSignature;
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -100,7 +101,7 @@ public interface Plugin {
    * {@link Plugin} so that it will only receive {@code <iq/>} with such signature. If no plugin
    * handles a particular {@code <iq/>}, a stanza error will be sent.
    */
-  Set<IqSignature> getSupportedIqs();
+  Set<XmlTagSignature> getSupportedIqs();
 
   /**
    * Invoked when a {@link Plugin} is being applied to a {@link Session}.

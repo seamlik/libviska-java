@@ -17,6 +17,7 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.EnumUtils;
+import chat.viska.commons.XmlTagSignature;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -96,7 +97,7 @@ public interface Stanza {
   /**
    * Gets the signature of an {@code <iq/>}.
    */
-  default IqSignature getIqSignature() throws StreamErrorException {
+  default XmlTagSignature getIqSignature() throws StreamErrorException {
     if (getType() != Type.IQ) {
       throw new IllegalArgumentException();
     }
@@ -109,7 +110,7 @@ public interface Stanza {
           "Empty namespace for an <iq/> sub-element."
       );
     }
-    return new IqSignature(namespace, name);
+    return new XmlTagSignature(namespace, name);
   }
 
   /**

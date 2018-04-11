@@ -17,7 +17,7 @@
 package chat.viska.xmpp.plugins.jingle.webrtc;
 
 import chat.viska.xmpp.CommonXmlns;
-import chat.viska.xmpp.IqSignature;
+import chat.viska.commons.XmlTagSignature;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.plugins.jingle.Content;
@@ -92,7 +92,7 @@ public class WebRtcPlugin implements SessionPlugin {
   }
 
   @Override
-  public Set<IqSignature> getSupportedIqs() {
+  public Set<XmlTagSignature> getSupportedIqs() {
     return Collections.emptySet();
   }
 

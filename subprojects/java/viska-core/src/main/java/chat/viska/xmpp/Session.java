@@ -16,6 +16,7 @@
 
 package chat.viska.xmpp;
 
+import chat.viska.commons.XmlTagSignature;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import io.reactivex.Observable;
@@ -160,7 +161,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
 
     private PluginManager() {
       final Consumer<Stanza> action = stanza -> {
-        final IqSignature signature = stanza.getIqSignature();
+        final XmlTagSignature signature = stanza.getIqSignature();
         final List<PluginContext> interestedContexts = contexts
             .parallelStream()
             .filter(it -> it.plugin.getSupportedIqs().contains(signature))
@@ -397,7 +398,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     }
 
     /**
-     * Gets a stream of inbound {@code <iq/>}s that only matches the {@link IqSignature}s registered
+     * Gets a stream of inbound {@code <iq/>}s that only matches the {@link XmlTagSignature}s registered
      * in {@link Plugin#getSupportedIqs()}.
      */
     public Flowable<Stanza> getInboundIqStream() {
