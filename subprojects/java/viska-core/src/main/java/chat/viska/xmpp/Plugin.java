@@ -101,13 +101,15 @@ public interface Plugin {
    * {@link Plugin} so that it will only receive {@code <iq/>} with such signature. If no plugin
    * handles a particular {@code <iq/>}, a stanza error will be sent.
    */
-  Set<XmlTagSignature> getSupportedIqs();
+  default Set<XmlTagSignature> getSupportedIqs() {
+    return Collections.emptySet();
+  }
 
   /**
    * Invoked when a {@link Plugin} is being applied to a {@link Session}.
    * @param context The {@link Session.PluginContext} that holds the {@link Plugin}.
    */
-  void onApply(final Session.PluginContext context);
+  default void onApply(final Session.PluginContext context) {}
 
   /**
    * Invoked when a {@link Plugin} is being removed from a {@link Session}.

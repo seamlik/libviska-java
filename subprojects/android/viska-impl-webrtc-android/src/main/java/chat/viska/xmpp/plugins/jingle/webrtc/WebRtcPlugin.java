@@ -92,11 +92,6 @@ public class WebRtcPlugin implements SessionPlugin {
   }
 
   @Override
-  public Set<XmlTagSignature> getSupportedIqs() {
-    return Collections.emptySet();
-  }
-
-  @Override
   public Session createSession(final String id, final Jid peer) {
     return new Session(id, peer, getFactory(), iceServers);
   }
