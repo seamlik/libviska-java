@@ -23,8 +23,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.Map;
 import java.util.Set;
 import javax.annotation.concurrent.ThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -64,6 +64,7 @@ public interface Plugin {
    * dependencies in any way, since this will cause an infinite loop when applying the plugins.</p>
    */
   default Set<Class<? extends Plugin>> getAllDependencies() {
+    // TODO: Use Apache Commons Lang CalssUtils
     final Set<Class<? extends Plugin>> dependencies = new LinkedHashSet<>();
     Class<?> clazz = getClass();
     while (clazz != null) {
