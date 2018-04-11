@@ -16,6 +16,7 @@
 
 package chat.viska.xmpp.plugins.jingle;
 
+import chat.viska.xmpp.CommonXmlns;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,18 +24,83 @@ import java.util.List;
 /**
  * <a href="https://xmpp.org/extensions/xep-0371.html">Jingle ICE transport method</a>.
  */
-public class IceTransport {
+public class IceTransport implements Transport {
 
+  /**
+   * ICE candidate.
+   */
   public static class Candidate {
+
+    public final String foundation;
+    public final String id;
+    public final String ip;
+    public final String protocol;
+    public final String relAddr;
+    public final String tcptype;
+    public final String type;
+    public final int generation;
+    public final int port;
+    public final int relPort;
+    public final long priority;
+    public final short component;
+
+    /**
+     * Default constructor.
+     */
+    public Candidate(final short component,
+                     final String foundation,
+                     final int generation,
+                     final String id,
+                     final String ip,
+                     final int port,
+                     final long priority,
+                     final String protocol,
+                     final String relAddr,
+                     final int relPort,
+                     final String tcptype,
+                     final String type) {
+      this.component = component;
+      this.foundation = foundation;
+      this.generation = generation;
+      this.id = id;
+      this.ip = ip;
+      this.port = port;
+      this.priority = priority;
+      this.protocol = protocol;
+      this.relAddr = relAddr;
+      this.relPort = relPort;
+      this.tcptype = tcptype;
+      this.type = type;
+    }
   }
 
-  public final List<Candidate> candidates;
-  public final String ufrag;
-  public final String pwd;
+  private final List<Candidate> candidates;
+  private final String ufrag;
+  private final String pwd;
 
+  /**
+   * Default constructor.
+   */
   public IceTransport(final String ufrag, final String pwd, final List<Candidate> candidates) {
     this.ufrag = ufrag;
     this.pwd = pwd;
     this.candidates = Collections.unmodifiableList(new ArrayList<>(candidates));
+  }
+
+  public List<Candidate> getCandidates() {
+    return candidates;
+  }
+
+  public String getPwd() {
+    return pwd;
+  }
+
+  public String getUfrag() {
+    return ufrag;
+  }
+
+  @Override
+  public String getNamespace() {
+    return CommonXmlns.JINGLE_ICE;
   }
 }

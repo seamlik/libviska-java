@@ -21,6 +21,7 @@ package chat.viska.xmpp;
  */
 public final class CommonXmlns {
   public static final String JINGLE = "urn:xmpp:jingle:1";
+  public static final String JINGLE_ERRORS = "urn:xmpp:jingle:errors:1";
   public static final String JINGLE_GROUPING = "urn:xmpp:jingle:apps:grouping:0";
   public static final String JINGLE_ICE = "urn:xmpp:jingle:transports:ice:0";
   public static final String JINGLE_RTP = "urn:xmpp:jingle:apps:rtp:1";
