@@ -17,7 +17,7 @@
 package chat.viska.xmpp;
 
 import chat.viska.commons.EnumUtils;
-import chat.viska.commons.XmlTagSignature;
+import javax.xml.namespace.QName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -97,20 +97,12 @@ public interface Stanza {
   /**
    * Gets the signature of an {@code <iq/>}.
    */
-  default XmlTagSignature getIqSignature() throws StreamErrorException {
+  default QName getIqQName() throws StreamErrorException {
     if (getType() != Type.IQ) {
       throw new IllegalArgumentException();
     }
     final Element iqElement = getIqElement();
-    final @Nullable String name = iqElement.getLocalName();
-    final @Nullable String namespace = iqElement.getNamespaceURI();
-    if (name == null || namespace == null) {
-      throw new StreamErrorException(
-          StreamErrorException.Condition.INVALID_XML,
-          "Empty namespace for an <iq/> sub-element."
-      );
-    }
-    return new XmlTagSignature(namespace, name);
+    return new QName(iqElement.getNamespaceURI(), iqElement.getLocalName(), iqElement.getPrefix());
   }
 
   /**

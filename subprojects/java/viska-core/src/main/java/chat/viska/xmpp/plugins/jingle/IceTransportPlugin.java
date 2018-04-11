@@ -17,7 +17,6 @@
 package chat.viska.xmpp.plugins.jingle;
 
 import chat.viska.commons.DomUtils;
-import chat.viska.commons.XmlTagSignature;
 import chat.viska.xmpp.CommonXmlns;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
@@ -31,6 +30,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.xml.namespace.QName;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -98,12 +98,13 @@ public class IceTransportPlugin extends StandardObject implements TransportPlugi
   }
 
   private Optional<Element> extractTransportFromContent(final Node contentElement) {
-    final XmlTagSignature transportSignature = new XmlTagSignature(CommonXmlns.JINGLE_ICE, "transport");
+    final QName transportQname = new QName(CommonXmlns.JINGLE_ICE, "transport");
     return DomUtils
         .convertToList(contentElement.getChildNodes())
         .stream()
         .map(it -> (Element) it)
-        .filter(it -> transportSignature.equals(it.getNamespaceURI(), it.getLocalName()))
+        .filter(it -> transportQname.getLocalPart().equals(it.getLocalName()))
+        .filter(it -> transportQname.getNamespaceURI().equals(it.getNamespaceURI()))
         .findFirst();
   }
 
@@ -112,11 +113,12 @@ public class IceTransportPlugin extends StandardObject implements TransportPlugi
       return false;
     }
 
-    final XmlTagSignature contentSignature = new XmlTagSignature(CommonXmlns.JINGLE, "content");
+    final QName contentQname = new QName(CommonXmlns.JINGLE, "content");
     return DomUtils
         .convertToList(jingleElement.getChildNodes())
         .parallelStream()
-        .filter(it -> contentSignature.equals(it.getNamespaceURI(), it.getLocalName()))
+        .filter(it -> contentQname.getLocalPart().equals(it.getLocalName()))
+        .filter(it -> contentQname.getNamespaceURI().equals(it.getNamespaceURI()))
         .allMatch(it -> extractTransportFromContent(it).isPresent());
   }
 
@@ -250,8 +252,8 @@ public class IceTransportPlugin extends StandardObject implements TransportPlugi
   }
 
   @Override
-  public Set<XmlTagSignature> getSupportedIqs() {
-    return Collections.singleton(JinglePlugin.JINGLE_SIGNATURE);
+  public Set<QName> getSupportedIqs() {
+    return Collections.singleton(JinglePlugin.JINGLE_QNAME);
   }
 
   @Override

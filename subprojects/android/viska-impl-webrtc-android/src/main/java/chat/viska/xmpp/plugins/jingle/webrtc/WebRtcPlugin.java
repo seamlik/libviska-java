@@ -17,7 +17,6 @@
 package chat.viska.xmpp.plugins.jingle.webrtc;
 
 import chat.viska.xmpp.CommonXmlns;
-import chat.viska.commons.XmlTagSignature;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.plugins.jingle.Content;

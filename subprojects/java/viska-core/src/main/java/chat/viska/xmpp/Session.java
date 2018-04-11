@@ -16,7 +16,6 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.XmlTagSignature;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import io.reactivex.disposables.Disposable;
@@ -36,6 +35,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import javax.annotation.concurrent.ThreadSafe;
+import javax.xml.namespace.QName;
 import org.apache.commons.lang3.StringUtils;
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
 import org.w3c.dom.Document;
@@ -155,11 +155,11 @@ public abstract class Session extends StandardObject implements AutoCloseable {
 
     private PluginManager() {
       final Consumer<Stanza> action = stanza -> {
-        final XmlTagSignature signature = stanza.getIqSignature();
+        final QName qname = stanza.getIqQName();
         final AtomicBoolean stanzaHandled = new AtomicBoolean(false);
         contexts
             .parallelStream()
-            .filter(it -> it.plugin.getSupportedIqs().contains(signature))
+            .filter(it -> it.plugin.getSupportedIqs().contains(qname))
             .forEach(it -> {
               it.feedStanza(stanza);
               stanzaHandled.compareAndSet(false, true);
@@ -394,7 +394,7 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     }
 
     /**
-     * Gets a stream of inbound {@code <iq/>}s that only matches the {@link XmlTagSignature}s registered
+     * Gets a stream of inbound {@code <iq/>}s that only matches the {@link QName}s registered
      * in {@link Plugin#getSupportedIqs()}.
      */
     public Flowable<Stanza> getInboundIqStream() {

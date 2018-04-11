@@ -19,7 +19,6 @@ package chat.viska.xmpp.plugins.base;
 import chat.viska.commons.DomUtils;
 import chat.viska.commons.EnumUtils;
 import chat.viska.xmpp.CommonXmlns;
-import chat.viska.commons.XmlTagSignature;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.Session;
@@ -40,6 +39,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import javax.annotation.concurrent.ThreadSafe;
+import javax.xml.namespace.QName;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -67,17 +67,31 @@ import rxbeans.StandardProperty;
 @ThreadSafe
 public class BasePlugin implements Plugin {
 
-  private static final Set<XmlTagSignature> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
-      new XmlTagSignature(
-          CommonXmlns.SERVICE_DISCOVERY_INFO, "query"
-      ),
-      new XmlTagSignature(
-          CommonXmlns.SERVICE_DISCOVERY_ITEMS, "query"
-      ),
-      new XmlTagSignature(
-          CommonXmlns.SOFTWARE_VERSION, "query"
-      ),
-      new XmlTagSignature(CommonXmlns.ROSTER, "query")
+  private static final QName QNAME_DISCO_INFO = new QName(
+      CommonXmlns.SERVICE_DISCOVERY_INFO,
+      "query"
+  );
+  private static final QName QNAME_DISCO_ITEMS = new QName(
+      CommonXmlns.SERVICE_DISCOVERY_INFO,
+      "query"
+  );
+  private static final QName QNAME_PING = new QName(
+      CommonXmlns.PING,
+      "query"
+  );
+  private static final QName QNAME_SOFTWARE_VERSION = new QName(
+      CommonXmlns.SERVICE_DISCOVERY_INFO,
+      "query"
+  );
+  private static final QName QNAME_ROSTER = new QName(
+      CommonXmlns.SERVICE_DISCOVERY_INFO,
+      "query"
+  );
+  private static final Set<QName> SUPPORTED_IQS = new HashSet<>(Arrays.asList(
+      QNAME_DISCO_INFO,
+      QNAME_DISCO_ITEMS,
+      QNAME_SOFTWARE_VERSION,
+      QNAME_ROSTER
   ));
 
   private final MutableProperty<String> softwareName = new StandardProperty<>("");
@@ -396,7 +410,7 @@ public class BasePlugin implements Plugin {
   }
 
   @Override
-  public Set<XmlTagSignature> getSupportedIqs() {
+  public Set<QName> getSupportedIqs() {
     return Collections.unmodifiableSet(SUPPORTED_IQS);
   }
 
@@ -408,28 +422,28 @@ public class BasePlugin implements Plugin {
     context
         .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqSignature().equals(CommonXmlns.SOFTWARE_VERSION, "query"))
+        .filter(it -> it.getIqQName().equals(QNAME_SOFTWARE_VERSION))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateSoftwareVersionResult(it))));
 
     // disco#info
     context
         .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY_INFO, "query"))
+        .filter(it -> it.getIqQName().equals(QNAME_DISCO_INFO))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoInfoResult(it))));
 
     // disco#items
     context
         .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqSignature().equals(CommonXmlns.SERVICE_DISCOVERY_ITEMS, "query"))
+        .filter(it -> it.getIqQName().equals(QNAME_DISCO_ITEMS))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(generateDiscoItemsResult(it))));
 
     // Ping
     context
         .getInboundIqStream()
         .filter(it -> it.getIqType() == Stanza.IqType.GET)
-        .filter(it -> it.getIqSignature().equals(CommonXmlns.PING, "ping"))
+        .filter(it -> it.getIqQName().equals(QNAME_PING))
         .subscribe(it -> context.sendIq(new XmlWrapperStanza(XmlWrapperStanza.createIqResult(it))));
   }
 }

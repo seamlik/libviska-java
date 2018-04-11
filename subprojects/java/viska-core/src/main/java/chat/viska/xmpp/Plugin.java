@@ -16,7 +16,6 @@
 
 package chat.viska.xmpp;
 
-import chat.viska.commons.XmlTagSignature;
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -27,6 +26,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import javax.annotation.concurrent.ThreadSafe;
+import javax.xml.namespace.QName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -102,7 +102,7 @@ public interface Plugin {
    * {@link Plugin} so that it will only receive {@code <iq/>} with such signature. If no plugin
    * handles a particular {@code <iq/>}, a stanza error will be sent.
    */
-  default Set<XmlTagSignature> getSupportedIqs() {
+  default Set<QName> getSupportedIqs() {
     return Collections.emptySet();
   }
 

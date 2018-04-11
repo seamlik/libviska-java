@@ -17,7 +17,6 @@
 package chat.viska.xmpp.plugins.jingle;
 
 import chat.viska.xmpp.CommonXmlns;
-import chat.viska.commons.XmlTagSignature;
 import chat.viska.xmpp.Jid;
 import chat.viska.xmpp.Plugin;
 import chat.viska.xmpp.plugins.base.BasePlugin;
@@ -28,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import javax.annotation.concurrent.ThreadSafe;
+import javax.xml.namespace.QName;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import rxbeans.Property;
 import rxbeans.StandardObject;
@@ -91,8 +91,8 @@ public class JinglePlugin extends StandardObject implements Plugin {
     }
   }
 
-  private final StandardProperty<Map<String, Session>> sessions = new StandardProperty<>(
-      Collections.emptyMap()
+  public static QName JINGLE_QNAME = new QName(
+      CommonXmlns.JINGLE, "jingle"
   );
   private chat.viska.xmpp.Session.@MonotonicNonNull PluginContext context;
 
@@ -141,10 +141,8 @@ public class JinglePlugin extends StandardObject implements Plugin {
   }
 
   @Override
-  public Set<XmlTagSignature> getSupportedIqs() {
-    return Collections.singleton(
-        new XmlTagSignature(CommonXmlns.JINGLE, "jingle")
-    );
+  public Set<QName> getSupportedIqs() {
+    return Collections.singleton(JINGLE_QNAME);
   }
 
   @Override
