@@ -272,8 +272,4 @@ public class StanzaErrorException extends Exception {
   public Stanza.Type getStanzaType() {
     return stanzaType;
   }
-
-  public Document toXml() {
-    throw new UnsupportedOperationException();
-  }
 }

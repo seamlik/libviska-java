@@ -376,13 +376,6 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     }
 
     /**
-     * Sends a stanza error.
-     */
-    public StanzaReceipt sendError(final StanzaErrorException error) {
-      return sendStanza(new XmlWrapperStanza(error.toXml()));
-    }
-
-    /**
      * Sends a stream error and closes the connection.
      */
     public void sendError(final StreamErrorException error) {
