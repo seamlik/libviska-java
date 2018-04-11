@@ -401,13 +401,6 @@ public abstract class Session extends StandardObject implements AutoCloseable {
       return inboundIqStream;
     }
 
-    /**
-     * Indicates if the window for sending or receiving {@link Stanza}s is open.
-     */
-    public Property<Boolean> availableProperty() {
-      return available;
-    }
-
     @Override
     public Session getSession() {
       return Session.this;
