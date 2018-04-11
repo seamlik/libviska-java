@@ -19,28 +19,25 @@ package chat.viska.xmpp;
 import chat.viska.commons.XmlTagSignature;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
-import io.reactivex.Observable;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.processors.FlowableProcessor;
 import io.reactivex.processors.PublishProcessor;
 import io.reactivex.schedulers.Schedulers;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.EventObject;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import javax.annotation.concurrent.ThreadSafe;
 import org.apache.commons.lang3.StringUtils;
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
-import org.checkerframework.checker.lock.qual.GuardedBy;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import rxbeans.ExceptionCaughtEvent;
@@ -148,35 +145,32 @@ public abstract class Session extends StandardObject implements AutoCloseable {
     ONLINE
   }
 
-
-
   /**
    * Contains information of {@link Plugin}s applied on an {@link Session}.
    */
   @ThreadSafe
   public class PluginManager implements SessionAware {
 
-    @GuardedBy("this")
-    private final Set<PluginContext> contexts = new LinkedHashSet<>();
+    private final Set<PluginContext> contexts = new CopyOnWriteArraySet<>();
 
     private PluginManager() {
       final Consumer<Stanza> action = stanza -> {
         final XmlTagSignature signature = stanza.getIqSignature();
-        final List<PluginContext> interestedContexts = contexts
+        final AtomicBoolean stanzaHandled = new AtomicBoolean(false);
+        contexts
             .parallelStream()
             .filter(it -> it.plugin.getSupportedIqs().contains(signature))
-            .collect(Collectors.toList());
-        if (interestedContexts.isEmpty()) {
+            .forEach(it -> {
+              it.feedStanza(stanza);
+              stanzaHandled.compareAndSet(false, true);
+            });
+        if (!stanzaHandled.get()) {
           sendStanza(new XmlWrapperStanza(XmlWrapperStanza.createIqError(
               stanza,
               StanzaErrorException.Condition.SERVICE_UNAVAILABLE,
               StanzaErrorException.Type.CANCEL,
               ""
           )));
-        } else {
-          interestedContexts.parallelStream().forEach(
-              it -> it.feedStanza(stanza)
-          );
         }
       };
       final Consumer<Throwable> handler = it -> {
@@ -197,81 +191,81 @@ public abstract class Session extends StandardObject implements AutoCloseable {
      * has already been applied.
      * @throws IllegalArgumentException If it fails to apply the {@link Plugin}.
      */
-    public synchronized void apply(final Class<? extends Plugin> type) {
-      if (getPlugins().parallelStream().anyMatch(type::isInstance)) {
-        return;
+    public void apply(final Class<? extends Plugin> type) {
+      synchronized (contexts) {
+        if (getPlugins().parallelStream().anyMatch(type::isInstance)) {
+          return;
+        }
+        final Plugin plugin;
+        try {
+          plugin = type.getConstructor().newInstance();
+        } catch (Exception ex) {
+          throw new IllegalArgumentException(ex);
+        }
+        for (Class<? extends Plugin> it : plugin.getAllDependencies()) {
+          apply(it);
+        }
+        final PluginContext context = new PluginContext(plugin);
+        this.contexts.add(context);
+        plugin.onApply(context);
       }
-      final Plugin plugin;
-      try {
-        plugin = type.getConstructor().newInstance();
-      } catch (Exception ex) {
-        throw new IllegalArgumentException(ex);
-      }
-      for (Class<? extends Plugin> it : plugin.getAllDependencies()) {
-        apply(it);
-      }
-      final PluginContext context = new PluginContext(plugin);
-      this.contexts.add(context);
-      plugin.onApply(context);
     }
 
     /**
      * Gets an applied plugin which is of a particular type.
      * @throws NoSuchElementException If no such plugin found.
      */
-    public synchronized  <T extends Plugin> T getPlugin(final Class<T> type) {
-      for (PluginContext it : this.contexts) {
-        if (type.isInstance(it.plugin)) {
-          return type.cast(it.plugin);
-        }
-      }
-      throw new NoSuchElementException();
+    public <T extends Plugin> T getPlugin(final Class<T> type) {
+      return contexts
+          .parallelStream()
+          .filter(it -> type.isInstance(it.plugin))
+          .findFirst()
+          .map(it -> type.cast(it.plugin))
+          .orElseThrow(NoSuchElementException::new);
     }
 
     /**
      * Gets all applied {@link Plugin}.
      */
-    public synchronized Set<Plugin> getPlugins() {
-      final Set<Plugin> results = new HashSet<>();
-      Observable.fromIterable(this.contexts).map(it -> it.plugin).subscribe(results::add);
-      return Collections.unmodifiableSet(results);
+    public Set<Plugin> getPlugins() {
+      return contexts.parallelStream().map(it -> it.plugin).collect(Collectors.toSet());
     }
 
     /**
      * Enable or disable a {@link Plugin}.
      */
-    public synchronized void setEnabled(final Class<? extends Plugin> type, final boolean enabled) {
-      for (PluginContext it : contexts) {
-        if (type.isInstance(it.plugin)) {
-          it.enabled.change(false);
-        }
-      }
+    public void setEnabled(final Class<? extends Plugin> type, final boolean enabled) {
+      contexts.parallelStream().filter(it -> type.isInstance(it.plugin)).forEach(
+          it -> it.enabled.change(enabled)
+      );
     }
 
     /**
      * Removes a {@link Plugin}.
      */
-    public synchronized void remove(final Class<? extends Plugin> type) {
-      final Set<PluginContext> toRemove = new HashSet<>();
-      for (PluginContext it : contexts) {
-        if (type.isInstance(it.plugin)) {
+    public void remove(final Class<? extends Plugin> type) {
+      synchronized (contexts) {
+        final Collection<PluginContext> toRemove = contexts
+            .parallelStream()
+            .filter(it -> type.isInstance(it.plugin))
+            .collect(Collectors.toList());
+        contexts.removeAll(toRemove);
+        toRemove.parallelStream().forEach(it -> {
+          it.plugin.onRemove();
           it.onRemove();
-          toRemove.add(it);
-        }
+        });
       }
-      contexts.removeAll(toRemove);
     }
 
     /**
      * Gets all features provided by the currently applied plugins.
      * @see <a href="https://xmpp.org/extensions/xep-0030.html">Service Discovery</a>
      */
-    public synchronized Set<String> getAllFeatures() {
-      final Set<String> features = new LinkedHashSet<>();
-      for (PluginContext it : contexts) {
-        features.addAll(it.plugin.getAllFeatures());
-      }
-      return features;
+    public Set<String> getAllFeatures() {
+      return contexts
+          .parallelStream()
+          .flatMap(it -> it.plugin.getAllFeatures().parallelStream())
+          .collect(Collectors.toSet());
     }
 
     @Override
