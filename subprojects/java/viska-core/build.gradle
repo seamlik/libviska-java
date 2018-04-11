@@ -23,9 +23,3 @@ dependencies {
   implementation project(':java:viska-sasl')
   implementation rootProject.libraries.COMMONS_LANG
 }
-
-tasks.withType(JavaCompile) {
-  options.compilerArgs += [
-      '-Awarns' // Too many false positives in Checker Framework, counter-productive...
-  ]
-}
