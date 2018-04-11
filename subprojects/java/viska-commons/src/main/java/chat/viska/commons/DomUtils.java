@@ -24,6 +24,7 @@ import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.concurrent.ThreadSafe;
+import javax.xml.namespace.QName;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
@@ -32,6 +33,9 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 import org.checkerframework.checker.lock.qual.GuardedBy;
 import org.checkerframework.dataflow.qual.Pure;
 import org.w3c.dom.Document;
@@ -47,10 +51,13 @@ import org.xml.sax.SAXException;
 public final class DomUtils {
 
   @GuardedBy("itself")
-  private static final DocumentBuilder DOM_BUILDER;
+  private static final DocumentBuilder BUILDER;
 
   @GuardedBy("itself")
-  private static final Transformer DOM_TRANSFORMER;
+  private static final Transformer TRANSFORMER;
+
+  @GuardedBy("itself")
+  private static final XPath XPATH = XPathFactory.newInstance().newXPath();
 
   static {
     final TransformerFactory transformerFactory = TransformerFactory.newInstance();
@@ -58,16 +65,16 @@ public final class DomUtils {
     builderFactory.setIgnoringComments(true);
     builderFactory.setNamespaceAware(true);
     try {
-      DOM_BUILDER = builderFactory.newDocumentBuilder();
-      DOM_TRANSFORMER = transformerFactory.newTransformer();
+      BUILDER = builderFactory.newDocumentBuilder();
+      TRANSFORMER = transformerFactory.newTransformer();
     } catch (Exception ex) {
       throw new RuntimeException("This JVM does not support DOM.", ex);
     }
-    DOM_TRANSFORMER.setOutputProperty(
+    TRANSFORMER.setOutputProperty(
         OutputKeys.OMIT_XML_DECLARATION,
         "yes"
     );
-    DOM_TRANSFORMER.setOutputProperty(
+    TRANSFORMER.setOutputProperty(
         OutputKeys.INDENT,
         "no"
     );
@@ -95,8 +102,8 @@ public final class DomUtils {
   public static String writeString(final Document document)
       throws TransformerException {
     final Writer writer = new StringWriter();
-    synchronized (DOM_TRANSFORMER) {
-      DOM_TRANSFORMER.transform(new DOMSource(document), new StreamResult(writer));
+    synchronized (TRANSFORMER) {
+      TRANSFORMER.transform(new DOMSource(document), new StreamResult(writer));
     }
     return writer.toString();
   }
@@ -106,9 +113,9 @@ public final class DomUtils {
    */
   public static Document readDocument(final String xml)
       throws SAXException {
-    synchronized (DOM_BUILDER) {
+    synchronized (BUILDER) {
       try {
-        final Document document = DOM_BUILDER.parse(new InputSource(new StringReader(xml)));
+        final Document document = BUILDER.parse(new InputSource(new StringReader(xml)));
         document.normalizeDocument();
         return document;
       } catch (IOException ex) {
@@ -124,10 +131,17 @@ public final class DomUtils {
   public static Document readDocument(final InputStream xml)
       throws SAXException, IOException {
     final Document document;
-    synchronized (DOM_BUILDER) {
-      document = DOM_BUILDER.parse(xml);
+    synchronized (BUILDER) {
+      document = BUILDER.parse(xml);
     }
     document.normalizeDocument();
     return document;
+  }
+
+  public static Object evaluateXPath(final String expression, final Object item, final QName type)
+      throws XPathExpressionException {
+    synchronized (XPATH) {
+      return XPATH.evaluate(expression, item, type);
+    }
   }
 }
