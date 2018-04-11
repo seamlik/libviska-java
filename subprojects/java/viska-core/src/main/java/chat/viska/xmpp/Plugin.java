@@ -108,4 +108,9 @@ public interface Plugin {
    * @param context The {@link Session.PluginContext} that holds the {@link Plugin}.
    */
   void onApply(final Session.PluginContext context);
+
+  /**
+   * Invoked when a {@link Plugin} is being removed from a {@link Session}.
+   */
+  default void onRemove() {}
 }
